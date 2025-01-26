@@ -256,5 +256,11 @@ fixtures = [
     },
     {
         "doctype":"Company", "filters":{"company_name":["in",["Sravi Enterprises - Kolapakkam"]]}
+    },
+    {
+        "doctype":"System Settings"
+    },
+    {
+        "doctype":"Print Format", "filters":{"module":["in",["Core Customizations"]]}
     }
 ]

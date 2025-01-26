@@ -244,4 +244,17 @@ app_license = "bsd-3-clause"
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
-
+fixtures = [
+    {
+        "doctype":"Custom Field", "filters":{"module":["in",["Core Customizations"]]}
+    },
+    {
+        "doctype":"Account", "filters":{"account_name":["in",["Axis CC","Disputed Bill Payment","Missing Bill Payment","Cheques Pending Bank Deposit"]]}
+    },
+    {
+        "doctype":"Mode of Payment", "filters":{"mode_of_payment":["in",["Cheque","NEFT","UPI"]]}
+    },
+    {
+        "doctype":"Company", "filters":{"company_name":["in",["Sravi Enterprises - Kolapakkam"]]}
+    }
+]

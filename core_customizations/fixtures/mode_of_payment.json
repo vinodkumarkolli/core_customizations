@@ -1,0 +1,56 @@
+[
+ {
+  "accounts": [
+   {
+    "company": "Sravi Enterprises - Kolapakkam",
+    "default_account": "Cheques Pending Bank Deposit - SE-K",
+    "parent": "Cheque",
+    "parentfield": "accounts",
+    "parenttype": "Mode of Payment"
+   }
+  ],
+  "docstatus": 0,
+  "doctype": "Mode of Payment",
+  "enabled": 1,
+  "mode_of_payment": "Cheque",
+  "modified": "2025-01-26 17:28:39.787753",
+  "name": "Cheque",
+  "type": "Bank"
+ },
+ {
+  "accounts": [
+   {
+    "company": "Sravi Enterprises - Kolapakkam",
+    "default_account": "Bank Account - SE-K",
+    "parent": "NEFT",
+    "parentfield": "accounts",
+    "parenttype": "Mode of Payment"
+   }
+  ],
+  "docstatus": 0,
+  "doctype": "Mode of Payment",
+  "enabled": 1,
+  "mode_of_payment": "NEFT",
+  "modified": "2025-01-26 17:27:16.983628",
+  "name": "NEFT",
+  "type": "Bank"
+ },
+ {
+  "accounts": [
+   {
+    "company": "Sravi Enterprises - Kolapakkam",
+    "default_account": "Bank Account - SE-K",
+    "parent": "UPI",
+    "parentfield": "accounts",
+    "parenttype": "Mode of Payment"
+   }
+  ],
+  "docstatus": 0,
+  "doctype": "Mode of Payment",
+  "enabled": 1,
+  "mode_of_payment": "UPI",
+  "modified": "2025-01-26 17:29:18.333635",
+  "name": "UPI",
+  "type": "Phone"
+ }
+]

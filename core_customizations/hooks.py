@@ -262,5 +262,8 @@ fixtures = [
     },
     {
         "doctype":"Print Format", "filters":{"module":["in",["Core Customizations"]]}
+    },
+    {
+        "doctype":"Client Script", "filters":{"module":["in",["Core Customizations"]]}
     }
 ]

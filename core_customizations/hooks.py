@@ -249,15 +249,6 @@ fixtures = [
         "doctype":"Custom Field", "filters":{"module":["in",["Core Customizations"]]}
     },
     {
-        "doctype":"Account", "filters":{"account_name":["in",["Axis CC","Disputed Bill Payment","Missing Bill Payment","Cheques Pending Bank Deposit"]]}
-    },
-    {
-        "doctype":"Mode of Payment", "filters":{"mode_of_payment":["in",["Cheque","NEFT","UPI"]]}
-    },
-    {
-        "doctype":"Company", "filters":{"company_name":["in",["Sravi Enterprises - Kolapakkam"]]}
-    },
-    {
         "doctype":"System Settings"
     },
     {
@@ -265,9 +256,5 @@ fixtures = [
     },
     {
         "doctype":"Client Script", "filters":{"module":["in",["Core Customizations"]]}
-    },
-    #Billing related fixtures - Items,Tax Category, Item Tax Template --- Tax Rules,  Sales Taxes & Charges Template, Purchase Taxes & Charges Template
-    {
-        "doctype":"Item"
-    },
+    }
 ]

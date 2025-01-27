@@ -265,5 +265,9 @@ fixtures = [
     },
     {
         "doctype":"Client Script", "filters":{"module":["in",["Core Customizations"]]}
-    }
+    },
+    #Billing related fixtures - Items,Tax Category, Item Tax Template --- Tax Rules,  Sales Taxes & Charges Template, Purchase Taxes & Charges Template
+    {
+        "doctype":"Item"
+    },
 ]

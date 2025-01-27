@@ -1,23 +1,5 @@
 [
- {
-  "accounts": [
-   {
-    "company": "Sravi Enterprises - Kolapakkam",
-    "default_account": "Cheques Pending Bank Deposit - SE-K",
-    "parent": "Cheque",
-    "parentfield": "accounts",
-    "parenttype": "Mode of Payment"
-   }
-  ],
-  "docstatus": 0,
-  "doctype": "Mode of Payment",
-  "enabled": 1,
-  "mode_of_payment": "Cheque",
-  "modified": "2025-01-26 17:28:39.787753",
-  "name": "Cheque",
-  "type": "Bank"
- },
- {
+  {
   "accounts": [
    {
     "company": "Sravi Enterprises - Kolapakkam",

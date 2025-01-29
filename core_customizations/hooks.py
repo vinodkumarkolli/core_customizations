@@ -249,9 +249,6 @@ fixtures = [
         "doctype":"Custom Field", "filters":{"module":["in",["Core Customizations"]]}
     },
     {
-        "doctype":"System Settings"
-    },
-    {
         "doctype":"Print Format", "filters":{"module":["in",["Core Customizations"]]}
     },
     {

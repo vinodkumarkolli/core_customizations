@@ -1,5 +1,3 @@
 frappe
 erpnext
-hrms
-payments
 india_compliance

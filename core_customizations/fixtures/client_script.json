@@ -20,5 +20,16 @@
   "name": "Sales Invoice Script",
   "script": "frappe.ui.form.on('Sales Invoice', {\n\trefresh(frm) {\n\t\t// your code here\n\t},\n\tonload(frm) {\n\t    //frappe.msgprint(frappe.datetime.get_today())\n\t    frappe.call({\n        \tmethod: 'frappe.client.get_list',\n        \targs: {\n        \t    doctype: \"Sales Invoice\",\n        \t    fields:[\"name\",\"posting_date\",\"customer\",\"rounded_total\",\"outstanding_amount\"],\n        \t    filters:[[\"docstatus\",\"=\",1], [\"customer\",\"=\",frm.doc.customer], [\"outstanding_amount\",\">\",0]] \n        \t},\n        \tasync:false,\n        \tcallback(r) {\n        \t    //frappe.msgprint(\"Just Look Console\");\n        \t     if(r.message){\n                    let outstandings = r.message\n                    for(let i = 0;i<outstandings.length;i++){\n                        if(frappe.datetime.get_day_diff(frappe.datetime.get_today(),outstandings[i].posting_date) != 0){\n                            frappe.msgprint(frappe.datetime.get_day_diff(frappe.datetime.get_today(),outstandings[i].posting_date)+ ' days is due for '+ outstandings[i].name);\n                        }\n              \t\t    frm.add_custom_button(outstandings[i].name, function(){ frappe.msgprint('Outstanding Amount',outstandings[i].outstanding_amount) }\n              \t\t    , __(\"Outstanding\"));\n  \t\t}\n                }\n        \t}\n        })\n        if(frm.doc.status == \"Draft\"){\n\t\tfrm.doc.update_stock = 1\n\t\tfrm.refresh_field('update_stock');\n\t    }\n\t\tif(frm.doc.company == 'Sravi Enterprises - Kolapakkam'){\n\t\t    frm.doc.set_warehouse = 'Stores - SE-K'\n\t\t    frm.refresh_field('set_warehouse');\n\t\t}\n\t\tfrm.doc.apply_discount_on = \"Grand Total\"\n        frm.refresh_field('apply_discount_on');\n\t}\n})",
   "view": "Form"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Client Script",
+  "dt": "Purchase Invoice",
+  "enabled": 1,
+  "modified": "2025-07-02 16:58:53.563962",
+  "module": "Core Customizations",
+  "name": "Purchase Invoice Client Script",
+  "script": "frappe.ui.form.on('Purchase Invoice', {\n\trefresh(frm) {\n\t\t// your code here\n\t},\n\tsupplier: function(frm){\n\t    frappe.call({\n\t        method: 'frappe.client.get',\n        \targs: {\n        \tdoctype: 'Supplier',\n        \tname: frm.doc.supplier,\n        \t},\n        \tcallback: function(r){\n        \t   // console.log(r.message.is_transporter)\n                  is_transporter = r.message.is_transporter;\n                  if(is_transporter === 1){\n                    frappe.msgprint({\n                        title: __('Notification'),\n                        indicator: 'green',\n                        message: __('Supplier is a Transporter and select an appropriate Freight Cost Center for proper accounting')\n                    });\n                      frm.set_df_property('cost_center', 'reqd', 1)\n                  }\n                  if(is_transporter === 0){\n                      frm.set_df_property('cost_center', 'reqd', 0)\n                  }\n                //   console.log(is_transporter);\n        \t}\n\t    })\n\t}\n})",
+  "view": "Form"
  }
 ]

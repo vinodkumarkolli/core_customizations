@@ -55,6 +55,7 @@ def execute():
 		{"parent": "Stock Entry Type", "read": 1, "write": 0, "create": 0, "delete": 0},
 		{"parent": "Stock Entry", "read": 1, "write": 0, "create": 0, "delete": 0},
 		{"parent": "Stock Ledger Entry", "read": 1, "write": 0, "create": 0, "delete": 0},
+		{"parent": "Accounts Settings","read": 1, "write": 0, "create": 0, "delete": 0},
 		{"parent": "Stock Settings","read": 1, "write": 0, "create": 0, "delete": 0},
 		{"parent": "POS Closing Entry", "read": 1, "write": 1, "create": 1, "delete": 0, "submit": 1, "amend": 0, "cancel": 0, "if_owner": 1, "print": 1, "email": 1, "export": 1, "report": 0, "share": 1},
 		{"parent": "POS Opening Entry", "read": 1, "write": 1, "create": 1, "delete": 0, "submit": 1, "amend": 0, "cancel": 0, "if_owner": 1, "print": 1, "email": 1, "export": 1, "report": 0, "share": 1},

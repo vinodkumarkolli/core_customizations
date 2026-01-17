@@ -101,6 +101,23 @@ def execute():
 			continue
 
 		doctype = p["parent"]
+
+		# Fix: Ensure standard permissions are copied to Custom DocPerms
+		# Frappe ignores standard DocPerms if ANY Custom DocPerm exists for the DocType.
+		# So we must ensure all standard permissions are migrated to Custom DocPerms.
+		standard_perms = frappe.get_all("DocPerm", filters={"parent": doctype}, fields="*")
+		for perm in standard_perms:
+			if not frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": perm.role, "permlevel": perm.permlevel, "if_owner": perm.if_owner}):
+				d = frappe.new_doc("Custom DocPerm")
+				perm.pop("name", None)
+				perm.pop("creation", None)
+				perm.pop("modified", None)
+				perm.pop("owner", None)
+				perm.pop("docstatus", None)
+				perm.pop("idx", None)
+				d.update(perm)
+				d.insert()
+
 		try:
 			doc_name = frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": role_name, "permlevel": 0})
 			if doc_name:

@@ -31,5 +31,27 @@
   "name": "Purchase Invoice Client Script",
   "script": "frappe.ui.form.on('Purchase Invoice', {\n\trefresh(frm) {\n\t\t// your code here\n\t},\n\tsupplier: function(frm){\n\t    frappe.call({\n\t        method: 'frappe.client.get',\n        \targs: {\n        \tdoctype: 'Supplier',\n        \tname: frm.doc.supplier,\n        \t},\n        \tcallback: function(r){\n        \t   // console.log(r.message.is_transporter)\n                  is_transporter = r.message.is_transporter;\n                  if(is_transporter === 1){\n                    frappe.msgprint({\n                        title: __('Notification'),\n                        indicator: 'green',\n                        message: __('Supplier is a Transporter and select an appropriate Freight Cost Center for proper accounting')\n                    });\n                      frm.set_df_property('cost_center', 'reqd', 1)\n                  }\n                  if(is_transporter === 0){\n                      frm.set_df_property('cost_center', 'reqd', 0)\n                  }\n                //   console.log(is_transporter);\n        \t}\n\t    })\n\t}\n})",
   "view": "Form"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Client Script",
+  "dt": "Expense Claim",
+  "enabled": 1,
+  "modified": "2026-01-17 14:29:57.522115",
+  "module": "Core Customizations",
+  "name": "Expense Claim Script",
+  "script": "frappe.ui.form.on('Expense Claim', {\n\trefresh(frm) {\n\t\t// 1. Check if the user has the 'Field Sales User' role\n        if (frappe.user.has_role('Field Sales User')) {\n            // 1. Initial toggle on load\n            toggle_task_field(frm);\n            // 2. Apply a filter to the 'payable_account' link field\n            frm.set_query('payable_account', () => {\n                return {\n                    filters: {\n                        'name': 'Expense Claims - SE-K'\n                    }\n                };\n            });\n\n            // 3. Optional: Set the value automatically if it's a new record\n            if (frm.is_new()) {\n                frm.set_value('payable_account', 'Expense Claims - SE-K');\n            }\n            // 4. Advanced Filter for Projects\n            const project_filter = {\n                filters: [\n                    ['Project User', 'user', '=', frappe.session.user],\n                    ['Project', 'status', '=', 'Open']\n                ]\n            };\n\n            frm.set_query('project', () => project_filter);\n            // The second argument 'expenses' targets the child table\n            frm.set_query('project', 'expenses', () => project_filter);\n            // 5. SET MANDATORY FIELDS\n            frm.set_df_property('project', 'reqd', 1);\n            frm.set_df_property('payable_account', 'reqd', 1);\n            frm.set_df_property('task', 'reqd', 1);\n            frm.set_df_property('clearance_date', 'read_only', 1);\n            // 6. Filter Mode of Payment to show only \"Credit\"\n            frm.set_query('mode_of_payment', () => {\n                return {\n                    filters: [\n                        ['Mode of Payment', 'name', 'not like', '%Credit%']\n                    ]\n                };\n            });\n        }\n\t},\n\t// Triggered when the Project field is changed\n    project(frm) {\n        toggle_task_field(frm);\n        \n        // Clear task value if project is removed/changed to prevent data mismatch\n        frm.set_value('task', '');\n    }\n})\nvar toggle_task_field = function(frm) {\n    if (frm.doc.project) {\n        frm.set_df_property('task', 'hidden', 0);\n    } else {\n        frm.set_df_property('task', 'hidden', 1);\n    }\n};",
+  "view": "Form"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Client Script",
+  "dt": "Timesheet",
+  "enabled": 1,
+  "modified": "2026-01-17 15:05:59.915328",
+  "module": "Core Customizations",
+  "name": "Timesheet Script",
+  "script": "frappe.ui.form.on('Timesheet', {\n\trefresh(frm) {\n\t\t// 1. Check if the user has the 'Field Sales User' role\n        if (frappe.user.has_role('Field Sales User')) {\n            const project_filter = {\n                filters: [\n                    ['Project User', 'user', '=', frappe.session.user],\n                    ['Project', 'status', '=', 'Open']\n                ]\n            };\n            frm.set_query('parent_project', () => project_filter);\n            // The second argument 'expenses' targets the child table\n            frm.set_query('project', 'time_logs', () => project_filter);\n        }\n\t}\n})",
+  "view": "Form"
  }
 ]

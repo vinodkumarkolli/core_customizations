@@ -253,5 +253,14 @@ fixtures = [
     },
     {
         "doctype":"Client Script", "filters":{"module":["in",["Core Customizations"]]}
+    },
+    {
+        "doctype":"Workflow State", "filters":{"name":["in",["Draft"]]}
+    },
+    {
+        "doctype":"Workflow Action Master", "filters":{"name":["in",["Submit for Review"]]}
+    },
+    {
+        "doctype":"Workflow"
     }
 ]

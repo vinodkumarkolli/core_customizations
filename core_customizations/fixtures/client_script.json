@@ -48,10 +48,10 @@
   "doctype": "Client Script",
   "dt": "Timesheet",
   "enabled": 1,
-  "modified": "2026-01-17 15:05:59.915328",
+  "modified": "2026-01-18 15:23:00.230128",
   "module": "Core Customizations",
   "name": "Timesheet Script",
-  "script": "frappe.ui.form.on('Timesheet', {\n\trefresh(frm) {\n\t\t// 1. Check if the user has the 'Field Sales User' role\n        if (frappe.user.has_role('Field Sales User')) {\n            const project_filter = {\n                filters: [\n                    ['Project User', 'user', '=', frappe.session.user],\n                    ['Project', 'status', '=', 'Open']\n                ]\n            };\n            frm.set_query('parent_project', () => project_filter);\n            // The second argument 'expenses' targets the child table\n            frm.set_query('project', 'time_logs', () => project_filter);\n        }\n\t}\n})",
+  "script": "frappe.ui.form.on('Timesheet', {\n\trefresh: function(frm) {\n\t    // 1. Make Project mandatory on refresh\n        frm.set_df_property('parent_project', 'reqd', 1);\n        // 2. Filter the main Parent Project field on load\n        if (frappe.user.has_role('Field Sales User')) {\n            frm.set_query('parent_project', () => {\n                return {\n                    filters: [\n                        ['Project User', 'user', '=', frappe.session.user],\n                        ['Project', 'status', '=', 'Open']\n                    ]\n                };\n            });\n        }\n        \n        //3. Initial visibility check\n        toggle_time_logs(frm);\n    },\n\n    parent_project: function(frm) {\n        // 2. Triggered when the main Project field changes\n        toggle_time_logs(frm);\n\n        // Filter the 'project' field inside the child table to match the parent selection\n        if (frm.doc.parent_project) {\n            frm.set_query('project', 'time_logs', () => {\n                return {\n                    filters: {\n                        'name': frm.doc.parent_project\n                    }\n                };\n            });\n        }\n    }\n})\n// Helper function to handle visibility logic\nvar toggle_time_logs = function(frm) {\n    if (frm.doc.parent_project) {\n        frm.toggle_display('time_logs', true);\n    } else {\n        // Hide if no project is selected (if that is your requirement)\n        frm.toggle_display('time_logs', false);\n    }\n};",
   "view": "Form"
  }
 ]

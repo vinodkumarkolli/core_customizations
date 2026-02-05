@@ -88,6 +88,8 @@ app_license = "bsd-3-clause"
 # before_install = "core_customizations.install.before_install"
 # after_install = "core_customizations.install.after_install"
 
+after_migrate = "core_customizations.setup.after_migrate"
+
 # Uninstallation
 # ------------
 

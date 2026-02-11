@@ -63,3 +63,18 @@ def after_migrate():
 				print(f"Updated permissions for {role_name} on {doctype}")
 			except Exception as e:
 				print(f"Skipping {doctype}: {e}")
+
+	create_custom_folders()
+
+def create_custom_folders():
+	folders = ["Employee Images", "Store Images", "Vehicle Images", "Location Images", "Activity Images and Videos"]
+	for folder_name in folders:
+		if not frappe.db.exists("File", {"file_name": folder_name, "is_folder": 1}):
+			folder = frappe.new_doc("File")
+			folder.file_name = folder_name
+			folder.is_folder = 1
+			folder.is_private = 0  # Adjust as needed, usually public for these types of images
+			folder.insert(ignore_permissions=True)
+			print(f"Created folder: {folder_name}")
+		else:
+			print(f"Folder already exists: {folder_name}")

@@ -1,4 +1,6 @@
 import frappe
+import base64
+from frappe.utils.file_manager import save_file
 # Method: get_mobile_keys
 @frappe.whitelist(allow_guest=True)
 def login_and_get_keys(usr, pwd):
@@ -36,3 +38,26 @@ def login_and_get_keys(usr, pwd):
         
     except frappe.AuthenticationError:
         frappe.throw("Invalid login credentials", frappe.AuthenticationError)
+
+@frappe.whitelist()
+def custom_upload_base64(base64_str, filename, doctype=None, docname=None, folder="Home", is_private=0):
+    # 1. Clean the base64 string if it contains the header
+    if "," in base64_str:
+        base64_str = base64_str.split(",")[1]
+    
+    # 2. Decode base64 to bytes
+    file_content = base64.b64decode(base64_str)
+    
+    # 3. Use Frappe's file_manager to save the file
+    # This automatically handles the physical file creation and File Doctype entry
+    file_doc = save_file(
+        fname=filename,
+        content=file_content,
+        dt=doctype,
+        dn=docname,
+        folder=folder,
+        is_private=int(is_private),
+        decode=False # Already decoded manually
+    )
+    
+    return file_doc.as_dict()

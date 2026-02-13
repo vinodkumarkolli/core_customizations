@@ -1,0 +1,56 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-02-13 22:45:47.785174",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "submodule_name",
+  "submodule_configuration",
+  "column_break_mpvl",
+  "submodule_route"
+ ],
+ "fields": [
+  {
+   "fieldname": "submodule_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Submodule Name",
+   "reqd": 1
+  },
+  {
+   "default": "{'enabled':1}",
+   "fieldname": "submodule_configuration",
+   "fieldtype": "JSON",
+   "in_list_view": 1,
+   "label": "Submodule Configuration",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_mpvl",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "submodule_route",
+   "fieldtype": "Data",
+   "label": "Submodule Route",
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-02-13 23:04:03.899109",
+ "modified_by": "Administrator",
+ "module": "Mobile App",
+ "name": "Mobile App Submodule Def",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

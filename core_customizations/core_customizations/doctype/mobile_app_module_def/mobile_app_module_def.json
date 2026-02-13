@@ -1,0 +1,114 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:module_name",
+ "creation": "2026-02-13 22:27:57.708661",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "module_name",
+  "mobile_route_path",
+  "column_break_ikva",
+  "fontawesome_icon",
+  "is_active",
+  "is_global",
+  "section_break_qarc",
+  "submodules"
+ ],
+ "fields": [
+  {
+   "fieldname": "module_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Module Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "mobile_route_path",
+   "fieldtype": "Data",
+   "label": "Mobile Route Path",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_ikva",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "\\uf1b3",
+   "fieldname": "fontawesome_icon",
+   "fieldtype": "Data",
+   "label": "Fontawesome Icon Code",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_global",
+   "fieldtype": "Check",
+   "label": "Is Global"
+  },
+  {
+   "fieldname": "section_break_qarc",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "submodules",
+   "fieldtype": "Table",
+   "label": "Submodules",
+   "options": "Mobile App Submodule Def"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-13 22:54:29.154466",
+ "modified_by": "Administrator",
+ "module": "Core Customizations",
+ "name": "Mobile App Module Def",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Employee",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Employee Self Service",
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "module_name"
+}

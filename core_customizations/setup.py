@@ -8,6 +8,9 @@ def after_migrate():
 			{"parent": "Workflow Action Master", "read": 1, "write": 0, "create": 0, "delete": 0},
 			{"parent": "Project", "read": 1, "write": 0, "create": 0, "delete": 0},
 			{"parent": "Mode of Payment", "read": 1, "write": 0, "create": 0, "delete": 0},
+		],
+		"System Manager": [
+			{"parent": "Employee", "read": 1, "write": 1, "permlevel": 1},
 		]
 	}
 
@@ -37,14 +40,15 @@ def after_migrate():
 
 			try:
 				# Check if permission already exists for this role
-				doc_name = frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": role_name, "permlevel": 0})
+				permlevel = p.get("permlevel", 0)
+				doc_name = frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": role_name, "permlevel": permlevel})
 				if doc_name:
 					d = frappe.get_doc("Custom DocPerm", doc_name)
 				else:
 					d = frappe.new_doc("Custom DocPerm")
 					d.parent = doctype
 					d.role = role_name
-					d.permlevel = 0
+					d.permlevel = permlevel
 
 				d.read = p.get("read", 0)
 				d.write = p.get("write", 0)

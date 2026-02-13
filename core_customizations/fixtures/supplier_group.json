@@ -1,0 +1,62 @@
+[
+ {
+  "accounts": [],
+  "docstatus": 0,
+  "doctype": "Supplier Group",
+  "is_group": 1,
+  "modified": "2026-02-13 23:35:40.040521",
+  "name": "Vendors",
+  "old_parent": "All Supplier Groups",
+  "parent_supplier_group": "All Supplier Groups",
+  "payment_terms": null,
+  "supplier_group_name": "Vendors"
+ },
+ {
+  "accounts": [],
+  "docstatus": 0,
+  "doctype": "Supplier Group",
+  "is_group": 0,
+  "modified": "2026-02-13 23:36:02.017672",
+  "name": "TM",
+  "old_parent": "Vendors",
+  "parent_supplier_group": "Vendors",
+  "payment_terms": null,
+  "supplier_group_name": "TM"
+ },
+ {
+  "accounts": [],
+  "docstatus": 0,
+  "doctype": "Supplier Group",
+  "is_group": 0,
+  "modified": "2026-02-13 23:36:11.561841",
+  "name": "BTL",
+  "old_parent": "Vendors",
+  "parent_supplier_group": "Vendors",
+  "payment_terms": null,
+  "supplier_group_name": "BTL"
+ },
+ {
+  "accounts": [],
+  "docstatus": 0,
+  "doctype": "Supplier Group",
+  "is_group": 0,
+  "modified": "2026-02-13 23:36:36.395374",
+  "name": "OOH",
+  "old_parent": "Vendors",
+  "parent_supplier_group": "Vendors",
+  "payment_terms": null,
+  "supplier_group_name": "OOH"
+ },
+ {
+  "accounts": [],
+  "docstatus": 0,
+  "doctype": "Supplier Group",
+  "is_group": 0,
+  "modified": "2026-02-13 23:37:19.904897",
+  "name": "INSTALLER",
+  "old_parent": "Vendors",
+  "parent_supplier_group": "Vendors",
+  "payment_terms": null,
+  "supplier_group_name": "INSTALLER"
+ }
+]

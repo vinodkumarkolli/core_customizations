@@ -264,5 +264,8 @@ fixtures = [
     },
     {
         "doctype":"Workflow"
+    },
+    {
+        "doctype": "Supplier Group", "filters": [["name", "in", ["Vendors", "BTL", "INSTALLER", "OOH", "TM"]]]
     }
 ]

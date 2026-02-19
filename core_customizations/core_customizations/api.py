@@ -61,3 +61,24 @@ def custom_upload_base64(base64_str, filename, doctype=None, docname=None, folde
     )
     
     return file_doc.as_dict()
+
+@frappe.whitelist()
+def get_user_roles(user=None):
+    """
+    Whitelisted method to fetch roles for a user.
+    Defaults to the current session user.
+    """
+    if not user:
+        user = frappe.session.user
+    
+    # Ensure users can only see their own roles unless they are a System Manager
+    if user != frappe.session.user and "System Manager" not in frappe.get_roles():
+        frappe.throw("You can only fetch your own roles.", frappe.PermissionError)
+        
+    return frappe.get_roles(user)
+
+
+    # Need a scheduler function which runs every day night that set any checkin that 
+    # donot have corresponding checkout (Log Type == "OUT"), 
+    # we need to set "custom_no_checkout_found" = 1. 
+    # In a day, there can be multiple checkins. frontend is designed such that when a checkin is done, checkout must be done so as to 

@@ -78,6 +78,20 @@ def get_user_roles(user=None):
     return frappe.get_roles(user)
 
 
+@frappe.whitelist()
+def get_sync_status(checks, user_email=None):
+    results = {}
+    # Use a list of checks: [{"doctype": "Beat", "timestamp": "...", "filters": [...]}, ...]
+    for check in checks:
+        doctype = check.get("doctype")
+        ts = check.get("timestamp")
+        flt = check.get("filters", [])
+        
+        # Check if any relevant record was modified since 'ts'
+        query_filters = flt + [["modified", ">", ts]]
+        results[doctype] = frappe.db.count(doctype, query_filters) > 0
+    return results
+
     # Need a scheduler function which runs every day night that set any checkin that 
     # donot have corresponding checkout (Log Type == "OUT"), 
     # we need to set "custom_no_checkout_found" = 1. 

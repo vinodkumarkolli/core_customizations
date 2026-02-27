@@ -10,7 +10,8 @@ def after_migrate():
 			{"parent": "Mode of Payment", "read": 1, "write": 0, "create": 0, "delete": 0},
 			{"parent": "Employee", "read": 1, "write": 0, "permlevel": 1},
 			{"parent": "Supplier", "read": 1, "write": 0, "create": 0, "delete": 0,"permlevel": 0},
-			{"parent":"Item Price","read": 1, "write": 0, "create": 0, "delete": 0}
+			{"parent":"Item Price","read": 1, "write": 0, "create": 0, "delete": 0},
+			{"parent":"Item Tax Template","read": 1, "write": 0, "create": 0, "delete": 0}
 		],
 		"System Manager": [
 			{"parent": "Employee", "read": 1, "write": 1, "permlevel": 1},

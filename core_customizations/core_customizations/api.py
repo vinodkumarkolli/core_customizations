@@ -1,6 +1,9 @@
 import frappe
 import base64
 from frappe.utils.file_manager import save_file
+from frappe.utils import today, getdate
+import re
+
 # Method: get_mobile_keys
 @frappe.whitelist(allow_guest=True)
 def login_and_get_keys(usr, pwd):
@@ -92,6 +95,64 @@ def get_sync_status(checks, user_email=None):
         results[doctype] = frappe.db.count(doctype, query_filters) > 0
     return results
 
+@frappe.whitelist()
+def get_items_configured(filters=None):
+    try:
+        # Handle stringified filters from frontend
+        if isinstance(filters, str):
+            filters = frappe.parse_json(filters)
+            
+        if not filters:
+            filters = [["disabled", "=", 0], ["is_sales_item", "=", 1], ["has_variants", "=", 0]]
+        # 1. Fetch main item data
+        items = frappe.get_list("Item", 
+            fields=["name", "item_code", "item_name", "item_group", "stock_uom", "disabled", "is_sales_item", "has_variants", "image", "modified"],
+            filters=filters,
+            limit_page_length=5000
+        )
+        
+        if not items:
+            return []
+        # 2. Get today's date as a date object
+        current_date = getdate(today())
+        # 3. Bulk fetch ALL taxes for these items at once
+        item_names = [i.name for i in items]
+        all_taxes = frappe.get_all("Item Tax",
+            fields=["parent", "item_tax_template", "valid_from"],
+            filters={ "parent": ["in", item_names], "docstatus": 0 },
+            order_by="valid_from desc"
+        )
+        # Map taxes to parents for quick lookup
+        tax_map = {}
+        for t in all_taxes:
+            if t.parent not in tax_map:
+                tax_map[t.parent] = []
+            tax_map[t.parent].append(t)
+        # 4. Map back to items
+        for item in items:
+            gst_rate = 18.0 # Default
+            item_taxes = tax_map.get(item.name, [])
+            
+            # Find the most recent applicable template
+            active_tax = None
+            for t in item_taxes:
+                # Ensure we compare date objects
+                tax_date = getdate(t.valid_from) if t.valid_from else None
+                if not tax_date or tax_date <= current_date:
+                    active_tax = t
+                    break
+            
+            if active_tax and active_tax.item_tax_template:
+                match = re.search(r"(\d+)", active_tax.item_tax_template)
+                if match:
+                    gst_rate = float(match.group(1))
+            
+            item["item_gst_rate"] = gst_rate
+        return items
+        
+    except Exception as e:
+        frappe.log_error(title="Owlly get_items_configured crash", message=frappe.get_traceback())
+        raise e
     # Need a scheduler function which runs every day night that set any checkin that 
     # donot have corresponding checkout (Log Type == "OUT"), 
     # we need to set "custom_no_checkout_found" = 1. 

@@ -153,6 +153,71 @@ def get_items_configured(filters=None):
     except Exception as e:
         frappe.log_error(title="Owlly get_items_configured crash", message=frappe.get_traceback())
         raise e
+@frappe.whitelist()
+def get_timesheets_configured(filters=None):
+    try:
+        # Handle stringified filters from frontend
+        if isinstance(filters, str):
+            filters = frappe.parse_json(filters)
+            
+        # 1. Fetch main Timesheet data
+        timesheets = frappe.get_list("Timesheet", 
+            fields=["name", "employee", "parent_project", "start_date", "status", "total_hours", "modified"],
+            filters=filters,
+            limit_page_length=5000
+        )
+        
+        if not timesheets:
+            return []
+        # 2. Bulk fetch ALL child Time Logs for these timesheets
+        timesheet_names = [ts.name for ts in timesheets]
+        all_logs = frappe.get_all("Timesheet Detail", # Note: Child table is 'Timesheet Detail' in standard Frappe
+            fields=["parent", "activity_type", "from_time", "to_time", "project", "task", "description", "hours", "name"],
+            filters={ "parent": ["in", timesheet_names], "docstatus": ["<", 2] },
+            order_by="from_time desc"
+        )
+        # Map logs to parents for quick lookup
+        log_map = {}
+        for log in all_logs:
+            if log.parent not in log_map:
+                log_map[log.parent] = []
+            log_map[log.parent].append(log)
+        # 3. Map back to timesheets
+        for ts in timesheets:
+            ts["time_logs"] = log_map.get(ts.name, [])
+            
+        return timesheets
+        
+    except Exception as e:
+        frappe.log_error(title="Owlly get_timesheets_configured crash", message=frappe.get_traceback())
+        raise e
+@frappe.whitelist()
+def get_pos_profiles_configured(user=None, filters=None):
+    if not user:
+        user = frappe.session.user
+    
+    # 1. Get all enabled POS Profiles
+    profiles = frappe.get_list("POS Profile",
+        fields=["name", "company", "disabled", "warehouse", "customer", "currency", 
+                "income_account", "expense_account", "write_off_account", "write_off_cost_center", 
+                "cost_center", "selling_price_list", "modified"],
+        filters={"disabled": 0}
+    )
+    
+    # 2. Filter for user-specific profiles in Python
+    # This avoids raw SQL joins and handles child table naming automatically
+    result = []
+    for p in profiles:
+        # Check 'Applicable for Users' child table
+        applicable_users = frappe.get_all("POS Profile User", 
+            filters={"parent": p.name}, 
+            fields=["user"]
+        )
+        # Match if (list is empty/Global) OR (current user is in the list)
+        if not applicable_users or any(u.user == user for u in applicable_users):
+            result.append(p)
+            
+    return result
     # Need a scheduler function which runs every day night that set any checkin that 
     # donot have corresponding checkout (Log Type == "OUT"), 
     # we need to set "custom_no_checkout_found" = 1. 

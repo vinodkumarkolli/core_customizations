@@ -7,7 +7,6 @@
  "engine": "InnoDB",
  "field_order": [
   "submodule_name",
-  "submodule_configuration",
   "column_break_mpvl",
   "submodule_route"
  ],
@@ -17,14 +16,6 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Submodule Name",
-   "reqd": 1
-  },
-  {
-   "default": "{'enabled':1}",
-   "fieldname": "submodule_configuration",
-   "fieldtype": "JSON",
-   "in_list_view": 1,
-   "label": "Submodule Configuration",
    "reqd": 1
   },
   {

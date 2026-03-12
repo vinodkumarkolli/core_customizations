@@ -54,6 +54,7 @@ def after_migrate():
 			{"parent": "Accounts Settings", "read": 1},
 			{"parent": "Project", "read": 1},
 			{"parent": "Mode of Payment", "read": 1},
+			{"parent": "Stock Settings","read":1},
 
 			# Group 2: Read, Write, Create, Delete
 			{"parent": "POS Invoice Merge Log", "read": 1, "write": 1, "create": 1, "delete": 1},

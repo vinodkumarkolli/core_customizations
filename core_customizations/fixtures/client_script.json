@@ -53,5 +53,16 @@
   "name": "Timesheet Script",
   "script": "frappe.ui.form.on('Timesheet', {\n\trefresh: function(frm) {\n\t    // 1. Make Project mandatory on refresh\n        frm.set_df_property('parent_project', 'reqd', 1);\n        // 2. Filter the main Parent Project field on load\n        if (frappe.user.has_role('Field Sales User')) {\n            frm.set_query('parent_project', () => {\n                return {\n                    filters: [\n                        ['Project User', 'user', '=', frappe.session.user],\n                        ['Project', 'status', '=', 'Open']\n                    ]\n                };\n            });\n        }\n        \n        //3. Initial visibility check\n        toggle_time_logs(frm);\n    },\n\n    parent_project: function(frm) {\n        // 2. Triggered when the main Project field changes\n        toggle_time_logs(frm);\n\n        // Filter the 'project' field inside the child table to match the parent selection\n        if (frm.doc.parent_project) {\n            frm.set_query('project', 'time_logs', () => {\n                return {\n                    filters: {\n                        'name': frm.doc.parent_project\n                    }\n                };\n            });\n        }\n    }\n})\n// Helper function to handle visibility logic\nvar toggle_time_logs = function(frm) {\n    if (frm.doc.parent_project) {\n        frm.toggle_display('time_logs', true);\n    } else {\n        // Hide if no project is selected (if that is your requirement)\n        frm.toggle_display('time_logs', false);\n    }\n};",
   "view": "Form"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Client Script",
+  "dt": "Social Login Key",
+  "enabled": 1,
+  "modified": "2026-03-17 15:48:56.640144",
+  "module": "Core Customizations",
+  "name": "Custom Social Login Script",
+  "script": "frappe.ui.form.on('Social Login Key', {\n    refresh: function(frm) {\n        // Add the button only if the document is not new\n        if (!frm.is_new()) {\n            frm.add_custom_button(__('Set as Default'), function() {\n                frappe.confirm(\n                    __('Are you sure you want this Social Login key to be default for Login?'),\n                    function() {\n                        // Action if \"Yes\" is clicked\n                        frappe.call({\n                            method: \"core_customizations.core_customizations.api.set_default_social_login\",\n                            args: {\n                                \"name\": frm.doc.name\n                            },\n                            callback: function(r) {\n                                if (!r.exc) {\n                                    frm.reload_doc();\n                                    frappe.msgprint(__('Success: This is now the default login key.'));\n                                }\n                            }\n                        });\n                    }\n                );\n            }, __('Actions'));\n        }\n    }\n});",
+  "view": "Form"
  }
 ]

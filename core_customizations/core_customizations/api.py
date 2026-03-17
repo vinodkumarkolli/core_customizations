@@ -222,3 +222,29 @@ def get_pos_profiles_configured(user=None, filters=None):
     # donot have corresponding checkout (Log Type == "OUT"), 
     # we need to set "custom_no_checkout_found" = 1. 
     # In a day, there can be multiple checkins. frontend is designed such that when a checkin is done, checkout must be done so as to 
+
+@frappe.whitelist()
+def set_default_social_login(name):
+    """
+    Sets the selected Social Login Key as default and unsets others.
+    """
+    # Check if the document exists
+    if not frappe.db.exists("Social Login Key", name):
+        frappe.throw(_("Social Login Key {0} not found").format(name))
+
+    try:
+        # 1. Set 'custom_default_login' to 0 for all records
+        frappe.db.sql("""
+            UPDATE `tabSocial Login Key` 
+            SET `custom_default_login` = 0
+        """)
+
+        # 2. Set 'custom_default_login' to 1 for the selected record
+        frappe.db.set_value("Social Login Key", name, "custom_default_login", 1)
+        
+        # Commit changes to database
+        frappe.db.commit()
+        
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), _("Set Default Social Login Failed"))
+        frappe.throw(_("An error occurred while setting the default login key."))

@@ -1,9 +1,29 @@
+# Copyright (c) 2026, Vinod Kumar K and contributors
+# For license information, please see license.txt
+"""
+Monkey patch to override stock update functionality for Delivery Note, POS Invoice, and Sales Invoice.
+
+This patch adds batch-based pricing and serial number filtering for stock updates.
+"""
+
 import erpnext.stock.get_item_details
 from erpnext.stock.get_item_details import get_batch_based_item_price, filter_batches, has_incorrect_serial_nos, get_filtered_serial_nos
 import frappe
 from frappe.utils import cint
 
+
 def custom_update_stock(ctx, out, doc=None):
+	"""
+	Custom stock update function for Delivery Note, POS Invoice, and Sales Invoice.
+
+	Args:
+		ctx (dict): Context containing doctype, item_code, warehouse, and other transaction details.
+		out (dict): Output dictionary to be updated with batch_no, rate, serial_no etc.
+		doc (Document, optional): Frappe document object for the transaction.
+
+	Returns:
+		None: Modifies 'out' dictionary in place.
+	"""
 	from erpnext.stock.doctype.batch.batch import get_available_batches
 	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos_for_outward
 

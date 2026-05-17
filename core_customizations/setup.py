@@ -1,4 +1,13 @@
+# Copyright (c) 2026, Vinod Kumar K and contributors
+# For license information, please see license.txt
+"""
+Setup module for core_customizations app.
+
+This module runs after migration to configure roles and permissions.
+"""
+
 import frappe
+
 
 def after_migrate():
 	roles_permissions = {
@@ -88,18 +97,20 @@ def after_migrate():
 			{"parent": "Customer", "select": 1, "read": 1, "write": 1, "create": 1},
 		]
 	}
-	#We need to create a new role called "Field Sales User" if it doesn't exist
+	# We need to create a new role called "Field Sales User" if it doesn't exist
 	if not frappe.db.exists("Role", "Field Sales User"):
 		d = frappe.new_doc("Role")
 		d.role_name = "Field Sales User"
 		d.insert()
 		print("Created role: Field Sales User")
-	#We need to add permissions to the "Field Sales User" role
-	
+	# We need to add permissions to the "Field Sales User" role
+
 	for role_name, permissions in roles_permissions.items():
 		if not frappe.db.exists("Role", role_name):
 			print(f"Role {role_name} not found.")
 			continue
+
+		updated_doctypes = []  # Initialize list for each role
 
 		for p in permissions:
 			doctype = p["parent"]
@@ -147,21 +158,9 @@ def after_migrate():
 				d.report = p.get("report", 1)
 				d.share = p.get("share", 1)
 				d.save()
-				print(f"Updated permissions for {role_name} on {doctype}")
+				updated_doctypes.append(doctype)  # Append doctype on successful update
 			except Exception as e:
 				print(f"Skipping {doctype}: {e}")
 
-	create_custom_folders()
-
-def create_custom_folders():
-	folders = ["Employee Images", "Store Images", "Vehicle Images", "Location Images", "Activity Images and Videos"]
-	for folder_name in folders:
-		if not frappe.db.exists("File", {"file_name": folder_name, "is_folder": 1}):
-			folder = frappe.new_doc("File")
-			folder.file_name = folder_name
-			folder.is_folder = 1
-			folder.is_private = 0  # Adjust as needed, usually public for these types of images
-			folder.insert(ignore_permissions=True)
-			print(f"Created folder: {folder_name}")
-		else:
-			print(f"Folder already exists: {folder_name}")
+		if updated_doctypes:  # Print consolidated message after all permissions for a role are processed
+			print(f"Updated permissions for {role_name} on: [{', '.join(updated_doctypes)}]")

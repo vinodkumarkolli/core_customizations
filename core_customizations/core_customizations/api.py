@@ -1,11 +1,21 @@
+# Copyright (c) 2026, Vinod Kumar K and contributors
+# For license information, please see license.txt
+"""
+API module for core_customizations.
+
+Note: This file contains legacy/commented-out API methods that were previously used.
+The methods below are kept for reference purposes only and are not currently active.
+"""
+
 import frappe
 import base64
 from frappe.utils.file_manager import save_file
 from frappe.utils import today, getdate
 import re
 
+
 # Method: get_mobile_keys
-#@frappe.whitelist(allow_guest=True)
+# @frappe.whitelist(allow_guest=True)
 # def login_and_get_keys(usr, pwd):
 #     try:
 #         # 1. Manually authenticate the user

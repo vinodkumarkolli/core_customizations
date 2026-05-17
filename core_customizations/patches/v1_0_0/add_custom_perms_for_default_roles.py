@@ -1,4 +1,13 @@
+# Copyright (c) 2026, Vinod Kumar K and contributors
+# For license information, please see license.txt
+"""
+Patch to add custom permissions for default roles.
+
+This patch adds read permissions for specific doctypes to the 'Employee Self Service' role.
+"""
+
 import frappe
+
 
 def execute():
 	roles_permissions = {

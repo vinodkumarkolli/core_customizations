@@ -1,3 +1,6 @@
+# Copyright (c) 2026, Vinod Kumar K and contributors
+# For license information, please see license.txt
+
 app_name = "core_customizations"
 app_title = "Core Customizations"
 app_publisher = "Vinod Kumar K"

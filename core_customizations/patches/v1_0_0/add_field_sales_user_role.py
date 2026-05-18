@@ -1,4 +1,17 @@
+# Copyright (c) 2026, Vinod Kumar K and contributors
+# For license information, please see license.txt
+"""
+Patch to create 'Field Sales User' role and configure custom permissions.
+
+This patch:
+- Creates a new role named 'Field Sales User'
+- Migrates standard DocPerms to Custom DocPerms for affected doctypes
+- Sets up custom permissions for various doctypes
+- Configures property setters for Stock Settings
+"""
+
 import frappe
+
 
 def execute():
 	role_name = "Field Sales User"

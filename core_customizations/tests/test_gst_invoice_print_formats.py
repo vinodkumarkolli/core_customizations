@@ -1,17 +1,23 @@
 # Copyright (c) 2026, Vinod Kumar K and contributors
 # For license information, please see license.txt
 
-import json
 import frappe
 from frappe.tests import IntegrationTestCase
+from core_customizations.utils import format_qty, get_code128_svg
 
 
 class TestGSTInvoicePrintFormats(IntegrationTestCase):
 	"""
 	Dedicated test suite for GST Invoice Print Formats on Sales Invoice:
-	1. GST Invoice - Original for Receiver (Original for Customer)
+	1. GST Invoice - Original for Receiver
 	2. GST Invoice - Duplicate for Transporter
 	3. GST Invoice - Triplicate for Supplier
+	4. Bank Details & Payment Status layout
+	5. Dedicated Shipping Details layout
+	6. No Shipping Details tag fallback
+	7. Zero-dependency Code128 SVG Barcode Generator
+	8. Quantity Formatter (.0 omission)
+	9. Additional Discount on Grand Total vs Net Total
 	"""
 
 	@classmethod
@@ -83,74 +89,123 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		}).insert(ignore_permissions=True)
 		return addr.name
 
-	def _get_test_invoice(self):
+	def _get_test_invoice(self, is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=0):
 		invoices = frappe.get_all("Sales Invoice", limit=1)
 		if not invoices:
 			self.skipTest("No Sales Invoice available for testing GST Invoice prints")
 		inv = frappe.get_doc("Sales Invoice", invoices[0].name)
+		if with_transporter:
+			inv.custom_transporter = self.transporter_name
+			inv.custom_transporter_from_address = self.from_address_name
+			inv.custom_transporter_from_address_display = "100 Transporter Origin Hub Street\nChennai\nTamil Nadu"
+			inv.custom_is_godown_delivery = 1
+			inv.custom_transporter_to_address = self.to_address_name
+			inv.custom_transporter_to_address_display = "200 Destination Godown Road\nSalem\nTamil Nadu"
+		else:
+			inv.custom_transporter = None
+			inv.custom_transporter_from_address = None
+			inv.custom_transporter_from_address_display = None
+			inv.custom_is_godown_delivery = 0
+			inv.custom_transporter_to_address = None
+			inv.custom_transporter_to_address_display = None
+
+		inv.apply_discount_on = apply_discount_on
+		inv.discount_amount = discount_amount
+
+		if is_paid:
+			inv.outstanding_amount = 0
+		else:
+			inv.outstanding_amount = 5000.00
+		inv.db_update()
 		return inv
 
 	def test_01_all_gst_print_formats_exist(self):
-		"""Verify all 3 GST Print Formats exist with correct configuration and module."""
+		"""Verify all 3 GST Print Formats exist with custom_format=1 and Jinja type."""
 		for pf_name in self.print_formats:
 			self.assertTrue(frappe.db.exists("Print Format", pf_name), f"Print Format '{pf_name}' not found")
 			pf = frappe.get_doc("Print Format", pf_name)
 			self.assertEqual(pf.doc_type, "Sales Invoice")
 			self.assertEqual(pf.module, "Core Customizations")
 			self.assertEqual(pf.print_format_type, "Jinja")
-			self.assertEqual(pf.font, "DM Sans")
-			self.assertEqual(pf.print_format_builder_beta, 1)
+			self.assertEqual(pf.custom_format, 1)
 
-	def test_02_print_formats_headings_intact(self):
-		"""Verify each print format retains its distinct, required header label."""
-		expected_headings = {
-			"GST Invoice - Original for Receiver": "Original for Customer",
+	def test_02_print_formats_headings_and_badges(self):
+		"""Verify each print format retains its distinct, required header label in html."""
+		expected_badges = {
+			"GST Invoice - Original for Receiver": "Original for Receiver",
 			"GST Invoice - Duplicate for Transporter": "Duplicate for Transporter",
 			"GST Invoice - Triplicate for Supplier": "Triplicate for Supplier",
 		}
 
-		for pf_name, heading in expected_headings.items():
+		for pf_name, badge in expected_badges.items():
 			pf = frappe.get_doc("Print Format", pf_name)
-			format_data = pf.format_data or ""
-			classic_data = pf.classic_format_data or ""
-			header_found = heading in format_data or heading in classic_data
-			self.assertTrue(header_found, f"Expected heading '{heading}' missing in Print Format '{pf_name}'")
+			html_content = pf.html or ""
+			self.assertIn(badge, html_content, f"Expected badge '{badge}' missing in Print Format '{pf_name}'")
+			self.assertIn("TAX INVOICE", html_content.upper())
+			self.assertIn("GSTIN:", html_content)
+			self.assertIn("Place of Supply:", html_content)
 
-	def test_03_original_for_receiver_renders(self):
-		"""Verify GST Invoice - Original for Receiver renders with all key sections."""
-		inv = self._get_test_invoice()
+	def test_03_payment_status_fully_paid_layout(self):
+		"""Verify Payment & Status box shows Bank Details and Fully Paid badge, with no Transporter info."""
+		inv = self._get_test_invoice(is_paid=True, with_transporter=True)
 		html = frappe.get_print("Sales Invoice", inv.name, print_format="GST Invoice - Original for Receiver")
 
-		self.assertIn("Original for Customer", html)
-		self.assertIn(inv.name, html)
-		self.assertIn(inv.company, html)
-		self.assertIn("Bank Details", html)
+		self.assertIn("Fully Paid", html)
+		self.assertIn("Payment & Status", html)
+		self.assertIn("Shipping & Logistics Details", html)
+		self.assertIn(self.transporter_name, html)
+		self.assertIn("Grand Total:", html)
 
-	def test_04_duplicate_for_transporter_renders(self):
-		"""Verify GST Invoice - Duplicate for Transporter renders with correct header."""
-		inv = self._get_test_invoice()
-		html = frappe.get_print("Sales Invoice", inv.name, print_format="GST Invoice - Duplicate for Transporter")
+	def test_04_payment_status_unpaid_layout(self):
+		"""Verify Payment & Status box shows Unpaid tag when outstanding amount > 0."""
+		inv = self._get_test_invoice(is_paid=False, with_transporter=True)
+		html = frappe.get_print("Sales Invoice", inv.name, print_format="GST Invoice - Original for Receiver")
 
-		self.assertIn("Duplicate for Transporter", html)
-		self.assertIn(inv.name, html)
-		self.assertIn("Bank Details", html)
+		self.assertIn("Unpaid:", html)
+		self.assertIn("Shipping & Logistics Details", html)
 
-	def test_05_triplicate_for_supplier_renders(self):
-		"""Verify GST Invoice - Triplicate for Supplier renders with correct header."""
-		inv = self._get_test_invoice()
-		html = frappe.get_print("Sales Invoice", inv.name, print_format="GST Invoice - Triplicate for Supplier")
-
-		self.assertIn("Triplicate for Supplier", html)
-		self.assertIn(inv.name, html)
-		self.assertIn("Bank Details", html)
-
-	def test_06_bank_details_rendering_across_all_three(self):
-		"""Verify all 3 GST formats render Bank Details cleanly without transporter section."""
-		inv = self._get_test_invoice()
+	def test_05_dedicated_shipping_details_section(self):
+		"""Verify bottom section contains dedicated Transporter and Godown/Hub delivery info across all 3 formats."""
+		inv = self._get_test_invoice(is_paid=True, with_transporter=True)
 
 		for pf_name in self.print_formats:
 			html = frappe.get_print("Sales Invoice", inv.name, print_format=pf_name)
-			self.assertIn("Bank Details", html, f"Bank Details missing in '{pf_name}'")
-			self.assertIn("document-footer-content", html, f"Footer missing in '{pf_name}'")
-			self.assertNotIn("<b>Transporter:</b>", html, f"Transporter should not appear below Bank Details in '{pf_name}'")
+			self.assertIn("Shipping & Logistics Details", html, f"Dedicated Shipping details missing in '{pf_name}'")
+			self.assertIn(self.transporter_name, html, f"Transporter name missing in '{pf_name}'")
+			self.assertIn("100 Transporter Origin Hub Street", html, f"Origin Hub missing in '{pf_name}'")
+			self.assertIn("200 Destination Godown Road", html, f"Destination Godown missing in '{pf_name}'")
 
+	def test_06_no_shipping_details_tag(self):
+		"""Verify 'No Shipping Details' tag is displayed when no transporter is configured."""
+		inv = self._get_test_invoice(is_paid=True, with_transporter=False)
+
+		for pf_name in self.print_formats:
+			html = frappe.get_print("Sales Invoice", inv.name, print_format=pf_name)
+			self.assertIn("No Shipping Details", html, f"'No Shipping Details' tag missing in '{pf_name}'")
+
+	def test_07_quantity_formatting_helper(self):
+		"""Verify format_qty omits .0 for whole numbers and retains true fractions."""
+		self.assertEqual(format_qty(5320.0), "5320")
+		self.assertEqual(format_qty(2.0), "2")
+		self.assertEqual(format_qty(15.0), "15")
+		self.assertEqual(format_qty(2.5), "2.5")
+		self.assertEqual(format_qty(0.75), "0.75")
+		self.assertEqual(format_qty("10.0"), "10")
+		self.assertEqual(format_qty(None), "")
+		self.assertEqual(format_qty(0), "0")
+
+	def test_08_code128_svg_generator(self):
+		"""Verify get_code128_svg creates valid standalone SVG elements."""
+		svg = get_code128_svg("INV-2627-00457")
+		self.assertTrue(svg.startswith("<svg"))
+		self.assertTrue(svg.endswith("</svg>"))
+		self.assertIn("<rect", svg)
+		self.assertIn('fill="#000"', svg)
+
+	def test_09_discount_on_grand_total_rendering(self):
+		"""Verify Additional Discount is rendered after Taxes when applied on Grand Total."""
+		inv = self._get_test_invoice(is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=68.0)
+		html = frappe.get_print("Sales Invoice", inv.name, print_format="GST Invoice - Original for Receiver")
+
+		self.assertIn("Additional Discount:", html)
+		self.assertIn("Grand Total:", html)

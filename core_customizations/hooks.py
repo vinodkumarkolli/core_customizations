@@ -80,10 +80,16 @@ app_license = "bsd-3-clause"
 # ----------
 
 # add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "core_customizations.utils.jinja_methods",
-# 	"filters": "core_customizations.utils.jinja_filters"
-# }
+jinja = {
+	"methods": [
+		"core_customizations.utils.get_code128_svg",
+		"core_customizations.utils.get_barcode",
+		"core_customizations.utils.format_qty"
+	],
+	"filters": [
+		"core_customizations.utils.format_qty"
+	]
+}
 
 # Installation
 # ------------

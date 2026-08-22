@@ -86,3 +86,50 @@ def after_migrate():
 
 		if updated_doctypes:  # Print consolidated message after all permissions for a role are processed
 			print(f"Updated permissions for {role_name} on: [{', '.join(updated_doctypes)}]")
+
+	# Clean up obsolete Print Formats
+	obsolete_print_formats = [
+		"Customer Delivery Address Label",
+		"Transporter Godown To Address Label",
+		"Transporter From Address Label",
+		"Company Address Label",
+		"Invoice Detail Label",
+	]
+	for pf_name in obsolete_print_formats:
+		if frappe.db.exists("Print Format", pf_name):
+			try:
+				frappe.delete_doc("Print Format", pf_name, ignore_permissions=True, force=True)
+				print(f"Deleted obsolete Print Format: {pf_name}")
+			except Exception as e:
+				print(f"Could not delete obsolete Print Format {pf_name}: {e}")
+
+	# Ensure Core Customizations Print Formats are in sync
+	try:
+		import json
+		import os
+
+		fixture_path = frappe.get_app_path("core_customizations", "fixtures", "print_format.json")
+		if os.path.exists(fixture_path):
+			with open(fixture_path) as f:
+				print_formats = json.load(f)
+
+			for pf_data in print_formats:
+				name = pf_data.get("name")
+				if not name:
+					continue
+
+				if frappe.db.exists("Print Format", name):
+					doc = frappe.get_doc("Print Format", name)
+				else:
+					doc = frappe.new_doc("Print Format")
+
+				for k, v in pf_data.items():
+					if k not in ["name", "doctype", "creation", "modified", "owner", "docstatus", "idx"]:
+						doc.set(k, v)
+
+				doc.name = name
+				doc.flags.ignore_permissions = True
+				doc.save()
+			print("Synced Core Customizations Print Formats successfully.")
+	except Exception as e:
+		print(f"Error syncing Print Formats in after_migrate: {e}")

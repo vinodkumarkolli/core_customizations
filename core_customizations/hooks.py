@@ -151,13 +151,16 @@ after_migrate = "core_customizations.setup.after_migrate"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Sales Invoice": {
+		"validate": "core_customizations.core_customizations.sales_invoice.validate_delivery_note_mandatory",
+	},
+	"Delivery Note": {
+		"validate": "core_customizations.core_customizations.delivery_note.validate_delivery_note",
+		"before_submit": "core_customizations.core_customizations.delivery_note.before_submit_delivery_note",
+		"on_cancel": "core_customizations.core_customizations.delivery_note.on_cancel_delivery_note",
+	}
+}
 
 # Scheduled Tasks
 # ---------------

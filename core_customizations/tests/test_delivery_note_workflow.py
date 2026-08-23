@@ -1,0 +1,466 @@
+# Copyright (c) 2026, Vinod Kumar K and contributors
+# For license information, please see license.txt
+
+import json
+import frappe
+from frappe.tests import IntegrationTestCase
+from core_customizations.core_customizations.delivery_note import (
+	update_transporter_details,
+	update_lr_details,
+	get_unpacked_items_summary,
+	generate_packing_slips,
+	get_packing_slips_list,
+	delete_packing_slips,
+	get_bulk_packing_labels_html,
+	_get_formatted_address,
+)
+from core_customizations.core_customizations.sales_invoice import validate_delivery_note_mandatory
+
+
+class TestDeliveryNoteWorkflow(IntegrationTestCase):
+	"""
+	Comprehensive integration test suite for 3PL Delivery Note Transporter Assignment,
+	Address Sanitization & GSTIN Display, Packing Slip Generator with dn_detail,
+	Manage Packing Slips with stock_uom, 4x6 Thermal Label Printing (Single & Bulk),
+	Godown Delivery toggle clearing, and Mandatory Delivery Note Validation on Sales Invoice.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+
+		# 1. Create a Test Customer with default transporter settings
+		cls.customer_name = "_Test 3PL Customer"
+		if not frappe.db.exists("Customer", cls.customer_name):
+			cust = frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": cls.customer_name,
+				"customer_group": "Commercial",
+				"territory": "All Territories",
+				"default_price_list": "Standard Selling",
+			}).insert(ignore_permissions=True)
+		else:
+			cust = frappe.get_doc("Customer", cls.customer_name)
+
+		# 2. Create Transporter Supplier
+		cls.transporter_name = "_Test 3PL Transporter"
+		if not frappe.db.exists("Supplier", cls.transporter_name):
+			supp = frappe.get_doc({
+				"doctype": "Supplier",
+				"supplier_name": cls.transporter_name,
+				"supplier_group": "Services",
+				"is_transporter": 1,
+			}).insert(ignore_permissions=True)
+		else:
+			supp = frappe.get_doc("Supplier", cls.transporter_name)
+			if not supp.is_transporter:
+				supp.is_transporter = 1
+				supp.save(ignore_permissions=True)
+
+		# 3. Create Addresses with GSTIN
+		cls.from_address = cls._create_address(
+			"_Test Origin Parrys Hub",
+			cls.transporter_name,
+			"100 Wall Tax Road, Parrys",
+			"Chennai",
+			"Tamil Nadu",
+			"600001",
+			gstin="33AAGCR8772D1Z9",
+		)
+		cls.to_address = cls._create_address(
+			"_Test Dest Salem Godown",
+			cls.transporter_name,
+			"500 Godown Main Road",
+			"Salem",
+			"Tamil Nadu",
+			"636001",
+			gstin="33AAGCR8772D1Z9",
+		)
+
+		# Set defaults on Customer
+		cust.custom_default_transporter = cls.transporter_name
+		cust.custom_default_transporter_from_address = cls.from_address
+		cust.custom_is_godown_delivery = 1
+		cust.custom_default_transporter_to_address = cls.to_address
+		cust.save(ignore_permissions=True)
+
+		# 4. Create Test Items
+		cls.item_code = "_Test_3PL_Carton_Item"
+		if not frappe.db.exists("Item", cls.item_code):
+			frappe.get_doc({
+				"doctype": "Item",
+				"item_code": cls.item_code,
+				"item_name": "Test 3PL Carton Item",
+				"item_group": "Products",
+				"stock_uom": "Nos",
+				"is_stock_item": 0,
+				"gst_hsn_code": "30049011",
+			}).insert(ignore_permissions=True)
+
+		cls.item_code_2 = "_Test_3PL_Loose_Item"
+		if not frappe.db.exists("Item", cls.item_code_2):
+			frappe.get_doc({
+				"doctype": "Item",
+				"item_code": cls.item_code_2,
+				"item_name": "Test 3PL Loose Item",
+				"item_group": "Products",
+				"stock_uom": "Nos",
+				"is_stock_item": 0,
+				"gst_hsn_code": "30049011",
+			}).insert(ignore_permissions=True)
+
+		frappe.db.commit()
+
+	@classmethod
+	def _create_address(cls, title, supplier_name, line1, city, state, pincode, gstin=None):
+		addr_name = frappe.db.get_value(
+			"Dynamic Link",
+			{"parenttype": "Address", "link_doctype": "Supplier", "link_name": supplier_name},
+			"parent",
+		)
+		if addr_name and frappe.db.get_value("Address", addr_name, "address_title") == title:
+			if gstin:
+				frappe.db.set_value("Address", addr_name, "gstin", gstin)
+			return addr_name
+
+		addr = frappe.get_doc({
+			"doctype": "Address",
+			"address_title": title,
+			"address_type": "Billing",
+			"address_line1": line1,
+			"city": city,
+			"state": state,
+			"pincode": pincode,
+			"country": "India",
+			"gstin": gstin,
+			"links": [{"link_doctype": "Supplier", "link_name": supplier_name}],
+		}).insert(ignore_permissions=True)
+		return addr.name
+
+	def _create_test_delivery_note(self):
+		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"customer": self.customer_name,
+			"company": company,
+			"items": [
+				{
+					"item_code": self.item_code,
+					"qty": 500,
+					"uom": "Nos",
+				},
+				{
+					"item_code": self.item_code_2,
+					"qty": 100,
+					"uom": "Nos",
+				}
+			]
+		}).insert(ignore_permissions=True)
+		return dn
+
+	def test_01_update_transporter_details_godown_enabled(self):
+		"""Verify updating transporter details with Godown Delivery enabled."""
+		dn = self._create_test_delivery_note()
+
+		res = update_transporter_details(
+			delivery_note=dn.name,
+			transporter=self.transporter_name,
+			from_address=self.from_address,
+			is_godown=1,
+			to_address=self.to_address,
+		)
+
+		self.assertEqual(res["transporter"], self.transporter_name)
+		self.assertEqual(res["is_godown_delivery"], 1)
+		self.assertEqual(res["to_address"], self.to_address)
+		self.assertIn("GSTIN: 33AAGCR8772D1Z9", res["to_address_display"])
+		self.assertNotIn("<br>", res["to_address_display"])
+
+		dn.reload()
+		self.assertEqual(dn.custom_transporter, self.transporter_name)
+		self.assertEqual(dn.custom_is_godown_delivery, 1)
+		self.assertEqual(dn.custom_transporter_to_address, self.to_address)
+		self.assertIn("GSTIN: 33AAGCR8772D1Z9", dn.custom_transporter_to_address_display)
+
+	def test_02_update_transporter_details_godown_disabled_clears_destination(self):
+		"""Verify unchecking Godown Delivery clears to_address and to_address_display."""
+		dn = self._create_test_delivery_note()
+
+		# First set as Godown
+		update_transporter_details(
+			delivery_note=dn.name,
+			transporter=self.transporter_name,
+			from_address=self.from_address,
+			is_godown=1,
+			to_address=self.to_address,
+		)
+
+		# Now update as Door Delivery (is_godown = 0)
+		res = update_transporter_details(
+			delivery_note=dn.name,
+			transporter=self.transporter_name,
+			from_address=self.from_address,
+			is_godown=0,
+			to_address=None,
+		)
+
+		self.assertEqual(res["is_godown_delivery"], 0)
+		self.assertIsNone(res["to_address"])
+		self.assertEqual(res["to_address_display"], "")
+
+		dn.reload()
+		self.assertEqual(dn.custom_is_godown_delivery, 0)
+		self.assertIsNone(dn.custom_transporter_to_address)
+		self.assertEqual(dn.custom_transporter_to_address_display or "", "")
+
+	def test_03_address_formatting_strips_html_and_includes_gstin(self):
+		"""Verify _get_formatted_address strips all HTML tags and guarantees GSTIN."""
+		formatted = _get_formatted_address(self.from_address)
+		self.assertNotIn("<br>", formatted)
+		self.assertNotIn("<br/>", formatted)
+		self.assertNotIn("<", formatted)
+		self.assertIn("GSTIN: 33AAGCR8772D1Z9", formatted)
+		self.assertIn("100 Wall Tax Road, Parrys", formatted)
+
+	def test_04_update_lr_details_api(self):
+		"""Verify updating LR details via dedicated API."""
+		dn = self._create_test_delivery_note()
+		res = update_lr_details(dn.name, lr_no="LR-CHENNAI-9988", lr_date="2026-08-23")
+		self.assertEqual(res["lr_no"], "LR-CHENNAI-9988")
+
+		dn.reload()
+		self.assertEqual(dn.lr_no, "LR-CHENNAI-9988")
+		self.assertEqual(str(dn.lr_date), "2026-08-23")
+
+	def test_05_packing_slip_generator_single_and_mixed(self):
+		"""Verify generating sequential packing slips with valid dn_detail references."""
+		dn = self._create_test_delivery_note()
+
+		# Generate 2 boxes of 200 units each for item 1 -> Box 1 and Box 2
+		res1 = generate_packing_slips(
+			delivery_note=dn.name,
+			packing_type="single",
+			item_code=self.item_code,
+			qty_per_box=200,
+			no_of_boxes=2,
+		)
+		self.assertEqual(len(res1["created_packing_slips"]), 2)
+		self.assertEqual(res1["total_boxes"], 2)
+
+		# Verify Packing Slip item has dn_detail set
+		ps1 = frappe.get_doc("Packing Slip", res1["created_packing_slips"][0])
+		self.assertEqual(ps1.items[0].dn_detail, dn.items[0].name)
+		self.assertEqual(ps1.from_case_no, 1)
+
+		# Generate 1 mixed carton with remainder of item 1 (100) and item 2 (100) -> Box 3
+		res2 = generate_packing_slips(
+			delivery_note=dn.name,
+			packing_type="mixed",
+			mixed_items=[
+				{"item_code": self.item_code, "qty": 100},
+				{"item_code": self.item_code_2, "qty": 100},
+			],
+			no_of_boxes=1,
+		)
+		self.assertEqual(len(res2["created_packing_slips"]), 1)
+		self.assertEqual(res2["total_boxes"], 3)
+
+		# Verify summary shows 0 balance for both items
+		summary = get_unpacked_items_summary(dn.name)
+		self.assertEqual(summary["total_boxes_created"], 3)
+		self.assertEqual(summary["next_package_no"], 4)
+
+		item1_sum = next(i for i in summary["items"] if i["item_code"] == self.item_code)
+		item2_sum = next(i for i in summary["items"] if i["item_code"] == self.item_code_2)
+
+		self.assertEqual(item1_sum["packed_qty"], 500.0)
+		self.assertEqual(item1_sum["remaining_qty"], 0.0)
+		self.assertEqual(item2_sum["packed_qty"], 100.0)
+		self.assertEqual(item2_sum["remaining_qty"], 0.0)
+
+	def test_06_manage_and_delete_packing_slips(self):
+		"""Verify listing packing slips with stock_uom and deleting them."""
+		dn = self._create_test_delivery_note()
+
+		generate_packing_slips(
+			delivery_note=dn.name,
+			packing_type="single",
+			item_code=self.item_code,
+			qty_per_box=250,
+			no_of_boxes=2,
+		)
+
+		slips = get_packing_slips_list(dn.name)
+		self.assertEqual(len(slips), 2)
+		self.assertEqual(slips[0]["from_case_no"], 1)
+		self.assertEqual(slips[1]["from_case_no"], 2)
+		self.assertIn("Nos", slips[0]["items_display"])
+
+		# Delete single slip
+		del_res = delete_packing_slips(dn.name, packing_slip_names=[slips[0]["name"]])
+		self.assertEqual(del_res["deleted_count"], 1)
+		self.assertEqual(del_res["remaining_count"], 1)
+
+		# Delete remaining slips
+		del_res_all = delete_packing_slips(dn.name)
+		self.assertEqual(del_res_all["remaining_count"], 0)
+
+	def test_07_bulk_and_single_4x6_thermal_label_rendering(self):
+		"""Verify Carton Shipping Label (4x6) single and bulk render without letterhead error."""
+		dn = self._create_test_delivery_note()
+		update_transporter_details(
+			delivery_note=dn.name,
+			transporter=self.transporter_name,
+			from_address=self.from_address,
+			is_godown=1,
+			to_address=self.to_address,
+		)
+
+		gen_res = generate_packing_slips(
+			delivery_note=dn.name,
+			packing_type="single",
+			item_code=self.item_code,
+			qty_per_box=250,
+			no_of_boxes=2,
+		)
+		ps_name = gen_res["created_packing_slips"][0]
+
+		# 1. Test single print format
+		html = frappe.get_print("Packing Slip", ps_name, print_format="Carton Shipping Label (4x6)", no_letterhead=1)
+		self.assertIn(ps_name, html)
+		self.assertIn(dn.name, html)
+		self.assertIn("BOX NUMBER / TOTAL", html)
+		self.assertIn("BOX [ &nbsp;<b>1</b>&nbsp; ]", html)
+		self.assertIn("GODOWN PICKUP", html)
+		self.assertIn("GSTIN: 33AAGCR8772D1Z9", html)
+
+		# 2. Test bulk print HTML
+		bulk_html = get_bulk_packing_labels_html(dn.name)
+		self.assertIn(gen_res["created_packing_slips"][0], bulk_html)
+		self.assertIn(gen_res["created_packing_slips"][1], bulk_html)
+		self.assertIn("page-break", bulk_html)
+
+	def test_08_mandatory_delivery_note_on_sales_invoice(self):
+		"""Verify Sales Invoice creation without a Delivery Note raises a validation error."""
+		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+
+		# Direct Sales Invoice without Delivery Note should fail
+		direct_inv = frappe.new_doc("Sales Invoice")
+		direct_inv.customer = self.customer_name
+		direct_inv.company = company
+		direct_inv.append("items", {
+			"item_code": self.item_code,
+			"qty": 10,
+			"rate": 100,
+			"delivery_note": None,
+		})
+
+		self.assertRaises(frappe.ValidationError, validate_delivery_note_mandatory, direct_inv)
+
+		# Sales Invoice linked to a Delivery Note should succeed
+		dn = self._create_test_delivery_note()
+		valid_inv = frappe.new_doc("Sales Invoice")
+		valid_inv.customer = self.customer_name
+		valid_inv.company = company
+		valid_inv.append("items", {
+			"item_code": self.item_code,
+			"qty": 10,
+			"rate": 100,
+			"delivery_note": dn.name,
+		})
+
+		# Should not raise exception
+		validate_delivery_note_mandatory(valid_inv)
+
+	def test_09_godown_delivery_validation_fails_without_to_address(self):
+		"""Verify update_transporter_details raises ValidationError if is_godown=1 but to_address is empty."""
+		dn = self._create_test_delivery_note()
+
+		with self.assertRaises(frappe.ValidationError):
+			update_transporter_details(
+				delivery_note=dn.name,
+				transporter=self.transporter_name,
+				from_address=self.from_address,
+				is_godown=1,
+				to_address=None,
+			)
+
+	def test_10_godown_delivery_validation_fails_without_from_address(self):
+		"""Verify update_transporter_details raises ValidationError if is_godown=1 but from_address is empty."""
+		dn = self._create_test_delivery_note()
+
+		with self.assertRaises(frappe.ValidationError):
+			update_transporter_details(
+				delivery_note=dn.name,
+				transporter=self.transporter_name,
+				from_address=None,
+				is_godown=1,
+				to_address=self.to_address,
+			)
+
+	def test_11_delivery_note_auto_fetches_customer_transporter_defaults(self):
+		"""Verify new Delivery Note auto-populates transporter, hub, godown, and displays from Customer."""
+		dn = self._create_test_delivery_note()
+		dn.reload()
+
+		self.assertEqual(dn.custom_transporter, self.transporter_name)
+		self.assertEqual(dn.custom_transporter_from_address, self.from_address)
+		self.assertEqual(dn.custom_is_godown_delivery, 1)
+		self.assertEqual(dn.custom_transporter_to_address, self.to_address)
+		self.assertIn("GSTIN: 33AAGCR8772D1Z9", dn.custom_transporter_from_address_display)
+		self.assertIn("GSTIN: 33AAGCR8772D1Z9", dn.custom_transporter_to_address_display)
+		self.assertNotIn("<br>", dn.custom_transporter_from_address_display)
+		self.assertNotIn("<br>", dn.custom_transporter_to_address_display)
+
+	def test_12_delivery_note_submission_auto_submits_draft_packing_slips(self):
+		"""Verify submitting Delivery Note automatically submits all linked Draft Packing Slips."""
+		dn = self._create_test_delivery_note()
+
+		gen_res = generate_packing_slips(
+			delivery_note=dn.name,
+			packing_type="single",
+			item_code=self.item_code,
+			qty_per_box=250,
+			no_of_boxes=2,
+		)
+		ps_names = gen_res["created_packing_slips"]
+
+		# Assert they are initially in Draft (docstatus: 0)
+		for ps_name in ps_names:
+			self.assertEqual(frappe.db.get_value("Packing Slip", ps_name, "docstatus"), 0)
+
+		# Submit Delivery Note
+		dn.reload()
+		dn.submit()
+
+		# Assert all linked Packing Slips are now Submitted (docstatus: 1)
+		for ps_name in ps_names:
+			self.assertEqual(frappe.db.get_value("Packing Slip", ps_name, "docstatus"), 1)
+
+	def test_13_delivery_note_cancellation_auto_cancels_submitted_packing_slips(self):
+		"""Verify cancelling Delivery Note automatically cancels all linked Submitted Packing Slips."""
+		dn = self._create_test_delivery_note()
+
+		gen_res = generate_packing_slips(
+			delivery_note=dn.name,
+			packing_type="single",
+			item_code=self.item_code,
+			qty_per_box=250,
+			no_of_boxes=2,
+		)
+		ps_names = gen_res["created_packing_slips"]
+
+		# Submit Delivery Note (which submits packing slips)
+		dn.reload()
+		dn.submit()
+
+		# Cancel Delivery Note
+		dn.reload()
+		dn.cancel()
+
+		# Assert all linked Packing Slips are now Cancelled (docstatus: 2)
+		for ps_name in ps_names:
+			self.assertEqual(frappe.db.get_value("Packing Slip", ps_name, "docstatus"), 2)
+
+
+

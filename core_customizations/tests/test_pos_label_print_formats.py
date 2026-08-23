@@ -7,7 +7,7 @@ from frappe.tests import IntegrationTestCase
 
 class TestPOSLabelPrintFormats(IntegrationTestCase):
 	"""
-	Dedicated test suite for Unified 4x6 Shipping Package Label Print Format on Sales Invoice.
+	Dedicated test suite for Unified 4x6 Shipping Package Label Print Format on Delivery Note.
 	"""
 
 	@classmethod
@@ -75,50 +75,50 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 		}).insert(ignore_permissions=True)
 		return addr.name
 
-	def _get_test_invoice(self, is_godown=1):
-		invoices = frappe.get_all("Sales Invoice", limit=1)
-		if not invoices:
-			self.skipTest("No Sales Invoice available for testing POS label prints")
-		inv = frappe.get_doc("Sales Invoice", invoices[0].name)
-		inv.custom_transporter = self.transporter_name
-		inv.custom_transporter_from_address = self.from_address_name
-		inv.custom_transporter_from_address_display = "500 Origin Booking Street\nChennai\nTamil Nadu"
-		inv.custom_is_godown_delivery = 1 if is_godown else 0
-		inv.custom_transporter_to_address = self.to_address_name if is_godown else None
-		inv.custom_transporter_to_address_display = "800 Destination Delivery Road\nSalem\nTamil Nadu" if is_godown else None
-		inv.db_update()
-		return inv
+	def _get_test_delivery_note(self, is_godown=1):
+		notes = frappe.get_all("Delivery Note", limit=1)
+		if not notes:
+			self.skipTest("No Delivery Note available for testing POS label prints")
+		dn = frappe.get_doc("Delivery Note", notes[0].name)
+		dn.custom_transporter = self.transporter_name
+		dn.custom_transporter_from_address = self.from_address_name
+		dn.custom_transporter_from_address_display = "500 Origin Booking Street\nChennai\nTamil Nadu"
+		dn.custom_is_godown_delivery = 1 if is_godown else 0
+		dn.custom_transporter_to_address = self.to_address_name if is_godown else None
+		dn.custom_transporter_to_address_display = "800 Destination Delivery Road\nSalem\nTamil Nadu" if is_godown else None
+		dn.db_update()
+		return dn
 
 	def test_01_unified_label_print_format_exists(self):
-		"""Verify unified 4x6 Shipping Package Label Print Format exists with proper configuration."""
+		"""Verify unified 4x6 Shipping Package Label Print Format exists with proper configuration on Delivery Note."""
 		self.assertTrue(frappe.db.exists("Print Format", self.label_format), f"Print Format '{self.label_format}' does not exist")
 		pf = frappe.get_doc("Print Format", self.label_format)
-		self.assertEqual(pf.doc_type, "Sales Invoice")
+		self.assertEqual(pf.doc_type, "Delivery Note")
 		self.assertEqual(pf.module, "Core Customizations")
 		self.assertEqual(pf.print_format_type, "Jinja")
 		self.assertEqual(pf.custom_format, 1)
 
 	def test_02_shipping_label_godown_delivery(self):
 		"""Verify Shipping Package Label renders Godown Delivery destination, transporter, sender, and reference box."""
-		inv = self._get_test_invoice(is_godown=1)
-		html = frappe.get_print("Sales Invoice", inv.name, print_format=self.label_format)
+		dn = self._get_test_delivery_note(is_godown=1)
+		html = frappe.get_print("Delivery Note", dn.name, print_format=self.label_format)
 
-		# Header & Invoice Info
-		self.assertIn("PACKAGE / SHIPPING LABEL", html)
-		self.assertIn(inv.name, html)
-		self.assertIn("REF / ROUTING CODE", html)
+		# Header & Info
+		self.assertIn(dn.name, html)
+		self.assertIn("BOX NUMBER / TOTAL", html)
 
 		# Godown Delivery info
-		self.assertIn("GODOWN DELIVERY", html)
+		self.assertIn("GODOWN PICKUP", html)
 		self.assertIn("800 Destination Delivery Road", html)
-		self.assertIn(inv.customer_name, html)
+		self.assertIn(dn.customer_name, html)
 
-		# Transporter info
+		# Transporter & Reference Routing Info
 		self.assertIn(self.transporter_name, html)
 		self.assertIn("500 Origin Booking Street", html)
+		self.assertIn("REF / ROUTING CODE", html)
 
 		# Company info
-		self.assertIn(inv.company, html)
+		self.assertIn(dn.company, html)
 
 		# Confirm individual items rows are not listed in a table
 		self.assertNotIn("<th>Item</th>", html)
@@ -127,10 +127,10 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 
 	def test_03_shipping_label_door_delivery(self):
 		"""Verify Shipping Package Label renders standard Door Delivery destination address."""
-		inv = self._get_test_invoice(is_godown=0)
-		html = frappe.get_print("Sales Invoice", inv.name, print_format=self.label_format)
+		dn = self._get_test_delivery_note(is_godown=0)
+		html = frappe.get_print("Delivery Note", dn.name, print_format=self.label_format)
 
 		self.assertIn("DOOR DELIVERY", html)
-		self.assertIn(inv.customer_name, html)
-		self.assertIn(inv.company, html)
-		self.assertIn(inv.name, html)
+		self.assertIn(dn.customer_name, html)
+		self.assertIn(dn.company, html)
+		self.assertIn(dn.name, html)

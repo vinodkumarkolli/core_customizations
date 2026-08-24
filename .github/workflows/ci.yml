@@ -61,6 +61,7 @@ jobs:
           su frappe -c '
           export PATH=$PATH:~/.local/bin
           pip install frappe-bench
+          rm -rf test-bench
           bench init test-bench --skip-redis-config-generation --frappe-branch version-16
           cd test-bench
           

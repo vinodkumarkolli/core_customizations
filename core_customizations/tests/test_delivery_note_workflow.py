@@ -462,5 +462,92 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		for ps_name in ps_names:
 			self.assertEqual(frappe.db.get_value("Packing Slip", ps_name, "docstatus"), 2)
 
+	def test_14_sales_invoice_from_delivery_note_disallows_update_stock(self):
+		"""Verify Sales Invoice linked to a Delivery Note blocks update_stock = 1."""
+		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+		dn = self._create_test_delivery_note()
+
+		inv = frappe.new_doc("Sales Invoice")
+		inv.customer = self.customer_name
+		inv.company = company
+		inv.update_stock = 1
+		inv.append("items", {
+			"item_code": self.item_code,
+			"qty": 10,
+			"rate": 100,
+			"delivery_note": dn.name,
+		})
+
+		# Should raise validation error because update_stock cannot be 1 when linked to DN
+		self.assertRaises(frappe.ValidationError, validate_delivery_note_mandatory, inv)
+
+		# When update_stock is 0, validation should succeed
+		inv.update_stock = 0
+		validate_delivery_note_mandatory(inv)
+
+
+	def test_15_batch_allocation_on_delivery_note_via_monkey_patch(self):
+		"""Verify monkey patch custom_update_stock triggers batch allocation for Delivery Note."""
+		from core_customizations.monkey_patches import custom_update_stock
+
+		# Create a batched item for testing if not present
+		batch_item_code = "_Test_3PL_Batched_Item"
+		if not frappe.db.exists("Item", batch_item_code):
+			frappe.get_doc({
+				"doctype": "Item",
+				"item_code": batch_item_code,
+				"item_name": "Test 3PL Batched Item",
+				"item_group": "Products",
+				"stock_uom": "Nos",
+				"is_stock_item": 1,
+				"has_batch_no": 1,
+				"create_new_batch": 1,
+				"gst_hsn_code": "30049011",
+			}).insert(ignore_permissions=True)
+
+		ctx = frappe._dict({
+			"doctype": "Delivery Note",
+			"item_code": batch_item_code,
+			"warehouse": "Stores - SE-K",
+			"child_docname": "dn_detail_1",
+		})
+		out = frappe._dict({
+			"warehouse": "Stores - SE-K",
+			"stock_qty": 5,
+			"uom": "Nos",
+			"item_code": batch_item_code,
+			"has_batch_no": 1,
+			"has_serial_no": 0,
+		})
+
+		# Calling custom_update_stock should execute without error for Delivery Note
+		custom_update_stock(ctx, out)
+		# Verify out has warehouse preserved
+		self.assertEqual(out.warehouse, "Stores - SE-K")
+
+	def test_16_sales_invoice_without_update_stock_does_not_trigger_batch_selection(self):
+		"""Verify monkey patch custom_update_stock skips Sales Invoice when update_stock is 0."""
+		from core_customizations.monkey_patches import custom_update_stock
+
+		ctx = frappe._dict({
+			"doctype": "Sales Invoice",
+			"update_stock": 0,
+			"item_code": self.item_code,
+			"warehouse": "Stores - SE-K",
+		})
+		out = frappe._dict({
+			"warehouse": "Stores - SE-K",
+			"stock_qty": 5,
+			"uom": "Nos",
+			"item_code": self.item_code,
+			"has_batch_no": 1,
+			"has_serial_no": 0,
+		})
+
+		# For Sales Invoice without update_stock, batch allocation in custom_update_stock is bypassed
+		custom_update_stock(ctx, out)
+		self.assertNotIn("batch_no", out)
+
+
 
 

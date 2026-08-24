@@ -8,7 +8,9 @@ from frappe import _
 def validate_delivery_note_mandatory(doc, method=None):
 	"""
 	Enforces 3PL dispatch-first dependency:
-	A standard Sales Invoice cannot be created/saved without linking to at least one Delivery Note.
+	1. A standard Sales Invoice cannot be created/saved without linking to at least one Delivery Note.
+	2. update_stock must not be enabled on the Sales Invoice because stock movement & batch allocation
+	   are handled by the upstream Delivery Note.
 	(Excludes Return / Credit Notes and POS Invoices).
 	"""
 	if doc.is_return or getattr(doc, "is_pos", 0):
@@ -26,3 +28,10 @@ def validate_delivery_note_mandatory(doc, method=None):
 			_("Delivery Note is mandatory for creating a Sales Invoice. Please generate the Delivery Note from the Sales Order first, complete dispatch & packing, and create the invoice from the Delivery Note."),
 			title=_("Delivery Note Required")
 		)
+
+	if getattr(doc, "update_stock", 0):
+		frappe.throw(
+			_("Update Stock cannot be enabled on a Sales Invoice created from a Delivery Note. Stock movement and batch allocation are already handled by the Delivery Note."),
+			title=_("Invalid Stock Update")
+		)
+

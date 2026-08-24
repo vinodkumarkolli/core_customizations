@@ -263,6 +263,9 @@ fixtures = [
         "doctype":"Custom Field", "filters":{"module":["in",["Core Customizations"]]}
     },
     {
+        "doctype":"Property Setter", "filters":{"module":["in",["Core Customizations"]]}
+    },
+    {
         "doctype":"Print Format", "filters":{"module":["in",["Core Customizations"]]}
     },
     {

@@ -90,34 +90,46 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		return addr.name
 
 	def _get_test_invoice(self, is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=0):
-		invoices = frappe.get_all("Sales Invoice", limit=1)
+		invoices = frappe.get_all("Sales Invoice", filters={"docstatus": ["!=", 2], "is_pos": 0}, limit=1)
 		if not invoices:
 			self.skipTest("No Sales Invoice available for testing GST Invoice prints")
 		inv = frappe.get_doc("Sales Invoice", invoices[0].name)
+
+
 		if with_transporter:
-			inv.custom_transporter = self.transporter_name
-			inv.custom_transporter_from_address = self.from_address_name
-			inv.custom_transporter_from_address_display = "100 Transporter Origin Hub Street\nChennai\nTamil Nadu"
-			inv.custom_is_godown_delivery = 1
-			inv.custom_transporter_to_address = self.to_address_name
-			inv.custom_transporter_to_address_display = "200 Destination Godown Road\nSalem\nTamil Nadu"
+			update_values = {
+				"transporter": self.transporter_name,
+				"custom_transporter": self.transporter_name,
+				"custom_transporter_from_address": self.from_address_name,
+				"custom_transporter_from_address_display": "100 Transporter Origin Hub Street<br>Chennai<br>Tamil Nadu",
+				"custom_is_godown_delivery": 1,
+				"custom_transporter_to_address": self.to_address_name,
+				"custom_transporter_to_address_display": "200 Destination Godown Road<br>Salem<br>Tamil Nadu",
+				"outstanding_amount": 0 if is_paid else 5000.00,
+				"apply_discount_on": apply_discount_on,
+				"discount_amount": discount_amount,
+			}
 		else:
-			inv.custom_transporter = None
-			inv.custom_transporter_from_address = None
-			inv.custom_transporter_from_address_display = None
-			inv.custom_is_godown_delivery = 0
-			inv.custom_transporter_to_address = None
-			inv.custom_transporter_to_address_display = None
+			update_values = {
+				"transporter": None,
+				"custom_transporter": None,
+				"custom_transporter_from_address": None,
+				"custom_transporter_from_address_display": None,
+				"custom_is_godown_delivery": 0,
+				"custom_transporter_to_address": None,
+				"custom_transporter_to_address_display": None,
+				"outstanding_amount": 0 if is_paid else 5000.00,
+				"apply_discount_on": apply_discount_on,
+				"discount_amount": discount_amount,
+			}
 
-		inv.apply_discount_on = apply_discount_on
-		inv.discount_amount = discount_amount
 
-		if is_paid:
-			inv.outstanding_amount = 0
-		else:
-			inv.outstanding_amount = 5000.00
-		inv.db_update()
+		inv.db_set(update_values)
+		frappe.db.commit()
+		inv.reload()
 		return inv
+
+
 
 	def test_01_all_gst_print_formats_exist(self):
 		"""Verify all 3 GST Print Formats exist with custom_format=1 and Jinja type."""
@@ -209,3 +221,25 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 
 		self.assertIn("Additional Discount:", html)
 		self.assertIn("Grand Total:", html)
+
+	def test_10_pos_flow_indication_on_gst_invoice(self):
+		"""Verify POS Flow indicator renders 'Over-the-Counter / Point of Sale (POS)' on GST Invoice when is_pos=1."""
+		invoices = frappe.get_all("Sales Invoice", filters={"docstatus": ["!=", 2]}, limit=1)
+		inv = frappe.get_doc("Sales Invoice", invoices[0].name)
+		inv.db_set({
+			"is_pos": 1,
+			"pos_profile": "_Test POS Profile",
+			"transporter": None,
+			"custom_transporter": None,
+			"custom_transporter_from_address": None,
+			"custom_transporter_from_address_display": None,
+		})
+		frappe.db.commit()
+		inv.reload()
+
+		for pf_name in self.print_formats:
+			html = frappe.get_print("Sales Invoice", inv.name, print_format=pf_name)
+			self.assertIn("Point of Sale (POS)", html, f"POS indicator missing in '{pf_name}'")
+			self.assertIn("Over-the-Counter / Point of Sale (POS)", html, f"Over-the-Counter mode missing in '{pf_name}'")
+			self.assertIn("_Test POS Profile", html, f"POS Profile name missing in '{pf_name}'")
+

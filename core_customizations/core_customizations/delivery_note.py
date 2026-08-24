@@ -35,6 +35,17 @@ def _get_formatted_address(address_name):
 		return ""
 
 
+def _get_item_case_pack(item_code):
+	"""Returns the item's case pack qty if configured."""
+	if not item_code:
+		return None
+	if frappe.db.has_column("Item", "custom_case_pack_qty"):
+		qty = frappe.db.get_value("Item", item_code, "custom_case_pack_qty")
+		return cint(qty) if qty else None
+	return None
+
+
+
 @frappe.whitelist()
 def update_transporter_details(delivery_note, transporter=None, from_address=None, is_godown=0, to_address=None, lr_no=None, lr_date=None):
 	"""
@@ -55,9 +66,13 @@ def update_transporter_details(delivery_note, transporter=None, from_address=Non
 
 	from_address_display = _get_formatted_address(from_address)
 	to_address_display = _get_formatted_address(to_address) if is_godown else ""
+	transporter_supplier_name = (
+		frappe.db.get_value("Supplier", transporter, "supplier_name") if transporter else None
+	)
 
 	update_dict = {
-		"custom_transporter": transporter or None,
+		"transporter": transporter or None,
+		"transporter_name": transporter_supplier_name,
 		"custom_transporter_from_address": from_address or None,
 		"custom_transporter_from_address_display": from_address_display,
 		"custom_is_godown_delivery": is_godown,
@@ -76,6 +91,7 @@ def update_transporter_details(delivery_note, transporter=None, from_address=Non
 	return {
 		"message": _("Transporter details updated successfully"),
 		"transporter": transporter,
+		"transporter_name": transporter_supplier_name,
 		"from_address": from_address,
 		"from_address_display": from_address_display,
 		"is_godown_delivery": is_godown,
@@ -84,6 +100,7 @@ def update_transporter_details(delivery_note, transporter=None, from_address=Non
 		"lr_no": lr_no,
 		"lr_date": str(lr_date) if lr_date else None,
 	}
+
 
 
 @frappe.whitelist()
@@ -110,17 +127,13 @@ def update_lr_details(delivery_note, lr_no=None, lr_date=None):
 
 def validate_delivery_note(doc, method=None):
 	"""
-	Validates and auto-populates transporter defaults from Customer if not already set,
-	and ensures address display fields are populated and sanitized.
+	Ensures transporter name is populated from Supplier,
+	ensures address display fields are populated and sanitized,
+	and clears destination address if Godown Delivery is disabled.
 	"""
-	# 1. If customer is set and transporter is not set, auto-populate from customer defaults
-	if doc.get("customer") and not doc.get("custom_transporter"):
-		cust_doc = frappe.get_cached_doc("Customer", doc.customer)
-		if cust_doc.get("custom_default_transporter"):
-			doc.custom_transporter = cust_doc.get("custom_default_transporter")
-			doc.custom_transporter_from_address = cust_doc.get("custom_default_transporter_from_address")
-			doc.custom_is_godown_delivery = cint(cust_doc.get("custom_is_godown_delivery"))
-			doc.custom_transporter_to_address = cust_doc.get("custom_default_transporter_to_address") if doc.custom_is_godown_delivery else None
+	# 1. Sync standard transporter_name if transporter is set
+	if doc.get("transporter") and not doc.get("transporter_name"):
+		doc.transporter_name = frappe.db.get_value("Supplier", doc.transporter, "supplier_name") or doc.transporter
 
 	# 2. If is_godown_delivery is 0, ensure destination address is cleared
 	if not doc.get("custom_is_godown_delivery"):
@@ -138,6 +151,21 @@ def validate_delivery_note(doc, method=None):
 	else:
 		doc.custom_transporter_to_address_display = ""
 
+	# 4. Enforce Single Warehouse confinement across all Item rows
+	primary_warehouse = None
+	for item in doc.get("items", []):
+		if item.get("warehouse"):
+			if not primary_warehouse:
+				primary_warehouse = item.warehouse
+			elif item.warehouse != primary_warehouse:
+				frappe.throw(
+					_("A Delivery Note should be confined to a single warehouse only ({0}). Row #{1} ({2}) has warehouse '{3}'. Please select '{0}' or create a separate Delivery Note for other warehouses.").format(
+						primary_warehouse, item.idx, item.item_code or item.item_name or "", item.warehouse
+					),
+					title=_("Multiple Warehouses Not Allowed")
+				)
+
+
 
 def before_submit_delivery_note(doc, method=None):
 	"""
@@ -146,14 +174,11 @@ def before_submit_delivery_note(doc, method=None):
 	draft_packing_slips = frappe.get_all(
 		"Packing Slip",
 		filters={"delivery_note": doc.name, "docstatus": 0},
-		pluck="name",
-		order_by="from_case_no asc",
+		fields=["name"],
 	)
-
-	for ps_name in draft_packing_slips:
-		ps = frappe.get_doc("Packing Slip", ps_name)
-		ps.flags.ignore_permissions = True
-		ps.submit()
+	for ps in draft_packing_slips:
+		ps_doc = frappe.get_doc("Packing Slip", ps.name)
+		ps_doc.submit()
 
 
 def on_cancel_delivery_note(doc, method=None):
@@ -163,67 +188,66 @@ def on_cancel_delivery_note(doc, method=None):
 	submitted_packing_slips = frappe.get_all(
 		"Packing Slip",
 		filters={"delivery_note": doc.name, "docstatus": 1},
-		pluck="name",
-		order_by="from_case_no desc",
+		fields=["name"],
 	)
-
-	for ps_name in submitted_packing_slips:
-		ps = frappe.get_doc("Packing Slip", ps_name)
-		ps.flags.ignore_permissions = True
-		ps.cancel()
+	for ps in submitted_packing_slips:
+		ps_doc = frappe.get_doc("Packing Slip", ps.name)
+		ps_doc.cancel()
 
 
 @frappe.whitelist()
 def get_unpacked_items_summary(delivery_note):
 	"""
-	Returns a breakdown of Delivery Note items, total ordered quantities,
-	already packed quantities across existing Packing Slips, and remaining unpacked balances.
+	Returns a summary of items in the Delivery Note with:
+	- standard qty
+	- packed qty (sum of all active packing slips)
+	- remaining unpacked balance
+	- item case pack (if configured)
+	- current transporter details
+	- customer master default transporter settings
 	"""
 	if not delivery_note:
-		frappe.throw(_("Delivery Note name is required"))
+		frappe.throw(_("Delivery Note is required"))
 
 	dn = frappe.get_doc("Delivery Note", delivery_note)
 
-	# Fetch existing packing slips linked to this delivery note
+	# Get all active packing slips (draft or submitted)
 	packing_slips = frappe.get_all(
 		"Packing Slip",
 		filters={"delivery_note": delivery_note, "docstatus": ["<", 2]},
-		fields=["name", "from_case_no", "to_case_no", "creation"],
+		fields=["name", "from_case_no", "to_case_no"],
 		order_by="from_case_no asc",
 	)
 
-	packed_map = {}
+	# Calculate packed quantities per Delivery Note Item row (using dn_detail)
+	packed_qty_map = {}
 	max_case_no = 0
-
 	for ps in packing_slips:
-		max_case_no = max(max_case_no, cint(ps.to_case_no) or cint(ps.from_case_no) or 0)
-		ps_items = frappe.get_all(
-			"Packing Slip Item",
-			filters={"parent": ps.name},
-			fields=["item_code", "qty"],
-		)
-		for psi in ps_items:
-			packed_map[psi.item_code] = packed_map.get(psi.item_code, 0.0) + flt(psi.qty)
+		ps_doc = frappe.get_doc("Packing Slip", ps.name)
+		to_case = cint(ps_doc.to_case_no) or cint(ps_doc.from_case_no) or 1
+		if to_case > max_case_no:
+			max_case_no = to_case
 
+		for item in ps_doc.items:
+			if item.dn_detail:
+				packed_qty_map[item.dn_detail] = packed_qty_map.get(item.dn_detail, 0) + flt(item.qty)
+
+	# Build items summary
 	items_summary = []
 	for item in dn.items:
-		packed_qty = flt(packed_map.get(item.item_code, 0.0))
-		remaining_qty = max(0.0, flt(item.qty) - packed_qty)
-
-		# Fetch default case pack size if configured and column exists
-		case_pack = 0
-		if frappe.db.has_column("Item", "custom_case_pack_qty"):
-			case_pack = frappe.db.get_value("Item", item.item_code, "custom_case_pack_qty") or 0
+		packed_qty = packed_qty_map.get(item.name, 0)
+		remaining_qty = max(0, flt(item.qty) - packed_qty)
+		case_pack = _get_item_case_pack(item.item_code)
 
 		items_summary.append({
+			"dn_detail": item.name,
 			"item_code": item.item_code,
-			"item_name": item.item_name or item.item_code,
-			"description": item.description,
-			"total_qty": flt(item.qty),
+			"item_name": item.item_name,
+			"qty": flt(item.qty),
 			"packed_qty": packed_qty,
 			"remaining_qty": remaining_qty,
 			"uom": item.uom,
-			"case_pack": cint(case_pack) if case_pack else None,
+			"case_pack": case_pack,
 		})
 
 	# Fetch customer transporter defaults if available (safe access)
@@ -243,7 +267,8 @@ def get_unpacked_items_summary(delivery_note):
 		"customer_name": dn.customer_name,
 		"docstatus": dn.docstatus,
 		"current_transporter": {
-			"transporter": dn.get("custom_transporter"),
+			"transporter": dn.get("transporter") or dn.get("custom_transporter"),
+			"transporter_name": dn.get("transporter_name"),
 			"from_address": dn.get("custom_transporter_from_address"),
 			"from_address_display": dn.get("custom_transporter_from_address_display"),
 			"is_godown_delivery": cint(dn.get("custom_is_godown_delivery")),
@@ -372,7 +397,7 @@ def generate_packing_slips(delivery_note, packing_type="single", item_code=None,
 @frappe.whitelist()
 def get_packing_slips_list(delivery_note):
 	"""
-	Returns all Packing Slips for a Delivery Note with their box range and contents.
+	Returns all Packing Slips for a Delivery Note with their box range, contents, and submission status.
 	"""
 	if not delivery_note:
 		frappe.throw(_("Delivery Note name is required"))
@@ -380,7 +405,7 @@ def get_packing_slips_list(delivery_note):
 	packing_slips = frappe.get_all(
 		"Packing Slip",
 		filters={"delivery_note": delivery_note, "docstatus": ["<", 2]},
-		fields=["name", "from_case_no", "to_case_no", "gross_weight_pkg", "net_weight_pkg", "creation"],
+		fields=["name", "from_case_no", "to_case_no", "gross_weight_pkg", "net_weight_pkg", "creation", "docstatus"],
 		order_by="from_case_no asc",
 	)
 
@@ -391,6 +416,7 @@ def get_packing_slips_list(delivery_note):
 			filters={"parent": ps.name},
 			fields=["item_code", "item_name", "qty", "stock_uom"],
 		)
+		status_label = "Draft" if ps.docstatus == 0 else ("Submitted" if ps.docstatus == 1 else "Cancelled")
 		result.append({
 			"name": ps.name,
 			"box_no": ps.from_case_no if ps.from_case_no == ps.to_case_no else f"{ps.from_case_no} - {ps.to_case_no}",
@@ -398,12 +424,48 @@ def get_packing_slips_list(delivery_note):
 			"to_case_no": ps.to_case_no,
 			"gross_weight": flt(ps.gross_weight_pkg),
 			"net_weight": flt(ps.net_weight_pkg),
+			"docstatus": ps.docstatus,
+			"status": status_label,
 			"items": items,
 			"items_display": ", ".join([f"{i.item_code} x {flt(i.qty):g} {i.stock_uom or ''}".strip() for i in items]),
 			"creation": str(ps.creation),
 		})
 
 	return result
+
+
+@frappe.whitelist()
+def submit_packing_slips(delivery_note, packing_slip_names=None):
+	"""
+	Submits selected draft Packing Slips (or all draft slips if packing_slip_names is empty)
+	linked to a Delivery Note.
+	"""
+	if not delivery_note:
+		frappe.throw(_("Delivery Note name is required"))
+
+	if isinstance(packing_slip_names, str):
+		packing_slip_names = json.loads(packing_slip_names)
+
+	filters = {"delivery_note": delivery_note, "docstatus": 0}
+	if packing_slip_names:
+		filters["name"] = ["in", packing_slip_names]
+
+	slips_to_submit = frappe.get_all("Packing Slip", filters=filters, pluck="name", order_by="from_case_no asc")
+
+	submitted_count = 0
+	for ps_name in slips_to_submit:
+		ps = frappe.get_doc("Packing Slip", ps_name)
+		ps.flags.ignore_permissions = True
+		ps.submit()
+		submitted_count += 1
+
+	frappe.db.commit()
+
+	return {
+		"message": _("Successfully submitted {0} Packing Slip(s)").format(submitted_count),
+		"submitted_count": submitted_count,
+		"submitted_slips": slips_to_submit,
+	}
 
 
 @frappe.whitelist()

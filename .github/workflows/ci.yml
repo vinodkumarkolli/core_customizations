@@ -53,33 +53,38 @@ jobs:
           
       - name: Setup Frappe Bench
         run: |
-          # Initialize a fresh bench for testing
+          # Give frappe user ownership of the github workspace
+          chown -R frappe:frappe .
+          
+          # Execute all bench commands as the frappe user to satisfy Frappe compliance
+          su frappe -c '
+          export PATH=$PATH:~/.local/bin
           pip install frappe-bench
           bench init test-bench --skip-redis-config-generation --frappe-branch version-16
           cd test-bench
           
-          # We need ERPNext for our app's dependencies
           bench get-app erpnext --branch version-16
-          
-          # Move our checked-out app into the apps folder
           cp -r ../apps/core_customizations apps/core_customizations
-          
-          # Install our app's dependencies
           bench setup requirements
           
-          # Create test site
           bench new-site test.local --db-root-password root --admin-password admin --no-mariadb-socket
           
-          # Install apps on site
           bench --site test.local install-app erpnext
           bench --site test.local install-app core_customizations
+          '
 
       - name: Run Backend Integration Tests
         run: |
+          su frappe -c '
+          export PATH=$PATH:~/.local/bin
           cd test-bench
           bench --site test.local run-tests --app core_customizations
+          '
 
       - name: Run Cypress Frontend Tests
         run: |
+          su frappe -c '
+          export PATH=$PATH:~/.local/bin
           cd test-bench
           bench --site test.local run-ui-tests core_customizations --headless
+          '

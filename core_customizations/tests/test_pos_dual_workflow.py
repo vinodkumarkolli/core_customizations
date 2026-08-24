@@ -312,7 +312,6 @@ class TestPOSDualWorkflow(IntegrationTestCase):
 			"company": self.company,
 			"customer": self.customer,
 			"delivery_date": nowdate(),
-			"custom_sales_person": "Administrator",
 			"items": [{
 				"item_code": self.item_code,
 				"qty": 5,

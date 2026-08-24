@@ -152,6 +152,9 @@ after_migrate = "core_customizations.setup.after_migrate"
 # Hook on document methods and events
 
 doc_events = {
+	"Purchase Invoice": {
+		"validate": "core_customizations.core_customizations.purchase_invoice.validate_3pl_items",
+	},
 	"Sales Invoice": {
 		"validate": "core_customizations.core_customizations.sales_invoice.validate_delivery_note_mandatory",
 	},

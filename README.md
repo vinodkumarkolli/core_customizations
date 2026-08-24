@@ -272,7 +272,18 @@ bench --site zap.localhost run-tests --module core_customizations.tests.test_set
 
 # 8. Sales Invoice Custom Fields (2 tests)
 bench --site zap.localhost run-tests --module core_customizations.tests.test_sales_invoice_customizations
+
+### Cypress Frontend UI Tests
+The app includes Cypress UI tests to validate frontend modals and workflow transitions:
+
+```bash
+# Run all Cypress UI tests headlessly
+bench --site zap.localhost run-ui-tests core_customizations --headless
+
+# Or open Cypress GUI to run tests interactively (requires X11/Desktop environment)
+bench --site zap.localhost run-ui-tests core_customizations
 ```
+
 
 ---
 

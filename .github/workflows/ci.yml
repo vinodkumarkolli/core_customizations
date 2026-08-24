@@ -27,13 +27,11 @@ jobs:
 
       redis-cache:
         image: redis:6.2-alpine
-        ports:
-          - 13000:6379
+        options: --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
       redis-queue:
         image: redis:6.2-alpine
-        ports:
-          - 11000:6379
+        options: --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
     steps:
       - name: Checkout Code
@@ -66,9 +64,13 @@ jobs:
           cd test-bench
           
           bench set-config -g db_host mariadb
-          bench set-config -g redis_cache "redis://redis-cache:13000"
-          bench set-config -g redis_queue "redis://redis-queue:11000"
-          bench set-config -g redis_socketio "redis://redis-queue:11000"
+          # Use the internal container port (6379), NOT the host-mapped port.
+          # When the job runs inside a Docker container, GitHub Actions service
+          # containers are on the same internal Docker network and are only
+          # reachable via the container's internal port, not the host mapping.
+          bench set-config -g redis_cache "redis://redis-cache:6379"
+          bench set-config -g redis_queue "redis://redis-queue:6379"
+          bench set-config -g redis_socketio "redis://redis-queue:6379"
           
           bench get-app erpnext --branch version-16
           cp -r ../apps/core_customizations apps/core_customizations

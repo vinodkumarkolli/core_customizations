@@ -4,6 +4,7 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 from core_customizations.utils import format_qty, get_code128_svg
+from core_customizations.tests.test_fixtures import ensure_test_fixtures
 
 
 class TestGSTInvoicePrintFormats(IntegrationTestCase):
@@ -23,6 +24,8 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
+		# Ensure ERPNext master data exists in the blank CI environment
+		ensure_test_fixtures()
 		cls.print_formats = [
 			"GST Invoice - Original for Receiver",
 			"GST Invoice - Duplicate for Transporter",

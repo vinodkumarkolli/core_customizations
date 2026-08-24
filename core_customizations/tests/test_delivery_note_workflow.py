@@ -5,6 +5,7 @@ import json
 import frappe
 from frappe.utils import nowdate, nowtime
 from frappe.tests import IntegrationTestCase
+from core_customizations.tests.test_fixtures import ensure_test_fixtures
 
 from core_customizations.core_customizations.delivery_note import (
 	update_transporter_details,
@@ -32,6 +33,8 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
+		# Ensure ERPNext master data exists in the blank CI environment
+		ensure_test_fixtures()
 
 		# 1. Create a Test Customer with default transporter settings
 		cls.customer_name = "_Test 3PL Customer"

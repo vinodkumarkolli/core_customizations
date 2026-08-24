@@ -5,6 +5,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import nowdate, nowtime, flt, cint
 from erpnext.accounts.doctype.pos_closing_entry.pos_closing_entry import make_closing_entry_from_opening
+from core_customizations.tests.test_fixtures import ensure_test_fixtures
 
 
 class TestPOSDualWorkflow(IntegrationTestCase):
@@ -18,6 +19,8 @@ class TestPOSDualWorkflow(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
+		# Ensure ERPNext master data exists in the blank CI environment
+		ensure_test_fixtures()
 		cls.company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
 
 		# 1. Create a Test POS Profile if not present

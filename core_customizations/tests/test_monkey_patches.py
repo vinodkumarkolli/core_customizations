@@ -4,6 +4,7 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from core_customizations.monkey_patches import custom_update_stock, custom_validate_delivery_note, custom_validate_items
+from core_customizations.tests.test_fixtures import ensure_test_fixtures
 
 
 class TestMonkeyPatches(FrappeTestCase):
@@ -15,8 +16,14 @@ class TestMonkeyPatches(FrappeTestCase):
 	"""
 
 	def setUp(self):
-		self.company = "Sravi Enterprises - Kolapakkam"
-		self.warehouse = "Stores - SE-K"
+		# Ensure ERPNext master data exists in the blank CI environment
+		ensure_test_fixtures()
+
+		# Resolve company and warehouse dynamically — the CI site has a single
+		# company created by ERPNext install, but it may have a different name
+		# than the production company "Sravi Enterprises - Kolapakkam".
+		self.company = frappe.db.get_value("Company", {}, "name") or "Test Company"
+		self.warehouse = frappe.db.get_value("Warehouse", {"company": self.company, "is_group": 0}, "name") or "Stores - TC"
 		self.customer = self._get_or_create_customer()
 		self.item_code = self._get_or_create_item()
 

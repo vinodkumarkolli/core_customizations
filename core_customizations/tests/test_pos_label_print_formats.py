@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from core_customizations.tests.test_fixtures import ensure_test_fixtures
 
 
 class TestPOSLabelPrintFormats(IntegrationTestCase):
@@ -13,6 +14,8 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
+		# Ensure ERPNext master data exists in the blank CI environment
+		ensure_test_fixtures()
 		cls.label_format = "Shipping Package Label (4x6)"
 
 		# Create a test transporter supplier if not present

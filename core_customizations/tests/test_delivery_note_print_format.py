@@ -1,13 +1,17 @@
 import unittest
 import frappe
 from frappe.utils import today, nowtime
+from core_customizations.tests.test_fixtures import ensure_test_fixtures
 
 
 class TestDeliveryNotePrintFormat(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
 		frappe.flags.ignore_permissions = True
-		cls.company = "Sravi Enterprises - Kolapakkam"
+		# Ensure ERPNext master data exists in the blank CI environment
+		ensure_test_fixtures()
+		# Resolve company dynamically; CI site will have a different name
+		cls.company = frappe.db.get_value("Company", {}, "name") or "Test Company"
 		cls.transporter_name = "_Test Speed Express Logistics"
 
 		if not frappe.db.exists("Supplier", {"supplier_name": cls.transporter_name}):

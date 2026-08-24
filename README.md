@@ -95,33 +95,34 @@ Accessible via the **`Packing Slips`** dropdown on `Delivery Note`:
 ## 6. Print Formats Suite
 
 ### A. Delivery Note Print Formats (A4)
-Available in 3 copies:
-1. `Delivery Note - Original for Consignee`
-2. `Delivery Note - Duplicate for Transporter`
-3. `Delivery Note - Triplicate for Supplier`
-
-**Key Features**:
-* **Corporate Header**: Company registered billing address, logo, GSTIN, and Place of Supply.
-* **3-Column Section**:
-  * *Column 1 (Consignor)*: Dispatch Warehouse name, physical warehouse address, phone, and GSTIN.
-  * *Column 2 (Consignee)*: Customer name, shipping address, GSTIN, and Sales Person.
-  * *Column 3 (Delivery & Logistics)*: DN No, Date, Time, PO Ref, Transporter, Booking Hub, Delivery Mode, LR details, and Total Boxes.
-* **Allocated Boxes & Packing Slip IDs**:
+Available in 3 copies (`Original for Consignee`, `Duplicate for Transporter`, `Triplicate for Supplier`):
+* **3-Column Header Architecture**:
+  * **Consignor (Dispatch From)**: Renders the dispatch Warehouse title, Warehouse street address, and phone number (falling back to Company Dispatch/Shipping address).
+  * **Consignee (Customer)**: Renders the Customer's **Shipping Address** (`shipping_address` / `shipping_address_name`) and shipping GSTIN (falling back to billing address if no separate shipping destination).
+  * **Delivery & Logistics**: Clean breakdown of Transporter name, Booking Origin Hub, Godown Delivery destination vs Door Delivery mode, LR details, Vehicle No, and Total Box count.
+* **Allocated Boxes Column**:
   * Displays Box No, Quantity, and exact **Packing Slip ID** against each item (e.g. `Box #1 (4000 Nos) • MAT-PAC-2026-00358`).
   * Dedicated consolidated table for mixed item cartons.
 * **No Financial Clutter**: Rates and values are omitted to focus purely on goods receipt.
 * **Dual Stamp & Signature Blocks**: Receiver's Acknowledgement (Left) and Company Authorised Signatory (Right).
 
+### B. Confidential Carton Shipping Label (4" x 6")
+* **DocType**: `Packing Slip` (`Carton Shipping Label (4x6)`).
+* **Anti-Pilferage Security**: Commercial product names and quantities are omitted from outer labels to protect high-value goods in 3PL transit.
+* **Prominent Logistics Info**: Large `BOX [ 1 ] OF [ 5 ]` counter, Consignee Destination, Transporter Booking Hub / Godown Pickup banner, and blank routing stamp box.
+
 ### C. GST Sales Invoice Print Formats (A4)
 Available in 3 copies (`Original for Receiver`, `Duplicate for Transporter`, `Triplicate for Supplier`):
-* **Dual Flow Awareness**:
+* **3-Column Header Architecture**:
+  * **Bill To**: Renders Customer's **Billing Address** (`address_display` / `customer_address`) and billing GSTIN.
+  * **Invoice Details**: Invoice No, Date, Time, Payment Due Date, Outstanding invoices summary, and **Sales Channel: Point of Sale (POS)** (if applicable).
+  * **Payment & Status**: Bank NEFT/RTGS details, dynamic UPI QR code for unpaid invoices, or green `✓ Fully Paid` badge.
+* **Dual Flow Awareness in Logistics Box**:
   * **Wholesale Flow**: Displays Transporter name, Booking Origin Hub, and Godown Destination / Door Delivery.
   * **POS Flow (`is_pos: 1` / `is_consolidated: 1`)**: Replaces 3PL logistics with:
     > **Delivery Mode:** Over-the-Counter / Point of Sale (POS)  
     > **POS Profile:** [POS Profile Name]  
     > *(Consolidated POS Shift Settlement)*
-  * **Invoice Details**: Displays **Sales Channel: Point of Sale (POS)**.
-* **Payment & Status Box**: Displays Bank NEFT/RTGS details, UPI dynamic QR code for unpaid invoices, or green `✓ Fully Paid` badge.
 * **GST Breakup Table**: Tax rate, taxable amount, and GST split.
 
 
@@ -132,7 +133,7 @@ Available in 3 copies (`Original for Receiver`, `Duplicate for Transporter`, `Tr
 Run integration tests for the entire app or by specific module:
 
 ```bash
-# Run ALL 59 tests across the entire app
+# Run ALL 60 tests across the entire app
 bench --site zap.localhost run-tests --app core_customizations
 
 # Or run individual test modules:
@@ -145,7 +146,7 @@ bench --site zap.localhost run-tests --module core_customizations.tests.test_pos
 # 3. GST Sales Invoice Print Formats Suite (10 tests)
 bench --site zap.localhost run-tests --module core_customizations.tests.test_gst_invoice_print_formats
 
-# 4. Delivery Note Print Formats Suite (with Packing Slip IDs) (10 tests)
+# 4. Delivery Note Print Formats Suite (with Packing Slip IDs & Shipping Address) (11 tests)
 bench --site zap.localhost run-tests --module core_customizations.tests.test_delivery_note_print_format
 
 # 5. Thermal & 4x6 Carton Shipping Labels (4 tests)

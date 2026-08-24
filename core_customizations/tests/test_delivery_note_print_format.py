@@ -411,5 +411,17 @@ class TestDeliveryNotePrintFormat(unittest.TestCase):
 		self.assertIn("Coimbatore", html, "Warehouse city missing in Consignor column")
 		self.assertIn("8056496441", html, "Warehouse phone missing in Consignor column")
 
+	def test_11_customer_shipping_address_rendered_in_consignee_column(self):
+		"""Verify Delivery Note renders Customer's Shipping Address in the Consignee column over Billing Address."""
+		dn = self._create_test_dn(with_transporter=True)
+		dn.address_display = "123 Billing Road, Financial Center, Chennai"
+		dn.shipping_address = "999 Factory Warehouse Delivery Gate, Industrial Estate, Salem"
+		dn.db_update()
+
+		html = frappe.get_print("Delivery Note", dn.name, print_format="Delivery Note - Original for Consignee", no_letterhead=1)
+		self.assertIn("Consignee (Customer)", html, "Consignee header missing")
+		self.assertIn("999 Factory Warehouse Delivery Gate", html, "Customer Shipping Address should be rendered in Consignee column")
+
+
 
 

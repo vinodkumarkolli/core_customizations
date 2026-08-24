@@ -80,7 +80,7 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 		if not notes:
 			self.skipTest("No Delivery Note available for testing POS label prints")
 		dn = frappe.get_doc("Delivery Note", notes[0].name)
-		dn.custom_transporter = self.transporter_name
+		dn.transporter = self.transporter_name
 		dn.custom_transporter_from_address = self.from_address_name
 		dn.custom_transporter_from_address_display = "500 Origin Booking Street\nChennai\nTamil Nadu"
 		dn.custom_is_godown_delivery = 1 if is_godown else 0
@@ -134,3 +134,39 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 		self.assertIn(dn.customer_name, html)
 		self.assertIn(dn.company, html)
 		self.assertIn(dn.name, html)
+
+	def test_04_carton_shipping_label_on_packing_slip_confidential_layout(self):
+		"""Verify Carton Shipping Label (4x6) on Packing Slip renders confidential logistics layout without item contents."""
+		dn = self._get_test_delivery_note(is_godown=1)
+
+		ps = frappe.new_doc("Packing Slip")
+		ps.delivery_note = dn.name
+		rec_case = ps.get_recommended_case_no() or 1
+		ps.from_case_no = rec_case
+		ps.to_case_no = rec_case
+		ps.append("items", {
+			"item_code": dn.items[0].item_code,
+			"item_name": dn.items[0].item_name,
+			"qty": 10,
+			"stock_uom": dn.items[0].uom or "Nos",
+			"dn_detail": dn.items[0].name
+		})
+		ps.insert(ignore_permissions=True)
+
+		html = frappe.get_print("Packing Slip", ps.name, print_format="Carton Shipping Label (4x6)", no_letterhead=1)
+
+		self.assertIn("BOX NUMBER / TOTAL", html)
+		self.assertIn("BOX [", html)
+		self.assertIn("CONSIGNEE (CUSTOMER)", html)
+		self.assertIn("GODOWN PICKUP", html)
+		self.assertIn("SHIPPING & ROUTING DETAILS", html)
+		self.assertIn("CONSIGNOR (SENDER)", html)
+		self.assertIn(ps.name, html)
+		self.assertIn(dn.name, html)
+		# Confidentiality check: item contents are omitted from outer carton label
+		self.assertNotIn("PACKAGE CONTENTS (ITEMS)", html)
+		self.assertNotIn(dn.items[0].item_name, html)
+
+
+
+

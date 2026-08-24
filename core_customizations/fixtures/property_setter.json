@@ -1,0 +1,29 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "default_value": null,
+  "doc_type": "Delivery Note",
+  "doctype_or_field": "DocField",
+  "field_name": "transporter",
+  "module": "Core Customizations",
+  "name": "Delivery Note-transporter-allow_on_submit",
+  "property": "allow_on_submit",
+  "property_type": "Check",
+  "value": "1"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "default_value": null,
+  "doc_type": "Delivery Note",
+  "doctype_or_field": "DocField",
+  "field_name": "transporter_name",
+  "module": "Core Customizations",
+  "name": "Delivery Note-transporter_name-allow_on_submit",
+  "property": "allow_on_submit",
+  "property_type": "Check",
+  "value": "1"
+ }
+]
+

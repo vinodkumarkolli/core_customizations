@@ -3,7 +3,9 @@
 
 import json
 import frappe
+from frappe.utils import nowdate, nowtime
 from frappe.tests import IntegrationTestCase
+
 from core_customizations.core_customizations.delivery_note import (
 	update_transporter_details,
 	update_lr_details,
@@ -178,7 +180,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		self.assertNotIn("<br>", res["to_address_display"])
 
 		dn.reload()
-		self.assertEqual(dn.custom_transporter, self.transporter_name)
+		self.assertEqual(dn.transporter, self.transporter_name)
 		self.assertEqual(dn.custom_is_godown_delivery, 1)
 		self.assertEqual(dn.custom_transporter_to_address, self.to_address)
 		self.assertIn("GSTIN: 33AAGCR8772D1Z9", dn.custom_transporter_to_address_display)
@@ -405,7 +407,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		dn.reload()
 
 		# Initial document is blank for transporter
-		self.assertIsNone(dn.custom_transporter)
+		self.assertIsNone(dn.transporter)
 		self.assertIsNone(dn.custom_transporter_from_address)
 
 		# Customer master defaults are available via summary API for popup "Fetch Customer Defaults"
@@ -425,7 +427,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		)
 		dn.reload()
 
-		self.assertEqual(dn.custom_transporter, self.transporter_name)
+		self.assertEqual(dn.transporter, self.transporter_name)
 		self.assertEqual(dn.custom_transporter_from_address, self.from_address)
 		self.assertEqual(dn.custom_is_godown_delivery, 1)
 		self.assertEqual(dn.custom_transporter_to_address, self.to_address)
@@ -600,7 +602,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 			"doctype": "Delivery Note",
 			"customer": self.customer_name,
 			"company": company,
-			"custom_transporter": alt_transporter_name,
+			"transporter": alt_transporter_name,
 			"custom_transporter_from_address": alt_hub_address,
 			"custom_is_godown_delivery": 0,
 			"custom_transporter_to_address": None,
@@ -616,7 +618,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		dn.reload()
 
 		# Assert Delivery Note preserved its explicit override (NOT replaced with customer default transporter)
-		self.assertEqual(dn.custom_transporter, alt_transporter_name)
+		self.assertEqual(dn.transporter, alt_transporter_name)
 		self.assertEqual(dn.custom_transporter_from_address, alt_hub_address)
 		self.assertEqual(dn.custom_is_godown_delivery, 0)
 		self.assertIsNone(dn.custom_transporter_to_address)
@@ -682,6 +684,63 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		for s in updated_slips:
 			self.assertEqual(s["docstatus"], 1)
 			self.assertEqual(s["status"], "Submitted")
+
+	def test_19_single_warehouse_confinement_validation(self):
+		"""Verify Delivery Note items must be confined to a single warehouse only."""
+		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+
+		# 1. Delivery Note with single warehouse succeeds
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"company": company,
+			"customer": self.customer_name,
+			"posting_date": nowdate(),
+			"posting_time": nowtime(),
+			"items": [
+				{
+					"item_code": self.item_code,
+					"qty": 50,
+					"warehouse": "Stores - SE-K",
+				},
+				{
+					"item_code": self.item_code_2,
+					"qty": 30,
+					"warehouse": "Stores - SE-K",
+				}
+			]
+		})
+		dn.flags.ignore_mandatory = True
+		dn.insert(ignore_permissions=True)
+		self.assertTrue(dn.name)
+
+		# 2. Delivery Note with multiple distinct warehouses throws ValidationError
+		dn_multi_wh = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"company": company,
+			"customer": self.customer_name,
+			"posting_date": nowdate(),
+			"posting_time": nowtime(),
+			"items": [
+				{
+					"item_code": self.item_code,
+					"qty": 50,
+					"warehouse": "Stores - SE-K",
+				},
+				{
+					"item_code": self.item_code_2,
+					"qty": 30,
+					"warehouse": "Coimbatore Goodown - SE-K",
+				}
+			]
+		})
+		dn_multi_wh.flags.ignore_mandatory = True
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			dn_multi_wh.insert(ignore_permissions=True)
+		self.assertIn("confined to a single warehouse only", str(ctx.exception))
+
+
+
+
 
 
 

@@ -1,5 +1,24 @@
 import frappe
-from core_customizations.tests.test_delivery_note_workflow import setup_test_data
+
+def setup_cypress_test_data():
+    if not frappe.db.exists("Customer", "Cypress Customer"):
+        frappe.get_doc({
+            "doctype": "Customer",
+            "customer_name": "Cypress Customer",
+            "customer_group": "Commercial",
+            "territory": "All Territories"
+        }).insert(ignore_permissions=True)
+        
+    if not frappe.db.exists("Item", "Cypress Test Item 1"):
+        frappe.get_doc({
+            "doctype": "Item",
+            "item_code": "Cypress Test Item 1",
+            "item_name": "Cypress Test Item 1",
+            "item_group": "Products",
+            "stock_uom": "Nos",
+            "is_stock_item": 1,
+            "gst_hsn_code": "30049011"
+        }).insert(ignore_permissions=True)
 
 @frappe.whitelist()
 def setup_cypress_wholesale_data():
@@ -7,12 +26,14 @@ def setup_cypress_wholesale_data():
         frappe.throw("Not allowed")
     
     frappe.set_user("Administrator")
-    setup_test_data()
+    setup_cypress_test_data()
     
     # Create a submitted Sales Order
+    company = frappe.defaults.get_user_default("company") or frappe.get_all("Company")[0].name
     so = frappe.get_doc({
         "doctype": "Sales Order",
         "customer": "Cypress Customer",
+        "company": company,
         "delivery_date": frappe.utils.add_days(frappe.utils.nowdate(), 7),
         "items": [{
             "item_code": "Cypress Test Item 1",
@@ -20,7 +41,7 @@ def setup_cypress_wholesale_data():
             "rate": 500
         }]
     })
-    so.insert()
+    so.insert(ignore_permissions=True)
     so.submit()
     
     return so.name
@@ -32,7 +53,6 @@ def cleanup_cypress_wholesale_data(so_name):
         
     frappe.set_user("Administrator")
     
-    # Try to cancel and delete SI, DN, SO
     si_list = frappe.get_all("Sales Invoice", filters={"items.sales_order": so_name})
     for si in si_list:
         doc = frappe.get_doc("Sales Invoice", si.name)

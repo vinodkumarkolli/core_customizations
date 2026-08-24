@@ -304,3 +304,95 @@ class TestPOSDualWorkflow(IntegrationTestCase):
 		si_consolidated.insert(ignore_permissions=True)
 		self.assertTrue(si_consolidated.name)
 
+	def test_07_cancellation_dependency_checks_chain(self):
+		"""Verify upstream documents cannot be cancelled while downstream documents are active (SO <- DN <- SI)."""
+		# 1. Create and submit Sales Order
+		so = frappe.get_doc({
+			"doctype": "Sales Order",
+			"company": self.company,
+			"customer": self.customer,
+			"delivery_date": nowdate(),
+			"custom_sales_person": "Administrator",
+			"items": [{
+				"item_code": self.item_code,
+				"qty": 5,
+				"rate": 100,
+				"item_tax_template": "GST 18% - SE-K",
+			}]
+		})
+		so.flags.ignore_mandatory = True
+		so.insert(ignore_permissions=True)
+		so.submit()
+
+		# 2. Create and submit Delivery Note against SO
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"company": self.company,
+			"customer": self.customer,
+			"items": [{
+				"item_code": self.item_code,
+				"qty": 5,
+				"rate": 100,
+				"warehouse": self.warehouse,
+				"against_sales_order": so.name,
+				"so_detail": so.items[0].name,
+				"item_tax_template": "GST 18% - SE-K",
+			}]
+		})
+		dn.flags.ignore_mandatory = True
+		dn.insert(ignore_permissions=True)
+		dn.submit()
+
+
+		# 3. Assert: Upstream SO CANNOT be cancelled while downstream DN is active (submitted)
+		with self.assertRaises(Exception):
+			so.cancel()
+
+		# 4. Create and submit Sales Invoice against DN
+		si = frappe.get_doc({
+			"doctype": "Sales Invoice",
+			"company": self.company,
+			"customer": self.customer,
+			"update_stock": 0,
+			"items": [{
+				"item_code": self.item_code,
+				"qty": 5,
+				"rate": 100,
+				"delivery_note": dn.name,
+				"dn_detail": dn.items[0].name,
+				"sales_order": so.name,
+				"so_detail": so.items[0].name,
+				"item_tax_template": "GST 18% - SE-K",
+			}]
+		})
+		si.flags.ignore_mandatory = True
+		si.insert(ignore_permissions=True)
+		si.submit()
+
+
+		# 5. Assert: Upstream DN CANNOT be cancelled while downstream SI is active (submitted)
+		with self.assertRaises(Exception):
+			dn.cancel()
+
+		# 6. Assert: Upstream SO CANNOT be cancelled while downstream SI and DN are active
+		with self.assertRaises(Exception):
+			so.cancel()
+
+		# 7. Reverse cancellation sequence:
+		# A. Cancel downstream Sales Invoice first (succeeds)
+		si.reload()
+		si.cancel()
+		self.assertEqual(si.docstatus, 2)
+
+		# B. Cancel Delivery Note next (succeeds, reverses stock and auto-cancels packing slips)
+		dn.reload()
+		dn.cancel()
+		self.assertEqual(dn.docstatus, 2)
+
+		# C. Cancel Sales Order last (succeeds once all downstream docs are cancelled)
+		so.reload()
+		so.cancel()
+		self.assertEqual(so.docstatus, 2)
+
+
+

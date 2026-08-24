@@ -128,6 +128,7 @@ def ensure_test_fixtures():
     if not frappe.db.exists("Warehouse Type", "Transit"):
         frappe.get_doc({
             "doctype": "Warehouse Type",
+            "name": "Transit",
             "warehouse_type_name": "Transit"
         }).insert(ignore_permissions=True)
         
@@ -137,6 +138,7 @@ def ensure_test_fixtures():
         parent = frappe.db.get_value("Territory", {"is_group": 1}, "name")
         frappe.get_doc({
             "doctype": "Territory",
+            "name": "Direct Customers",
             "territory_name": "Direct Customers",
             "parent_territory": parent or "All Territories"
         }).insert(ignore_permissions=True)
@@ -149,6 +151,28 @@ def ensure_test_fixtures():
             "country": "India",
             "abbr": "SE-K"
         }).insert(ignore_permissions=True)
+
+    # Proactively ensure all critical stock accounts are set on the company
+    # The Chart of Accounts might not configure these automatically in a blank test site.
+    company_name = "Sravi Enterprises - Kolapakkam"
+    company_doc = frappe.get_doc("Company", company_name)
+    stock_accounts_map = {
+        "stock_received_but_not_billed": "Stock Received But Not Billed",
+        "stock_adjustment_account": "Stock Adjustment",
+        "expenses_included_in_valuation": "Expenses Included In Valuation",
+        "default_inventory_account": "Stock In Hand",
+        "cost_of_goods_sold": "Cost of Goods Sold",
+    }
+    needs_save = False
+    for field, acc_name in stock_accounts_map.items():
+        if not company_doc.get(field):
+            # Find the account created by Chart of Accounts
+            acc = frappe.db.get_value("Account", {"account_name": acc_name, "company": company_name})
+            if acc:
+                company_doc.set(field, acc)
+                needs_save = True
+    if needs_save:
+        company_doc.save(ignore_permissions=True)
 
     # --- Fiscal Year Extension ---
     # ERPNext creates standard test fiscal years which might expire based on current date.

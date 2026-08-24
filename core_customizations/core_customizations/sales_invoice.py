@@ -11,16 +11,24 @@ def validate_delivery_note_mandatory(doc, method=None):
 	1. A standard Sales Invoice cannot be created/saved without linking to at least one Delivery Note.
 	2. update_stock must not be enabled on the Sales Invoice because stock movement & batch allocation
 	   are handled by the upstream Delivery Note.
-	(Excludes Return / Credit Notes and POS Invoices).
+	(Excludes Return / Credit Notes, POS Invoices, Consolidated POS Invoices, and POS Profile invoices).
 	"""
-	if doc.is_return or getattr(doc, "is_pos", 0):
+	if (
+		doc.is_return
+		or getattr(doc, "is_pos", 0)
+		or getattr(doc, "is_consolidated", 0)
+		or getattr(doc, "pos_profile", None)
+	):
 		return
 
-	# Check if any item row has a linked Delivery Note
+	# Check if any item row is linked to a POS Invoice or Delivery Note
 	has_delivery_note = False
 	for item in doc.get("items", []):
+		if getattr(item, "pos_invoice", None) or getattr(item, "pos_invoice_item", None):
+			return
 		if getattr(item, "delivery_note", None):
 			has_delivery_note = True
+
 			break
 
 	if not has_delivery_note:

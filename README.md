@@ -1,124 +1,156 @@
 # Core Customizations
 
-Customizations and 3PL Logistics Workflows for Frappe / ERPNext.
+Customizations, 3PL Logistics Workflows, and Dual Sales Architecture for Frappe / ERPNext.
 
 ---
 
-## 3PL Logistics & Distribution Architecture
+## 1. Dual Sales & Fulfillment Architecture
 
-The logistics and dispatch workflows are decoupled from financial billing documents (`Sales Invoice`) and centralized into the **`Customer`** $\rightarrow$ **`Delivery Note`** $\rightarrow$ **`Packing Slip`** lifecycle.
+The system supports two distinct sales and fulfillment flows designed for different operational channels:
 
 ```mermaid
-graph LR
-    C[Customer Defaults] --> DN[Delivery Note]
-    DN --> PS[Packing Slips 1..N]
-    DN --> SI[Sales Invoice]
-    style C fill:#f0f4f8,stroke:#3182ce,stroke-width:2px
+graph TD
+    subgraph Flow 1: Wholesale / 3PL Dispatch-First Flow
+        SO[Sales Order] --> DN[Delivery Note<br><b>Stock Movement & Batch Allocation</b>]
+        DN --> PS[Packing Slips 1..N<br><i>4x6 Carton Labels</i>]
+        DN --> SI1[Sales Invoice<br><b>update_stock = 0</b><br><i>Requires Delivery Note</i>]
+    end
+
+    subgraph Flow 2: Retail / Over-the-Counter POS Flow
+        POS[POS Register / Desk] --> PI[POS Invoice<br><b>Over-the-Counter Handover</b>]
+        PI --> CE[POS Closing Entry<br><i>End-of-Day Shift Settlement</i>]
+        CE --> SI2[Consolidated Sales Invoice<br><b>update_stock = 1</b><br><i>Exempted from Delivery Note</i>]
+    end
+
+    style SO fill:#f0f4f8,stroke:#3182ce,stroke-width:2px
     style DN fill:#e6fffa,stroke:#319795,stroke-width:2px
     style PS fill:#fefcbf,stroke:#d69e2e,stroke-width:2px
-    style SI fill:#edf2f7,stroke:#718096,stroke-width:2px
+    style SI1 fill:#edf2f7,stroke:#718096,stroke-width:2px
+    style POS fill:#feebc8,stroke:#dd6b20,stroke-width:2px
+    style PI fill:#fed7d7,stroke:#e53e3e,stroke-width:2px
+    style CE fill:#e9d8fd,stroke:#805ad5,stroke-width:2px
+    style SI2 fill:#edf2f7,stroke:#718096,stroke-width:2px
 ```
 
 ---
 
-## 1. Customer Master Defaults
+## 2. Sales Returns & Credit Notes Lifecycle
 
+Sales returns are handled specifically for each channel to preserve stock accuracy and tax compliance:
+
+### A. Wholesale / B2B Return Flow (`SO` $\rightarrow$ `DN` $\rightarrow$ `SI`)
+* **Physical Stock Return (Warehouse)**:
+  * A **Delivery Note Return** is created against the original `Delivery Note` (`is_return: 1`, negative quantity).
+  * Increases stock in the warehouse and restores batches.
+* **Financial Credit Adjustment (Accounts)**:
+  * A **Sales Invoice Return (Credit Note)** is generated against the original `Sales Invoice` (`is_return: 1`, `update_stock: 0`).
+  * Reverses Accounts Receivable, revenue, and output GST.
+  * **Validation Rule**: In `sales_invoice.py`, return invoices (`is_return: 1`) bypass the forward Delivery Note requirement.
+
+### B. Retail / POS Return Flow (`POS` $\rightarrow$ `POS Invoice`)
+* **Immediate Counter Refund**:
+  * Cashier selects **"Return"** in the POS UI, creating a `POS Invoice` with negative quantities (`is_return: 1`).
+  * Stock is immediately returned to the shelf/godown, and cash/card refund is issued to the customer.
+* **Shift Settlement**:
+  * The **POS Closing Entry** consolidates daily sales and returns into net revenue and consolidated Credit Note entries.
+
+---
+
+## 3. 3PL Logistics & Transporter Management
+
+Logistics and transport settings are decoupled from billing and centralized into the **`Customer`** $\rightarrow$ **`Delivery Note`** $\rightarrow$ **`Packing Slip`** lifecycle.
+
+### Customer Master Defaults
 Configured under **Customer $\rightarrow$ Transporter & Shipping Settings**:
+* **Default Transporter**: Linked `Supplier` (filtered with `is_transporter: 1`).
+* **Origin / Booking Hub Address**: Dynamic booking office address (e.g. Parrys Booking Hub).
+* **Is Godown Delivery**: Toggle for Transporter Godown pickup vs Door Delivery.
+* **Destination Godown Address**: Customer's designated collection godown.
 
-* **Default Transporter**: Link to `Supplier` (filtered with `is_transporter: 1`).
-* **Default Origin / Booking Hub Address**: Booking office / hub address (e.g. Parrys booking hub). Dynamically filtered by the selected Transporter.
-* **Is Godown Delivery**: Toggle for Transporter Godown pickup vs Door Delivery. Only appears when an Origin Hub is selected.
-* **Default Destination Godown Address**: Destination godown address where the customer will collect the shipment. Mandatory when Godown Delivery is enabled.
-
----
-
-## 2. Delivery Note Logistics Actions
-
-When a Delivery Note is created for a Customer, all Transporter defaults and sanitized address blocks (with GSTIN) are automatically inherited.
-
-The Delivery Note form provides dedicated action buttons under the **`Logistics`** dropdown:
-
-### A. `Logistics >> Transporter`
-* Opens an interactive modal to view or update Transporter, Origin Hub, and Destination Godown.
-* Displays live HTML address preview cards with GSTIN.
-* Supported in both **Draft** and **Submitted** states.
-
-### B. `Logistics >> Update LR Details`
-* Dedicated modal to record or update the **Lorry Receipt (LR) / Consignment Number** and **LR Date** once handed over to the transport agency.
+### Delivery Note Logistics Actions
+* **`Logistics >> Transporter`**: Interactive modal to view or update Transporter, Origin Hub, and Destination Godown with live HTML address preview cards.
+* **`Logistics >> Update LR Details`**: Modal to update Lorry Receipt / Consignment No (`lr_no`) and Date (`lr_date`).
 
 ---
 
-## 3. Packing Slips & Carton Management
+## 4. Single Warehouse Confinement on Delivery Note
 
-A dedicated **`Packing Slips`** dropdown on the `Delivery Note` handles warehouse box-packing and 4x6" thermal label printing:
-
-```
-Delivery Note
- └── Packing Slips
-      ├── Generate
-      ├── Edit / Cancel
-      ├── Print Single
-      └── Print Bulk
-```
-
-### A. `Packing Slips >> Generate`
-* **Single Item Cartons**: Select an item and case pack quantity; auto-calculates and generates sequential boxes (`Box 1`, `Box 2`, etc.).
-* **Mixed Items Carton**: Pack remaining loose balances or multiple item codes into a single mixed box.
-* **Line Item References**: Automatically sets `dn_detail` linkage on each `Packing Slip Item` to comply with ERPNext stock validation.
-* **Draft by Default**: Saves generated Packing Slips as **Draft (`docstatus: 0`)** for review before dispatch.
-
-### B. `Packing Slips >> Edit / Cancel`
-* Lists all packed boxes with item summaries and quantities.
-* Allows one-click deletion of individual boxes or deleting all boxes to repack.
-
-### C. `Packing Slips >> Print Single`
-* Prompts for a box number and opens the **`Carton Shipping Label (4x6)`** thermal label for that specific carton.
-
-### D. `Packing Slips >> Print Bulk`
-* Generates a multi-page, continuous print stream rendering 4x6" thermal labels for **all boxes sequentially** (`BOX 1 OF N` through `BOX N OF N`) and automatically triggers the print dialog.
+A Delivery Note is strictly confined to dispatching from a **single warehouse**:
+* **Client-Side Trigger**: When editing the `warehouse` on any item row, if another warehouse is already set by earlier items, the form alerts the dispatcher and automatically reverts the row to the primary warehouse.
+* **Server-Side Validation**: `validate_delivery_note` in `delivery_note.py` verifies all item rows belong to the same warehouse before save/submission.
 
 ---
 
-## 4. Document Lifecycle & Submissions
+## 5. Packing Slips & Carton Management
 
-* **Auto-Submission**: When the `Delivery Note` is submitted, all linked Draft `Packing Slip` documents are automatically submitted (`docstatus: 1`).
-* **Auto-Cancellation**: If the `Delivery Note` is cancelled, all linked `Packing Slip` documents are automatically cancelled (`docstatus: 2`).
-* **Mandatory Delivery Note on Sales Invoice**: `Sales Invoice` items must be linked to a valid `Delivery Note`. Direct invoice creation without a delivery note is blocked.
-
----
-
-## 5. Thermal Print Formats (4" x 6")
-
-* **`Carton Shipping Label (4x6)`** *(DocType: `Packing Slip`)*:
-  * Dynamic `BOX [ X ] OF [ Y ]` count.
-  * Barcode encoding Packing Slip ID.
-  * Consignee (Customer) delivery address or Godown Pickup banner.
-  * Transporter Origin Hub & Destination Godown with GSTIN.
-  * Sender (Consignor) company information.
-* **`Shipping Package Label (4x6)`** *(DocType: `Delivery Note`)*.
+Accessible via the **`Packing Slips`** dropdown on `Delivery Note`:
+* **`Generate`**: Generates single-item or mixed-item cartons with automatic `dn_detail` linkage, saved as Draft (`docstatus: 0`).
+* **`Manage / Edit`**: Table view of all carton boxes with status, packed items, individual box deletion, or bulk repacking.
+* **`Submit Draft Slips`**: One-click submission of draft packing slips.
+* **`Print Single`**: Prompts for a box number to print its 4x6" thermal label.
+* **`Print Bulk`**: Generates a continuous multi-page print stream of all carton labels (`BOX 1 OF N` to `BOX N OF N`).
 
 ---
 
-## 6. Running Integration Tests
+## 6. Print Formats Suite
 
-Run the full 13-test integration suite:
+### A. Delivery Note Print Formats (A4)
+Available in 3 copies:
+1. `Delivery Note - Original for Consignee`
+2. `Delivery Note - Duplicate for Transporter`
+3. `Delivery Note - Triplicate for Supplier`
+
+**Key Features**:
+* **Corporate Header**: Company registered billing address, logo, GSTIN, and Place of Supply.
+* **3-Column Section**:
+  * *Column 1 (Consignor)*: Dispatch Warehouse name, physical warehouse address, phone, and GSTIN.
+  * *Column 2 (Consignee)*: Customer name, shipping address, GSTIN, and Sales Person.
+  * *Column 3 (Delivery & Logistics)*: DN No, Date, Time, PO Ref, Transporter, Booking Hub, Delivery Mode, LR details, and Total Boxes.
+* **Allocated Boxes & Packing Slip IDs**:
+  * Displays Box No, Quantity, and exact **Packing Slip ID** against each item (e.g. `Box #1 (4000 Nos) • MAT-PAC-2026-00358`).
+  * Dedicated consolidated table for mixed item cartons.
+* **No Financial Clutter**: Rates and values are omitted to focus purely on goods receipt.
+* **Dual Stamp & Signature Blocks**: Receiver's Acknowledgement (Left) and Company Authorised Signatory (Right).
+
+### C. GST Sales Invoice Print Formats (A4)
+Available in 3 copies (`Original for Receiver`, `Duplicate for Transporter`, `Triplicate for Supplier`):
+* **Dual Flow Awareness**:
+  * **Wholesale Flow**: Displays Transporter name, Booking Origin Hub, and Godown Destination / Door Delivery.
+  * **POS Flow (`is_pos: 1` / `is_consolidated: 1`)**: Replaces 3PL logistics with:
+    > **Delivery Mode:** Over-the-Counter / Point of Sale (POS)  
+    > **POS Profile:** [POS Profile Name]  
+    > *(Consolidated POS Shift Settlement)*
+  * **Invoice Details**: Displays **Sales Channel: Point of Sale (POS)**.
+* **Payment & Status Box**: Displays Bank NEFT/RTGS details, UPI dynamic QR code for unpaid invoices, or green `✓ Fully Paid` badge.
+* **GST Breakup Table**: Tax rate, taxable amount, and GST split.
+
+
+---
+
+## 7. Running Automated Test Suites
+
+Run integration tests across all modules:
 
 ```bash
+# 1. Delivery Note Workflow & Single Warehouse (19 tests)
 bench --site [site-name] run-tests --module core_customizations.tests.test_delivery_note_workflow
-```
 
-Run print format tests:
+# 2. Delivery Note Print Format Suite (10 tests)
+bench --site [site-name] run-tests --module core_customizations.tests.test_delivery_note_print_format
 
-```bash
+# 3. POS & Carton Thermal Labels (4 tests)
 bench --site [site-name] run-tests --module core_customizations.tests.test_pos_label_print_formats
+
+# 4. GST Sales Invoice Print Formats (9 tests)
+bench --site [site-name] run-tests --module core_customizations.tests.test_gst_invoice_print_formats
 ```
 
 ---
 
-## Pre-requisites & Installation
+## 8. Installation & Migration
 
-1. ERPNext Company & Master Setup completed.
-2. Run database migration and fixture sync:
-   ```bash
-   bench --site [site-name] migrate
-   ```
+To synchronize all customizations, custom fields, property setters, client scripts, and print formats:
+
+```bash
+bench --site [site-name] migrate
+```

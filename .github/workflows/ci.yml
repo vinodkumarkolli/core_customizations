@@ -55,8 +55,12 @@ jobs:
           # Give frappe user ownership of the github workspace
           chown -R frappe:frappe .
           
-          # Execute all bench commands as the frappe user to satisfy Frappe compliance
-          su frappe -c '
+          # Use gosu (pre-installed in frappe/erpnext images) instead of su.
+          # gosu uses Linux setuid/setgid syscalls to properly change the real UID,
+          # which su can fail to do in non-interactive Docker environments.
+          # bench v5 checks os.getuid() == 0 and exits(1) if still root.
+          gosu frappe bash << 'FRAPPE_SETUP'
+          set -e
           export PATH=$PATH:~/.local/bin
           pip install frappe-bench
           rm -rf test-bench
@@ -84,21 +88,22 @@ jobs:
           # Run migrate to apply all custom fields, fixtures, and patches
           # from core_customizations to the test site schema before tests run.
           bench --site test.local migrate
-          '
-
+          FRAPPE_SETUP
 
       - name: Run Backend Integration Tests
         run: |
-          su frappe -c '
+          gosu frappe bash << 'RUN_TESTS'
+          set -e
           export PATH=$PATH:~/.local/bin
           cd test-bench
           bench --site test.local run-tests --app core_customizations
-          '
+          RUN_TESTS
 
       - name: Run Cypress Frontend Tests
         run: |
-          su frappe -c '
+          gosu frappe bash << 'RUN_UI_TESTS'
+          set -e
           export PATH=$PATH:~/.local/bin
           cd test-bench
           bench --site test.local run-ui-tests core_customizations --headless
-          '
+          RUN_UI_TESTS

@@ -62,8 +62,13 @@ jobs:
           export PATH=$PATH:~/.local/bin
           pip install frappe-bench
           rm -rf test-bench
-          bench init test-bench --skip-redis-config-generation --frappe-branch version-16
+          bench init test-bench --skip-redis-config-generation --no-backups --frappe-branch version-16
           cd test-bench
+          
+          bench set-config -g db_host mariadb
+          bench set-config -g redis_cache "redis://redis-cache:13000"
+          bench set-config -g redis_queue "redis://redis-queue:11000"
+          bench set-config -g redis_socketio "redis://redis-queue:11000"
           
           bench get-app erpnext --branch version-16
           cp -r ../apps/core_customizations apps/core_customizations

@@ -90,10 +90,13 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		return addr.name
 
 	def _get_test_invoice(self, is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=0):
-		invoices = frappe.get_all("Sales Invoice", filters={"docstatus": ["!=", 2], "is_pos": 0}, limit=1)
+		invoices = frappe.get_all("Sales Invoice", filters={"docstatus": 1, "is_pos": 0}, order_by="creation desc", limit=1)
+		if not invoices:
+			invoices = frappe.get_all("Sales Invoice", filters={"docstatus": ["!=", 2], "is_pos": 0}, order_by="creation desc", limit=1)
 		if not invoices:
 			self.skipTest("No Sales Invoice available for testing GST Invoice prints")
 		inv = frappe.get_doc("Sales Invoice", invoices[0].name)
+
 
 
 		if with_transporter:

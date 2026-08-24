@@ -104,43 +104,242 @@ def update_transporter_details(delivery_note, transporter=None, from_address=Non
 
 
 @frappe.whitelist()
-def update_lr_details(delivery_note, lr_no=None, lr_date=None):
+def get_lr_dialog_info(delivery_note):
 	"""
-	Whitelisted method to update Lorry Receipt (LR) number and date on a Delivery Note
-	in both Draft and Submitted states.
+	Returns linked Sales Invoices, current LR details, and E-Way Bill status
+	for the interactive Delivery Note LR Details popup.
 	"""
 	if not delivery_note:
 		frappe.throw(_("Delivery Note name is required"))
 
 	dn = frappe.get_doc("Delivery Note", delivery_note)
 
-	dn.db_set("lr_no", lr_no or None, update_modified=True)
-	dn.db_set("lr_date", getdate(lr_date) if lr_date else None, update_modified=True)
+	# Find linked Sales Invoices (non-cancelled)
+	linked_si_names = frappe.get_all(
+		"Sales Invoice Item",
+		filters={"delivery_note": delivery_note, "docstatus": ["!=", 2]},
+		distinct=True,
+		pluck="parent"
+	)
+
+	sales_invoices = []
+	active_ewaybill = dn.get("ewaybill")
+	max_invoice_val = flt(dn.grand_total)
+
+	for si_name in linked_si_names:
+		si = frappe.get_doc("Sales Invoice", si_name)
+		if si.get("ewaybill") and not active_ewaybill:
+			active_ewaybill = si.get("ewaybill")
+		if flt(si.grand_total) > max_invoice_val:
+			max_invoice_val = flt(si.grand_total)
+		sales_invoices.append({
+			"name": si.name,
+			"grand_total": si.grand_total,
+			"rounded_total": si.rounded_total,
+			"ewaybill": si.get("ewaybill"),
+			"docstatus": si.docstatus,
+		})
+
+	return {
+		"has_sales_invoice": len(sales_invoices) > 0,
+		"sales_invoices": sales_invoices,
+		"current_lr": {
+			"lr_no": dn.lr_no or "",
+			"lr_date": str(dn.lr_date) if dn.lr_date else "",
+			"vehicle_no": dn.vehicle_no or "",
+			"mode_of_transport": dn.mode_of_transport or "Road",
+			"gst_vehicle_type": dn.gst_vehicle_type or "Regular",
+			"lr_receipt_image": dn.get("custom_lr_receipt_image") or "",
+			"ewaybill": active_ewaybill,
+		},
+		"max_invoice_value": max_invoice_val,
+		"is_above_threshold": max_invoice_val > 50000.0,
+		"ewaybill_no": active_ewaybill,
+	}
+
+
+@frappe.whitelist()
+def update_lr_details(
+	delivery_note,
+	lr_no=None,
+	lr_date=None,
+	vehicle_no=None,
+	mode_of_transport="Road",
+	gst_vehicle_type="Regular",
+	lr_receipt_image=None,
+	auto_update_ewaybill=1,
+):
+	"""
+	Whitelisted method to update Lorry Receipt (LR) number, date, vehicle number,
+	transport mode, and LR receipt photo on a Delivery Note and all linked Sales Invoices.
+	Optionally triggers E-Way Bill Part B update via india_compliance if an active EWB is present.
+	"""
+	if not delivery_note:
+		frappe.throw(_("Delivery Note name is required"))
+
+	dn = frappe.get_doc("Delivery Note", delivery_note)
+	formatted_vehicle_no = (vehicle_no or "").replace(" ", "").upper() or None
+	parsed_lr_date = getdate(lr_date) if lr_date else None
+
+	# 1. Update Delivery Note
+	dn.db_set({
+		"lr_no": lr_no or None,
+		"lr_date": parsed_lr_date,
+		"vehicle_no": formatted_vehicle_no,
+		"mode_of_transport": mode_of_transport or "Road",
+		"gst_vehicle_type": gst_vehicle_type or "Regular",
+		"custom_lr_receipt_image": lr_receipt_image or None,
+	}, update_modified=True)
+
+	# 2. Synchronize to all linked Sales Invoices
+	linked_si_names = frappe.get_all(
+		"Sales Invoice Item",
+		filters={"delivery_note": delivery_note, "docstatus": ["!=", 2]},
+		distinct=True,
+		pluck="parent"
+	)
+
+
+	target_ewb_doc = None
+	if dn.get("ewaybill"):
+		target_ewb_doc = dn
+
+	for si_name in linked_si_names:
+		si = frappe.get_doc("Sales Invoice", si_name)
+		si.db_set({
+			"lr_no": lr_no or None,
+			"lr_date": parsed_lr_date,
+			"vehicle_no": formatted_vehicle_no,
+			"mode_of_transport": mode_of_transport or "Road",
+			"gst_vehicle_type": gst_vehicle_type or "Regular",
+			"custom_lr_receipt_image": lr_receipt_image or None,
+		}, update_modified=True)
+		if si.get("ewaybill") and not target_ewb_doc:
+			target_ewb_doc = si
+
 	frappe.db.commit()
+
+	# 3. E-Way Bill Part B Auto-Update via india_compliance
+	ewb_status = None
+	if formatted_vehicle_no and cint(auto_update_ewaybill) and target_ewb_doc and target_ewb_doc.get("ewaybill"):
+		try:
+			from india_compliance.gst_india.utils.e_waybill import update_vehicle_info
+
+			ewb_values = {
+				"vehicle_no": formatted_vehicle_no,
+				"lr_no": lr_no or "",
+				"lr_date": str(parsed_lr_date) if parsed_lr_date else "",
+				"mode_of_transport": mode_of_transport or "Road",
+				"gst_vehicle_type": gst_vehicle_type or "Regular",
+				"reason_code": "1",  # Transshipment / Line-haul dispatch
+				"reason_remark": "Updated from Delivery Note LR Booking",
+				"update_e_waybill_data": 1,
+			}
+			update_vehicle_info(doctype=target_ewb_doc.doctype, docname=target_ewb_doc.name, values=ewb_values)
+			ewb_status = {
+				"success": True,
+				"message": _("E-Way Bill Part B updated successfully on GST Portal for {0}").format(target_ewb_doc.get("ewaybill")),
+			}
+		except Exception as e:
+			frappe.log_error(f"E-Waybill Part B update failed for {target_ewb_doc.name}: {e}", "Core Customizations E-Waybill")
+			ewb_status = {
+				"success": False,
+				"error": str(e),
+			}
 
 	return {
 		"message": _("LR Details updated successfully"),
 		"lr_no": lr_no,
-		"lr_date": str(lr_date) if lr_date else None,
+		"lr_date": str(parsed_lr_date) if parsed_lr_date else None,
+		"vehicle_no": formatted_vehicle_no,
+		"lr_receipt_image": lr_receipt_image,
+		"synced_invoices": linked_si_names,
+		"ewb_status": ewb_status,
 	}
+
+
+def auto_populate_shipping_contact_details(doc):
+	"""
+	Auto-populates shipping contact person and details if empty,
+	falling back to billing contact_person or customer's primary contact.
+	"""
+	if not doc.get("customer"):
+		return
+
+	# 1. Billing Contact Person fallback if empty
+	if not doc.get("contact_person"):
+		primary_contact = frappe.db.get_value("Customer", doc.customer, "customer_primary_contact")
+		if not primary_contact:
+			primary_contact = frappe.db.get_value(
+				"Dynamic Link",
+				{"link_doctype": "Customer", "link_name": doc.customer, "parenttype": "Contact"},
+				"parent"
+			)
+		if primary_contact:
+			doc.contact_person = primary_contact
+
+	# Sync billing contact details if contact_person is present
+	if doc.get("contact_person") and (not doc.get("contact_mobile") or not doc.get("contact_display")):
+		c_doc = frappe.get_doc("Contact", doc.contact_person)
+		if not doc.get("contact_display"):
+			doc.contact_display = c_doc.full_name or c_doc.name
+		if not doc.get("contact_mobile"):
+			doc.contact_mobile = c_doc.mobile_no or c_doc.phone
+		if not doc.get("contact_email"):
+			doc.contact_email = c_doc.email_id
+
+	# 2. Shipping Contact Person fallback if empty
+	if not doc.get("shipping_contact_person"):
+		shipping_contact = None
+		if doc.get("shipping_address_name"):
+			shipping_contact = frappe.db.get_value(
+				"Dynamic Link",
+				{"link_doctype": "Address", "link_name": doc.shipping_address_name, "parenttype": "Contact"},
+				"parent"
+			)
+		if not shipping_contact:
+			shipping_contact = doc.get("contact_person") or frappe.db.get_value("Customer", doc.customer, "customer_primary_contact")
+		if not shipping_contact:
+			shipping_contact = frappe.db.get_value(
+				"Dynamic Link",
+				{"link_doctype": "Customer", "link_name": doc.customer, "parenttype": "Contact"},
+				"parent"
+			)
+
+		if shipping_contact:
+			doc.shipping_contact_person = shipping_contact
+
+	# Sync shipping contact details if shipping_contact_person is present
+	if doc.get("shipping_contact_person"):
+		sc_doc = frappe.get_doc("Contact", doc.shipping_contact_person)
+		if not doc.get("shipping_contact_display"):
+			doc.shipping_contact_display = sc_doc.full_name or sc_doc.name
+		if not doc.get("shipping_contact_mobile"):
+			doc.shipping_contact_mobile = sc_doc.mobile_no or sc_doc.phone
+		if not doc.get("shipping_contact_email"):
+			doc.shipping_contact_email = sc_doc.email_id
 
 
 def validate_delivery_note(doc, method=None):
 	"""
 	Ensures transporter name is populated from Supplier,
 	ensures address display fields are populated and sanitized,
+	ensures shipping and billing contact details are auto-populated,
 	and clears destination address if Godown Delivery is disabled.
 	"""
-	# 1. Sync standard transporter_name if transporter is set
+	# 1. Auto-populate shipping and billing contact details
+	auto_populate_shipping_contact_details(doc)
+
+	# 2. Sync standard transporter_name if transporter is set
 	if doc.get("transporter") and not doc.get("transporter_name"):
 		doc.transporter_name = frappe.db.get_value("Supplier", doc.transporter, "supplier_name") or doc.transporter
 
-	# 2. If is_godown_delivery is 0, ensure destination address is cleared
+	# 3. If is_godown_delivery is 0, ensure destination address is cleared
 	if not doc.get("custom_is_godown_delivery"):
 		doc.custom_transporter_to_address = None
 		doc.custom_transporter_to_address_display = ""
 
-	# 3. Auto-populate sanitized address display fields
+	# 4. Auto-populate sanitized address display fields
 	if doc.get("custom_transporter_from_address"):
 		doc.custom_transporter_from_address_display = _get_formatted_address(doc.custom_transporter_from_address)
 	else:
@@ -151,7 +350,7 @@ def validate_delivery_note(doc, method=None):
 	else:
 		doc.custom_transporter_to_address_display = ""
 
-	# 4. Enforce Single Warehouse confinement across all Item rows
+	# 5. Enforce Single Warehouse confinement across all Item rows
 	primary_warehouse = None
 	for item in doc.get("items", []):
 		if item.get("warehouse"):
@@ -164,6 +363,7 @@ def validate_delivery_note(doc, method=None):
 					),
 					title=_("Multiple Warehouses Not Allowed")
 				)
+
 
 
 
@@ -468,10 +668,41 @@ def submit_packing_slips(delivery_note, packing_slip_names=None):
 	}
 
 
+
+@frappe.whitelist()
+def cancel_packing_slips(delivery_note, packing_slip_names=None):
+	"""
+	Cancels selected Submitted Packing Slips for a Delivery Note.
+	"""
+	if not delivery_note:
+		frappe.throw(_("Delivery Note name is required"))
+
+	if isinstance(packing_slip_names, str):
+		packing_slip_names = json.loads(packing_slip_names)
+
+	if packing_slip_names:
+		filters = {"name": ["in", packing_slip_names], "delivery_note": delivery_note, "docstatus": 1}
+	else:
+		filters = {"delivery_note": delivery_note, "docstatus": 1}
+
+	slips_to_cancel = frappe.get_all("Packing Slip", filters=filters, fields=["name"])
+
+	cancelled_count = 0
+	for s in slips_to_cancel:
+		doc = frappe.get_doc("Packing Slip", s.name)
+		doc.cancel()
+		cancelled_count += 1
+
+	return {
+		"message": _("{0} Packing Slip(s) cancelled successfully").format(cancelled_count),
+		"cancelled_count": cancelled_count
+	}
+
 @frappe.whitelist()
 def delete_packing_slips(delivery_note, packing_slip_names=None):
 	"""
 	Deletes selected Packing Slips (or all if packing_slip_names is empty) for a Delivery Note.
+	Skips Submitted Packing Slips and reports them.
 	"""
 	if not delivery_note:
 		frappe.throw(_("Delivery Note name is required"))
@@ -484,12 +715,16 @@ def delete_packing_slips(delivery_note, packing_slip_names=None):
 	else:
 		filters = {"delivery_note": delivery_note}
 
-	slips_to_delete = frappe.get_all("Packing Slip", filters=filters, fields=["name"])
+	slips_to_delete = frappe.get_all("Packing Slip", filters=filters, fields=["name", "docstatus"])
 
 	deleted_count = 0
+	failed_slips = []
 	for s in slips_to_delete:
-		frappe.delete_doc("Packing Slip", s.name, ignore_permissions=True)
-		deleted_count += 1
+		if s.docstatus == 1:
+			failed_slips.append(s.name)
+		else:
+			frappe.delete_doc("Packing Slip", s.name, ignore_permissions=True)
+			deleted_count += 1
 
 	# Recalculate remaining boxes
 	remaining_slips = frappe.get_all(
@@ -500,11 +735,29 @@ def delete_packing_slips(delivery_note, packing_slip_names=None):
 	frappe.db.set_value("Delivery Note", delivery_note, "custom_total_boxes", len(remaining_slips), update_modified=True)
 	frappe.db.commit()
 
-	return {
-		"message": _("Deleted {0} Packing Slip(s)").format(deleted_count),
-		"deleted_count": deleted_count,
-		"remaining_count": len(remaining_slips),
-	}
+	if failed_slips:
+		if deleted_count > 0:
+			msg = _("{0} Draft/Cancelled Packing Slip(s) deleted. {1} Submitted Packing Slip(s) ({2}) cannot be deleted and must be Cancelled first.").format(
+				deleted_count, len(failed_slips), ", ".join(failed_slips)
+			)
+		else:
+			msg = _("{0} Submitted Packing Slip(s) ({1}) cannot be deleted and must be Cancelled first.").format(
+				len(failed_slips), ", ".join(failed_slips)
+			)
+		frappe.msgprint(msg, title=_("Partial Deletion"), indicator="orange")
+		return {
+			"message": msg,
+			"deleted_count": deleted_count,
+			"remaining_count": len(remaining_slips),
+			"partial": True
+		}
+	else:
+		return {
+			"message": _("Deleted {0} Packing Slip(s)").format(deleted_count),
+			"deleted_count": deleted_count,
+			"remaining_count": len(remaining_slips),
+			"partial": False
+		}
 
 
 @frappe.whitelist()
@@ -518,7 +771,7 @@ def get_bulk_packing_labels_html(delivery_note):
 
 	packing_slips = frappe.get_all(
 		"Packing Slip",
-		filters={"delivery_note": delivery_note, "docstatus": ["<", 2]},
+		filters={"delivery_note": delivery_note, "docstatus": 1},
 		fields=["name"],
 		order_by="from_case_no asc",
 	)

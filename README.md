@@ -129,20 +129,36 @@ Available in 3 copies (`Original for Receiver`, `Duplicate for Transporter`, `Tr
 
 ## 7. Running Automated Test Suites
 
-Run integration tests across all modules:
+Run integration tests for the entire app or by specific module:
 
 ```bash
-# 1. Delivery Note Workflow & Single Warehouse (19 tests)
-bench --site [site-name] run-tests --module core_customizations.tests.test_delivery_note_workflow
+# Run ALL 59 tests across the entire app
+bench --site zap.localhost run-tests --app core_customizations
 
-# 2. Delivery Note Print Format Suite (10 tests)
-bench --site [site-name] run-tests --module core_customizations.tests.test_delivery_note_print_format
+# Or run individual test modules:
+# 1. Delivery Note 3PL Logistics & Single Warehouse (19 tests)
+bench --site zap.localhost run-tests --module core_customizations.tests.test_delivery_note_workflow
 
-# 3. POS & Carton Thermal Labels (4 tests)
-bench --site [site-name] run-tests --module core_customizations.tests.test_pos_label_print_formats
+# 2. Dual Sales Architecture (Wholesale + Retail POS + Returns) (6 tests)
+bench --site zap.localhost run-tests --module core_customizations.tests.test_pos_dual_workflow
 
-# 4. GST Sales Invoice Print Formats (9 tests)
-bench --site [site-name] run-tests --module core_customizations.tests.test_gst_invoice_print_formats
+# 3. GST Sales Invoice Print Formats Suite (10 tests)
+bench --site zap.localhost run-tests --module core_customizations.tests.test_gst_invoice_print_formats
+
+# 4. Delivery Note Print Formats Suite (with Packing Slip IDs) (10 tests)
+bench --site zap.localhost run-tests --module core_customizations.tests.test_delivery_note_print_format
+
+# 5. Thermal & 4x6 Carton Shipping Labels (4 tests)
+bench --site zap.localhost run-tests --module core_customizations.tests.test_pos_label_print_formats
+
+# 6. Monkey Patches & Packing Slip Overrides (4 tests)
+bench --site zap.localhost run-tests --module core_customizations.tests.test_monkey_patches
+
+# 7. Setup & Role Permissions Provisioning (4 tests)
+bench --site zap.localhost run-tests --module core_customizations.tests.test_setup_permissions
+
+# 8. Sales Invoice Custom Fields (2 tests)
+bench --site zap.localhost run-tests --module core_customizations.tests.test_sales_invoice_customizations
 ```
 
 ---
@@ -152,5 +168,6 @@ bench --site [site-name] run-tests --module core_customizations.tests.test_gst_i
 To synchronize all customizations, custom fields, property setters, client scripts, and print formats:
 
 ```bash
-bench --site [site-name] migrate
+bench --site zap.localhost migrate
 ```
+

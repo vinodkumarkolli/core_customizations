@@ -92,7 +92,36 @@ Accessible via the **`Packing Slips`** dropdown on `Delivery Note`:
 
 ---
 
-## 6. Print Formats Suite
+## 6. Document Cancellation & Dependency Guardrails
+
+Strict relational dependency validation is enforced across the entire order fulfillment lifecycle:
+
+```mermaid
+graph RL
+    SI["Sales Invoice (SI)<br/>(Accounts/Tax)"] -->|Must Cancel First| DN["Delivery Note (DN)<br/>(Stock/Dispatch)"]
+    DN -->|Must Cancel Before| SO["Sales Order (SO)<br/>(Booking)"]
+```
+
+### Dependency Cancellation Rules:
+1. **Sales Order Cancellation (`SO`)**:
+   * **Blocked** if any submitted `Delivery Note` or `Sales Invoice` is linked.
+   * Attempting to cancel an SO with an active downstream document throws `LinkValidationError`.
+2. **Delivery Note Cancellation (`DN`)**:
+   * **Blocked** if an active submitted `Sales Invoice` references it (`Sales Invoice Item.delivery_note`).
+   * Once downstream Sales Invoices are cancelled, cancelling the `Delivery Note`:
+     * Auto-cancels all submitted `Packing Slip` records attached to it (via `on_cancel_delivery_note` hook).
+     * Reverses Stock Ledger and Batch ledger movements.
+     * Restores Sales Order's `per_delivered` % to un-delivered status.
+3. **Sales Invoice Cancellation (`SI`)**:
+   * **Blocked** if linked `Payment Entry` exists.
+   * Cancelling the SI reverses GL accounting entries and resets the Delivery Note's `per_billed` % without cancelling the Delivery Note.
+4. **Strict Reverse Cancellation Sequence**:
+   $$\text{Payment Entry} \longrightarrow \text{Sales Invoice (SI)} \longrightarrow \text{Delivery Note (DN)} \longrightarrow \text{Sales Order (SO)}$$
+
+
+---
+
+## 7. Print Formats Suite
 
 ### A. Delivery Note Print Formats (A4)
 Available in 3 copies (`Original for Consignee`, `Duplicate for Transporter`, `Triplicate for Supplier`):
@@ -128,19 +157,19 @@ Available in 3 copies (`Original for Receiver`, `Duplicate for Transporter`, `Tr
 
 ---
 
-## 7. Running Automated Test Suites
+## 8. Running Automated Test Suites
 
 Run integration tests for the entire app or by specific module:
 
 ```bash
-# Run ALL 60 tests across the entire app
+# Run ALL 61 tests across the entire app
 bench --site zap.localhost run-tests --app core_customizations
 
 # Or run individual test modules:
 # 1. Delivery Note 3PL Logistics & Single Warehouse (19 tests)
 bench --site zap.localhost run-tests --module core_customizations.tests.test_delivery_note_workflow
 
-# 2. Dual Sales Architecture (Wholesale + Retail POS + Returns) (6 tests)
+# 2. Dual Sales Architecture (Wholesale + Retail POS + Returns + Cancellation) (7 tests)
 bench --site zap.localhost run-tests --module core_customizations.tests.test_pos_dual_workflow
 
 # 3. GST Sales Invoice Print Formats Suite (10 tests)
@@ -164,11 +193,12 @@ bench --site zap.localhost run-tests --module core_customizations.tests.test_sal
 
 ---
 
-## 8. Installation & Migration
+## 9. Installation & Migration
 
 To synchronize all customizations, custom fields, property setters, client scripts, and print formats:
 
 ```bash
 bench --site zap.localhost migrate
 ```
+
 

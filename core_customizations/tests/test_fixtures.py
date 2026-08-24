@@ -117,4 +117,32 @@ def ensure_test_fixtures():
                 "parent_supplier_group": "All Supplier Groups"
             }).insert(ignore_permissions=True)
 
+    # --- Company & Default Accounts ---
+    if not frappe.db.exists("Company", "Test Company"):
+        frappe.get_doc({
+            "doctype": "Company",
+            "company_name": "Test Company",
+            "default_currency": "INR",
+            "abbr": "TC"
+        }).insert(ignore_permissions=True)
+    
+    # Sometimes creating a company creates the default warehouse, sometimes it doesn't.
+    if not frappe.db.exists("Warehouse", "Stores - TC"):
+        frappe.get_doc({
+            "doctype": "Warehouse",
+            "warehouse_name": "Stores",
+            "company": "Test Company",
+            "is_group": 0
+        }).insert(ignore_permissions=True)
+
+    # --- Default Address Template ---
+    # Required for get_address_display() which is called on ExtendedAddress save hooks
+    if not frappe.db.exists("Address Template", {"is_default": 1}):
+        frappe.get_doc({
+            "doctype": "Address Template",
+            "country": "India",
+            "template": "{{ address_line1 }}<br>{{ city }}<br>{{ state }} - {{ pincode }}<br>{{ country }}",
+            "is_default": 1
+        }).insert(ignore_permissions=True)
+
     frappe.db.commit()

@@ -9,6 +9,7 @@ from frappe.tests import IntegrationTestCase
 from core_customizations.core_customizations.delivery_note import (
 	update_transporter_details,
 	update_lr_details,
+	get_lr_dialog_info,
 	get_unpacked_items_summary,
 	generate_packing_slips,
 	get_packing_slips_list,
@@ -226,14 +227,70 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		self.assertIn("100 Wall Tax Road, Parrys", formatted)
 
 	def test_04_update_lr_details_api(self):
-		"""Verify updating LR details via dedicated API."""
+		"""Verify updating LR details, vehicle number, S3 image, and syncing with linked Sales Invoice."""
 		dn = self._create_test_delivery_note()
-		res = update_lr_details(dn.name, lr_no="LR-CHENNAI-9988", lr_date="2026-08-23")
-		self.assertEqual(res["lr_no"], "LR-CHENNAI-9988")
 
+		# 1. Before Sales Invoice: get_lr_dialog_info indicates has_sales_invoice = False
+		info_before = get_lr_dialog_info(dn.name)
+		self.assertFalse(info_before["has_sales_invoice"])
+
+		# 2. Create linked Sales Invoice
+		si = frappe.get_doc({
+			"doctype": "Sales Invoice",
+			"company": dn.company,
+			"customer": self.customer_name,
+			"update_stock": 0,
+			"items": [{
+				"item_code": self.item_code,
+				"qty": 500,
+				"rate": 100,
+				"delivery_note": dn.name,
+				"dn_detail": dn.items[0].name,
+				"item_tax_template": "GST 18% - SE-K",
+			}]
+		})
+		si.flags.ignore_mandatory = True
+		si.insert(ignore_permissions=True)
+
+
+		# 3. After Sales Invoice: get_lr_dialog_info indicates has_sales_invoice = True and threshold checked
+		info_after = get_lr_dialog_info(dn.name)
+		self.assertTrue(info_after["has_sales_invoice"])
+		self.assertEqual(len(info_after["sales_invoices"]), 1)
+
+		# 4. Update LR Details with vehicle_no, mode_of_transport, and S3 image attachment
+		res = update_lr_details(
+			delivery_note=dn.name,
+			lr_no="LR-CHENNAI-9988",
+			lr_date="2026-08-23",
+			vehicle_no="tn 28 ab 1234",
+			mode_of_transport="Road",
+			gst_vehicle_type="Regular",
+			lr_receipt_image="/files/sample_lr_slip.png",
+		)
+		self.assertEqual(res["lr_no"], "LR-CHENNAI-9988")
+		self.assertEqual(res["vehicle_no"], "TN28AB1234")
+		self.assertEqual(res["lr_receipt_image"], "/files/sample_lr_slip.png")
+		self.assertIn(si.name, res["synced_invoices"])
+
+		# 5. Verify Delivery Note updated
 		dn.reload()
 		self.assertEqual(dn.lr_no, "LR-CHENNAI-9988")
 		self.assertEqual(str(dn.lr_date), "2026-08-23")
+		self.assertEqual(dn.vehicle_no, "TN28AB1234")
+		self.assertEqual(dn.mode_of_transport, "Road")
+		self.assertEqual(dn.gst_vehicle_type, "Regular")
+		self.assertEqual(dn.custom_lr_receipt_image, "/files/sample_lr_slip.png")
+
+		# 6. Verify linked Sales Invoice synchronized
+		si.reload()
+		self.assertEqual(si.lr_no, "LR-CHENNAI-9988")
+		self.assertEqual(str(si.lr_date), "2026-08-23")
+		self.assertEqual(si.vehicle_no, "TN28AB1234")
+		self.assertEqual(si.mode_of_transport, "Road")
+		self.assertEqual(si.gst_vehicle_type, "Regular")
+		self.assertEqual(si.custom_lr_receipt_image, "/files/sample_lr_slip.png")
+
 
 	def test_05_packing_slip_generator_single_and_mixed(self):
 		"""Verify generating sequential packing slips with valid dn_detail references."""
@@ -337,7 +394,11 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		self.assertIn("GODOWN PICKUP", html)
 		self.assertIn("GSTIN: 33AAGCR8772D1Z9", html)
 
-		# 2. Test bulk print HTML
+		# 2. Bulk print strictly skips drafts, so calling now throws error
+		self.assertRaises(frappe.ValidationError, get_bulk_packing_labels_html, dn.name)
+
+		# 3. Submit slips and test bulk print HTML again
+		submit_packing_slips(dn.name, packing_slip_names=json.dumps(gen_res["created_packing_slips"]))
 		bulk_html = get_bulk_packing_labels_html(dn.name)
 		self.assertIn(gen_res["created_packing_slips"][0], bulk_html)
 		self.assertIn(gen_res["created_packing_slips"][1], bulk_html)
@@ -737,6 +798,123 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError) as ctx:
 			dn_multi_wh.insert(ignore_permissions=True)
 		self.assertIn("confined to a single warehouse only", str(ctx.exception))
+
+	def test_20_auto_populate_shipping_contact_details(self):
+		"""Verify shipping and billing contact details are automatically populated on Delivery Note."""
+		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+
+		# 1. Create a customer with a primary contact
+		cust_name = "_Test Contact AutoPop Cust"
+		cg = frappe.get_all("Customer Group", filters={"is_group": 0}, limit=1)[0].name
+		territory = frappe.get_all("Territory", filters={"is_group": 0}, limit=1)[0].name
+		if not frappe.db.exists("Customer", cust_name):
+			cust = frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": cust_name,
+				"customer_group": cg,
+				"territory": territory,
+				"default_price_list": "Standard Selling",
+			}).insert(ignore_permissions=True)
+		else:
+			cust = frappe.get_doc("Customer", cust_name)
+
+
+
+		# Create contact
+		contact_name = "_Test AutoPop Contact"
+		if not frappe.db.exists("Contact", contact_name):
+			contact = frappe.get_doc({
+				"doctype": "Contact",
+				"first_name": "_Test AutoPop",
+				"last_name": "Contact",
+				"phone_nos": [{"phone": "9876543210", "is_primary_mobile_no": 1}],
+				"email_ids": [{"email_id": "test.autopop@example.com", "is_primary": 1}],
+				"is_primary_contact": 1,
+				"links": [{"link_doctype": "Customer", "link_name": cust.name}],
+			}).insert(ignore_permissions=True)
+		else:
+			contact = frappe.get_doc("Contact", contact_name)
+
+
+		cust.customer_primary_contact = contact.name
+		cust.save(ignore_permissions=True)
+
+		# 2. Create Delivery Note without explicitly passing shipping_contact_person
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"company": company,
+			"customer": cust.name,
+			"posting_date": nowdate(),
+			"posting_time": nowtime(),
+			"items": [{
+				"item_code": self.item_code,
+				"qty": 10,
+				"warehouse": "Stores - SE-K",
+			}]
+		})
+		dn.flags.ignore_mandatory = True
+		dn.insert(ignore_permissions=True)
+
+		# 3. Assert shipping and billing contact fields are auto-populated
+		self.assertEqual(dn.contact_person, contact.name)
+		self.assertEqual(dn.shipping_contact_person, contact.name)
+		self.assertEqual(dn.shipping_contact_mobile, "9876543210")
+		self.assertEqual(dn.shipping_contact_email, "test.autopop@example.com")
+
+	def test_21_partial_deletion_of_packing_slips(self):
+		"""Verify non-interrupting partial deletion skipping submitted packing slips."""
+		dn = self._create_test_delivery_note()
+
+		gen_res = generate_packing_slips(
+			delivery_note=dn.name,
+			packing_type="single",
+			item_code=self.item_code,
+			qty_per_box=100,
+			no_of_boxes=3,
+		)
+		ps_names = gen_res["created_packing_slips"]
+
+		# Submit the first packing slip
+		submit_packing_slips(dn.name, packing_slip_names=json.dumps([ps_names[0]]))
+
+		# Attempt to delete all of them
+		del_res = delete_packing_slips(dn.name)
+		
+		# Should delete 2 and fail 1 (the submitted one)
+		self.assertEqual(del_res["deleted_count"], 2)
+		self.assertTrue(del_res["partial"])
+		self.assertEqual(del_res["remaining_count"], 1)
+		
+		# Verify only the submitted one remains
+		remaining = frappe.get_all("Packing Slip", filters={"delivery_note": dn.name})
+		self.assertEqual(len(remaining), 1)
+		self.assertEqual(remaining[0].name, ps_names[0])
+
+	def test_22_cancel_packing_slips(self):
+		"""Verify cancellation of submitted packing slips."""
+		from core_customizations.core_customizations.delivery_note import cancel_packing_slips
+		dn = self._create_test_delivery_note()
+
+		gen_res = generate_packing_slips(
+			delivery_note=dn.name,
+			packing_type="single",
+			item_code=self.item_code,
+			qty_per_box=100,
+			no_of_boxes=2,
+		)
+		ps_names = gen_res["created_packing_slips"]
+
+		# Submit both
+		submit_packing_slips(dn.name, packing_slip_names=json.dumps(ps_names))
+		
+		# Cancel them
+		cancel_res = cancel_packing_slips(dn.name, packing_slip_names=json.dumps(ps_names))
+		self.assertEqual(cancel_res["cancelled_count"], 2)
+
+		# Verify they are now cancelled (docstatus 2)
+		for ps_name in ps_names:
+			self.assertEqual(frappe.db.get_value("Packing Slip", ps_name, "docstatus"), 2)
+
 
 
 

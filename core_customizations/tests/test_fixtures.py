@@ -118,13 +118,27 @@ def ensure_test_fixtures():
             }).insert(ignore_permissions=True)
 
     # --- Company & Default Accounts ---
+    if not frappe.db.exists("Role", "Employee Self Service"):
+        frappe.get_doc({
+            "doctype": "Role",
+            "role_name": "Employee Self Service"
+        }).insert(ignore_permissions=True)
+        
     if not frappe.db.exists("Company", "Test Company"):
         frappe.get_doc({
             "doctype": "Company",
             "company_name": "Test Company",
             "default_currency": "INR",
+            "country": "India",
             "abbr": "TC"
         }).insert(ignore_permissions=True)
+
+    # --- Fiscal Year Extension ---
+    # ERPNext creates standard test fiscal years which might expire based on current date.
+    # Extend all fiscal years to 2030 so that nowdate() always falls within them.
+    frappe.db.sql("UPDATE `tabFiscal Year` SET year_end_date='2030-03-31'")
+    frappe.cache().delete_key("fiscal_years")
+    frappe.clear_cache()
     
     # Sometimes creating a company creates the default warehouse, sometimes it doesn't.
     if not frappe.db.exists("Warehouse", "Stores - TC"):

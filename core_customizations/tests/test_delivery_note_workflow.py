@@ -145,7 +145,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		return addr.name
 
 	def _create_test_delivery_note(self):
-		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+		company = "Sravi Enterprises - Kolapakkam"
 		dn = frappe.get_doc({
 			"doctype": "Delivery Note",
 			"customer": self.customer_name,
@@ -409,7 +409,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 
 	def test_08_mandatory_delivery_note_on_sales_invoice(self):
 		"""Verify Sales Invoice creation without a Delivery Note raises a validation error."""
-		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+		company = "Sravi Enterprises - Kolapakkam"
 
 		# Direct Sales Invoice without Delivery Note should fail
 		direct_inv = frappe.new_doc("Sales Invoice")
@@ -553,7 +553,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 
 	def test_14_sales_invoice_from_delivery_note_disallows_update_stock(self):
 		"""Verify Sales Invoice linked to a Delivery Note blocks update_stock = 1."""
-		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+		company = "Sravi Enterprises - Kolapakkam"
 		dn = self._create_test_delivery_note()
 
 		inv = frappe.new_doc("Sales Invoice")
@@ -659,7 +659,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 			gstin="33AAGCR8772D1Z9",
 		)
 
-		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+		company = "Sravi Enterprises - Kolapakkam"
 
 		# 2. Create a Delivery Note explicitly with the alternate transporter & Door Delivery (is_godown = 0)
 		dn = frappe.get_doc({
@@ -751,7 +751,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 
 	def test_19_single_warehouse_confinement_validation(self):
 		"""Verify Delivery Note items must be confined to a single warehouse only."""
-		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+		company = "Sravi Enterprises - Kolapakkam"
 
 		# 1. Delivery Note with single warehouse succeeds
 		dn = frappe.get_doc({
@@ -804,7 +804,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 
 	def test_20_auto_populate_shipping_contact_details(self):
 		"""Verify shipping and billing contact details are automatically populated on Delivery Note."""
-		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+		company = "Sravi Enterprises - Kolapakkam"
 
 		# 1. Create a customer with a primary contact
 		cust_name = "_Test Contact AutoPop Cust"

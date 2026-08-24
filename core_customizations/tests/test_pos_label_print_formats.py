@@ -79,7 +79,7 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 		return addr.name
 
 	def _get_test_delivery_note(self, is_godown=1):
-		notes = frappe.get_all("Delivery Note", limit=1)
+		notes = frappe.get_all("Delivery Note", filters={"docstatus": ("<", 2)}, limit=1)
 		if not notes:
 			self.skipTest("No Delivery Note available for testing POS label prints")
 		dn = frappe.get_doc("Delivery Note", notes[0].name)

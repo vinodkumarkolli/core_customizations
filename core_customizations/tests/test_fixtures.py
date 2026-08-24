@@ -124,13 +124,13 @@ def ensure_test_fixtures():
             "role_name": "Employee Self Service"
         }).insert(ignore_permissions=True)
         
-    if not frappe.db.exists("Company", "Test Company"):
+    if not frappe.db.exists("Company", "Sravi Enterprises - Kolapakkam"):
         frappe.get_doc({
             "doctype": "Company",
-            "company_name": "Test Company",
+            "company_name": "Sravi Enterprises - Kolapakkam",
             "default_currency": "INR",
             "country": "India",
-            "abbr": "TC"
+            "abbr": "SE-K"
         }).insert(ignore_permissions=True)
 
     # --- Fiscal Year Extension ---
@@ -141,11 +141,19 @@ def ensure_test_fixtures():
     frappe.clear_cache()
     
     # Sometimes creating a company creates the default warehouse, sometimes it doesn't.
-    if not frappe.db.exists("Warehouse", "Stores - TC"):
+    if not frappe.db.exists("Warehouse", "Stores - SE-K"):
         frappe.get_doc({
             "doctype": "Warehouse",
             "warehouse_name": "Stores",
-            "company": "Test Company",
+            "company": "Sravi Enterprises - Kolapakkam",
+            "is_group": 0
+        }).insert(ignore_permissions=True)
+        
+    if not frappe.db.exists("Warehouse", "Coimbatore Goodown - SE-K"):
+        frappe.get_doc({
+            "doctype": "Warehouse",
+            "warehouse_name": "Coimbatore Goodown",
+            "company": "Sravi Enterprises - Kolapakkam",
             "is_group": 0
         }).insert(ignore_permissions=True)
 

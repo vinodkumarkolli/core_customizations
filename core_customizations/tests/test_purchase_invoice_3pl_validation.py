@@ -42,7 +42,7 @@ class TestPurchaseInvoice3PLValidation(FrappeTestCase):
                 "supplier_group": "Local"
             }).insert(ignore_permissions=True)
             
-        self.company = frappe.db.get_value("Company", None, "name")
+        self.company = frappe.db.get_value("Company", "Sravi Enterprises - Kolapakkam", "name") or "Sravi Enterprises - Kolapakkam"
         self.expense_account = frappe.db.get_value("Account", {"company": self.company, "account_type": "Expense Account"}, "name")
         self.cost_center = frappe.db.get_value("Cost Center", {"company": self.company}, "name")
 

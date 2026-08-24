@@ -11,7 +11,7 @@ class TestDeliveryNotePrintFormat(unittest.TestCase):
 		# Ensure ERPNext master data exists in the blank CI environment
 		ensure_test_fixtures()
 		# Resolve company dynamically; CI site will have a different name
-		cls.company = frappe.db.get_value("Company", {}, "name") or "Test Company"
+		cls.company = frappe.db.get_value("Company", "Sravi Enterprises - Kolapakkam", "name") or "Sravi Enterprises - Kolapakkam"
 		cls.transporter_name = "_Test Speed Express Logistics"
 
 		if not frappe.db.exists("Supplier", {"supplier_name": cls.transporter_name}):

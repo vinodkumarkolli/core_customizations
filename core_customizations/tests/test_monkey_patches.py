@@ -22,8 +22,8 @@ class TestMonkeyPatches(FrappeTestCase):
 		# Resolve company and warehouse dynamically — the CI site has a single
 		# company created by ERPNext install, but it may have a different name
 		# than the production company "Sravi Enterprises - Kolapakkam".
-		self.company = frappe.db.get_value("Company", {}, "name") or "Test Company"
-		self.warehouse = frappe.db.get_value("Warehouse", {"company": self.company, "is_group": 0}, "name") or "Stores - TC"
+		self.company = frappe.db.get_value("Company", "Sravi Enterprises - Kolapakkam", "name") or "Sravi Enterprises - Kolapakkam"
+		self.warehouse = frappe.db.get_value("Warehouse", {"company": self.company, "is_group": 0}, "name") or "Stores - SE-K"
 		self.customer = self._get_or_create_customer()
 		self.item_code = self._get_or_create_item()
 

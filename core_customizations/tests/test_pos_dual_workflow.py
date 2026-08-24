@@ -21,7 +21,7 @@ class TestPOSDualWorkflow(IntegrationTestCase):
 		super().setUpClass()
 		# Ensure ERPNext master data exists in the blank CI environment
 		ensure_test_fixtures()
-		cls.company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+		cls.company = "Sravi Enterprises - Kolapakkam"
 
 		# 1. Create a Test POS Profile if not present
 		cls.pos_profile_name = "_Test POS Profile"

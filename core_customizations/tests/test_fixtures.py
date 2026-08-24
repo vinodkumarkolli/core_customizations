@@ -124,6 +124,23 @@ def ensure_test_fixtures():
             "role_name": "Employee Self Service"
         }).insert(ignore_permissions=True)
         
+    # --- Pre-requisites for Company and Customer ---
+    if not frappe.db.exists("Warehouse Type", "Transit"):
+        frappe.get_doc({
+            "doctype": "Warehouse Type",
+            "warehouse_type_name": "Transit"
+        }).insert(ignore_permissions=True)
+        
+    if not frappe.db.exists("Territory", "Direct Customers"):
+        # Territories usually have a tree structure. Use "All Territories" as parent if needed,
+        # but for tests, just inserting it should be fine.
+        parent = frappe.db.get_value("Territory", {"is_group": 1}, "name")
+        frappe.get_doc({
+            "doctype": "Territory",
+            "territory_name": "Direct Customers",
+            "parent_territory": parent or "All Territories"
+        }).insert(ignore_permissions=True)
+
     if not frappe.db.exists("Company", "Sravi Enterprises - Kolapakkam"):
         frappe.get_doc({
             "doctype": "Company",

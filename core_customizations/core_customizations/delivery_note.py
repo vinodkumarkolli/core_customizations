@@ -110,24 +110,15 @@ def update_lr_details(delivery_note, lr_no=None, lr_date=None):
 
 def validate_delivery_note(doc, method=None):
 	"""
-	Validates and auto-populates transporter defaults from Customer if not already set,
-	and ensures address display fields are populated and sanitized.
+	Ensures address display fields are populated and sanitized,
+	and clears destination address if Godown Delivery is disabled.
 	"""
-	# 1. If customer is set and transporter is not set, auto-populate from customer defaults
-	if doc.get("customer") and not doc.get("custom_transporter"):
-		cust_doc = frappe.get_cached_doc("Customer", doc.customer)
-		if cust_doc.get("custom_default_transporter"):
-			doc.custom_transporter = cust_doc.get("custom_default_transporter")
-			doc.custom_transporter_from_address = cust_doc.get("custom_default_transporter_from_address")
-			doc.custom_is_godown_delivery = cint(cust_doc.get("custom_is_godown_delivery"))
-			doc.custom_transporter_to_address = cust_doc.get("custom_default_transporter_to_address") if doc.custom_is_godown_delivery else None
-
-	# 2. If is_godown_delivery is 0, ensure destination address is cleared
+	# 1. If is_godown_delivery is 0, ensure destination address is cleared
 	if not doc.get("custom_is_godown_delivery"):
 		doc.custom_transporter_to_address = None
 		doc.custom_transporter_to_address_display = ""
 
-	# 3. Auto-populate sanitized address display fields
+	# 2. Auto-populate sanitized address display fields
 	if doc.get("custom_transporter_from_address"):
 		doc.custom_transporter_from_address_display = _get_formatted_address(doc.custom_transporter_from_address)
 	else:
@@ -372,7 +363,7 @@ def generate_packing_slips(delivery_note, packing_type="single", item_code=None,
 @frappe.whitelist()
 def get_packing_slips_list(delivery_note):
 	"""
-	Returns all Packing Slips for a Delivery Note with their box range and contents.
+	Returns all Packing Slips for a Delivery Note with their box range, contents, and submission status.
 	"""
 	if not delivery_note:
 		frappe.throw(_("Delivery Note name is required"))
@@ -380,7 +371,7 @@ def get_packing_slips_list(delivery_note):
 	packing_slips = frappe.get_all(
 		"Packing Slip",
 		filters={"delivery_note": delivery_note, "docstatus": ["<", 2]},
-		fields=["name", "from_case_no", "to_case_no", "gross_weight_pkg", "net_weight_pkg", "creation"],
+		fields=["name", "from_case_no", "to_case_no", "gross_weight_pkg", "net_weight_pkg", "creation", "docstatus"],
 		order_by="from_case_no asc",
 	)
 
@@ -391,6 +382,7 @@ def get_packing_slips_list(delivery_note):
 			filters={"parent": ps.name},
 			fields=["item_code", "item_name", "qty", "stock_uom"],
 		)
+		status_label = "Draft" if ps.docstatus == 0 else ("Submitted" if ps.docstatus == 1 else "Cancelled")
 		result.append({
 			"name": ps.name,
 			"box_no": ps.from_case_no if ps.from_case_no == ps.to_case_no else f"{ps.from_case_no} - {ps.to_case_no}",
@@ -398,12 +390,48 @@ def get_packing_slips_list(delivery_note):
 			"to_case_no": ps.to_case_no,
 			"gross_weight": flt(ps.gross_weight_pkg),
 			"net_weight": flt(ps.net_weight_pkg),
+			"docstatus": ps.docstatus,
+			"status": status_label,
 			"items": items,
 			"items_display": ", ".join([f"{i.item_code} x {flt(i.qty):g} {i.stock_uom or ''}".strip() for i in items]),
 			"creation": str(ps.creation),
 		})
 
 	return result
+
+
+@frappe.whitelist()
+def submit_packing_slips(delivery_note, packing_slip_names=None):
+	"""
+	Submits selected draft Packing Slips (or all draft slips if packing_slip_names is empty)
+	linked to a Delivery Note.
+	"""
+	if not delivery_note:
+		frappe.throw(_("Delivery Note name is required"))
+
+	if isinstance(packing_slip_names, str):
+		packing_slip_names = json.loads(packing_slip_names)
+
+	filters = {"delivery_note": delivery_note, "docstatus": 0}
+	if packing_slip_names:
+		filters["name"] = ["in", packing_slip_names]
+
+	slips_to_submit = frappe.get_all("Packing Slip", filters=filters, pluck="name", order_by="from_case_no asc")
+
+	submitted_count = 0
+	for ps_name in slips_to_submit:
+		ps = frappe.get_doc("Packing Slip", ps_name)
+		ps.flags.ignore_permissions = True
+		ps.submit()
+		submitted_count += 1
+
+	frappe.db.commit()
+
+	return {
+		"message": _("Successfully submitted {0} Packing Slip(s)").format(submitted_count),
+		"submitted_count": submitted_count,
+		"submitted_slips": slips_to_submit,
+	}
 
 
 @frappe.whitelist()

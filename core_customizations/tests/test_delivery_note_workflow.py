@@ -11,6 +11,7 @@ from core_customizations.core_customizations.delivery_note import (
 	generate_packing_slips,
 	get_packing_slips_list,
 	delete_packing_slips,
+	submit_packing_slips,
 	get_bulk_packing_labels_html,
 	_get_formatted_address,
 )
@@ -398,9 +399,30 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 				to_address=self.to_address,
 			)
 
-	def test_11_delivery_note_auto_fetches_customer_transporter_defaults(self):
-		"""Verify new Delivery Note auto-populates transporter, hub, godown, and displays from Customer."""
+	def test_11_customer_transporter_defaults_fetched_on_demand(self):
+		"""Verify new Delivery Note starts without transporter until explicitly assigned or fetched on demand."""
 		dn = self._create_test_delivery_note()
+		dn.reload()
+
+		# Initial document is blank for transporter
+		self.assertIsNone(dn.custom_transporter)
+		self.assertIsNone(dn.custom_transporter_from_address)
+
+		# Customer master defaults are available via summary API for popup "Fetch Customer Defaults"
+		summary = get_unpacked_items_summary(dn.name)
+		self.assertEqual(summary["customer_defaults"]["default_transporter"], self.transporter_name)
+		self.assertEqual(summary["customer_defaults"]["default_from_address"], self.from_address)
+		self.assertEqual(summary["customer_defaults"]["default_is_godown"], 1)
+		self.assertEqual(summary["customer_defaults"]["default_to_address"], self.to_address)
+
+		# When user applies the customer defaults via update_transporter_details
+		update_transporter_details(
+			delivery_note=dn.name,
+			transporter=summary["customer_defaults"]["default_transporter"],
+			from_address=summary["customer_defaults"]["default_from_address"],
+			is_godown=summary["customer_defaults"]["default_is_godown"],
+			to_address=summary["customer_defaults"]["default_to_address"],
+		)
 		dn.reload()
 
 		self.assertEqual(dn.custom_transporter, self.transporter_name)
@@ -411,6 +433,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		self.assertIn("GSTIN: 33AAGCR8772D1Z9", dn.custom_transporter_to_address_display)
 		self.assertNotIn("<br>", dn.custom_transporter_from_address_display)
 		self.assertNotIn("<br>", dn.custom_transporter_to_address_display)
+
 
 	def test_12_delivery_note_submission_auto_submits_draft_packing_slips(self):
 		"""Verify submitting Delivery Note automatically submits all linked Draft Packing Slips."""
@@ -547,6 +570,120 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		# For Sales Invoice without update_stock, batch allocation in custom_update_stock is bypassed
 		custom_update_stock(ctx, out)
 		self.assertNotIn("batch_no", out)
+
+	def test_17_delivery_note_overridden_transporter_takes_precedence_over_customer_defaults(self):
+		"""Verify Delivery Note specific transporter override takes precedence over Customer Master defaults."""
+		# 1. Create an alternate transporter and hub
+		alt_transporter_name = "_Test Alternate Transporter"
+		if not frappe.db.exists("Supplier", alt_transporter_name):
+			frappe.get_doc({
+				"doctype": "Supplier",
+				"supplier_name": alt_transporter_name,
+				"supplier_group": "Services",
+				"is_transporter": 1,
+			}).insert(ignore_permissions=True)
+
+		alt_hub_address = self._create_address(
+			"_Test Alt Koyambedu Hub",
+			alt_transporter_name,
+			"500 Koyambedu Wholesale Market Road",
+			"Chennai",
+			"Tamil Nadu",
+			"600107",
+			gstin="33AAGCR8772D1Z9",
+		)
+
+		company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company", limit=1)[0].name
+
+		# 2. Create a Delivery Note explicitly with the alternate transporter & Door Delivery (is_godown = 0)
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"customer": self.customer_name,
+			"company": company,
+			"custom_transporter": alt_transporter_name,
+			"custom_transporter_from_address": alt_hub_address,
+			"custom_is_godown_delivery": 0,
+			"custom_transporter_to_address": None,
+			"items": [
+				{
+					"item_code": self.item_code,
+					"qty": 100,
+					"uom": "Nos",
+				}
+			]
+		}).insert(ignore_permissions=True)
+
+		dn.reload()
+
+		# Assert Delivery Note preserved its explicit override (NOT replaced with customer default transporter)
+		self.assertEqual(dn.custom_transporter, alt_transporter_name)
+		self.assertEqual(dn.custom_transporter_from_address, alt_hub_address)
+		self.assertEqual(dn.custom_is_godown_delivery, 0)
+		self.assertIsNone(dn.custom_transporter_to_address)
+		self.assertIn("500 Koyambedu Wholesale Market Road", dn.custom_transporter_from_address_display)
+
+		# 3. Verify API returns the Delivery Note's specific override in current_transporter
+		summary = get_unpacked_items_summary(dn.name)
+		self.assertEqual(summary["current_transporter"]["transporter"], alt_transporter_name)
+		self.assertEqual(summary["current_transporter"]["from_address"], alt_hub_address)
+		self.assertEqual(summary["current_transporter"]["is_godown_delivery"], 0)
+		self.assertIsNone(summary["current_transporter"]["to_address"])
+
+		# And still provides customer master defaults for reference if the user wants to switch back
+		self.assertEqual(summary["customer_defaults"]["default_transporter"], self.transporter_name)
+		self.assertEqual(summary["customer_defaults"]["default_from_address"], self.from_address)
+		self.assertEqual(summary["customer_defaults"]["default_is_godown"], 1)
+		self.assertEqual(summary["customer_defaults"]["default_to_address"], self.to_address)
+
+	def test_18_submit_draft_packing_slips_on_submitted_delivery_note(self):
+		"""Verify submitting draft Packing Slips on an already submitted Delivery Note."""
+		# 1. Create and submit Delivery Note without packing slips
+		dn = self._create_test_delivery_note()
+		dn.submit()
+		self.assertEqual(dn.docstatus, 1)
+
+		# 2. Generate 3 packing slips on the submitted Delivery Note
+		res = generate_packing_slips(
+			delivery_note=dn.name,
+			packing_type="single",
+			item_code=self.item_code,
+			qty_per_box=100,
+			no_of_boxes=3,
+		)
+		ps_names = res["created_packing_slips"]
+		self.assertEqual(len(ps_names), 3)
+
+		# Verify they are initially created as Draft (docstatus: 0)
+		for ps_name in ps_names:
+			self.assertEqual(frappe.db.get_value("Packing Slip", ps_name, "docstatus"), 0)
+
+		# Verify get_packing_slips_list returns docstatus and Draft status label
+		slips = get_packing_slips_list(dn.name)
+		self.assertEqual(len(slips), 3)
+		for s in slips:
+			self.assertEqual(s["docstatus"], 0)
+			self.assertEqual(s["status"], "Draft")
+
+		# 3. Submit 1 packing slip individually via submit_packing_slips API
+		single_sub = submit_packing_slips(dn.name, packing_slip_names=[ps_names[0]])
+		self.assertEqual(single_sub["submitted_count"], 1)
+		self.assertEqual(frappe.db.get_value("Packing Slip", ps_names[0], "docstatus"), 1)
+		self.assertEqual(frappe.db.get_value("Packing Slip", ps_names[1], "docstatus"), 0)
+		self.assertEqual(frappe.db.get_value("Packing Slip", ps_names[2], "docstatus"), 0)
+
+		# 4. Submit remaining draft packing slips in bulk via submit_packing_slips API
+		bulk_sub = submit_packing_slips(dn.name)
+		self.assertEqual(bulk_sub["submitted_count"], 2)
+		self.assertEqual(frappe.db.get_value("Packing Slip", ps_names[1], "docstatus"), 1)
+		self.assertEqual(frappe.db.get_value("Packing Slip", ps_names[2], "docstatus"), 1)
+
+		# 5. Verify get_packing_slips_list now returns Submitted status label for all
+		updated_slips = get_packing_slips_list(dn.name)
+		for s in updated_slips:
+			self.assertEqual(s["docstatus"], 1)
+			self.assertEqual(s["status"], "Submitted")
+
+
 
 
 

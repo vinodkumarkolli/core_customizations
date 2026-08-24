@@ -1210,9 +1210,10 @@
   "link_filters": "[[\"Supplier\",\"is_transporter\",\"=\",1]]",
   "allow_on_submit": 1,
   "name": "Delivery Note-custom_transporter",
-  "modified": "2026-08-23 16:25:44.964989",
+  "modified": "2026-08-24 06:44:00.000000",
   "creation": "2026-08-23 09:08:03.575362",
-  "fetch_from": "customer.custom_default_transporter"
+  "fetch_from": null,
+  "fetch_if_empty": 0
  },
  {
   "docstatus": 0,
@@ -1225,9 +1226,10 @@
   "options": "Address",
   "allow_on_submit": 1,
   "name": "Delivery Note-custom_transporter_from_address",
-  "modified": "2026-08-23 16:25:44.964989",
+  "modified": "2026-08-24 06:44:00.000000",
   "creation": "2026-08-23 09:08:03.575362",
-  "fetch_from": "customer.custom_default_transporter_from_address"
+  "fetch_from": null,
+  "fetch_if_empty": 0
  },
  {
   "docstatus": 0,
@@ -1254,10 +1256,11 @@
   "default": "0",
   "allow_on_submit": 1,
   "name": "Delivery Note-custom_is_godown_delivery",
-  "modified": "2026-08-23 16:25:44.964989",
+  "modified": "2026-08-24 06:44:00.000000",
   "creation": "2026-08-23 09:08:03.575362",
   "depends_on": "eval:Boolean(doc.custom_transporter_from_address)",
-  "fetch_from": "customer.custom_is_godown_delivery"
+  "fetch_from": null,
+  "fetch_if_empty": 0
  },
  {
   "docstatus": 0,
@@ -1283,10 +1286,11 @@
   "depends_on": "eval:doc.custom_is_godown_delivery==1 && Boolean(doc.custom_transporter_from_address)",
   "allow_on_submit": 1,
   "name": "Delivery Note-custom_transporter_to_address",
-  "modified": "2026-08-23 16:25:44.964989",
+  "modified": "2026-08-24 06:44:00.000000",
   "creation": "2026-08-23 09:08:03.575362",
   "mandatory_depends_on": "eval:doc.custom_is_godown_delivery==1",
-  "fetch_from": "customer.custom_default_transporter_to_address"
+  "fetch_from": null,
+  "fetch_if_empty": 0
  },
  {
   "docstatus": 0,

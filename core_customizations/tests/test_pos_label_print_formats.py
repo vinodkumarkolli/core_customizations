@@ -88,15 +88,15 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 		if not notes:
 			self.skipTest("No Delivery Note available for testing POS label prints")
 		dn = frappe.get_doc("Delivery Note", notes[0].name)
-		dn.transporter = self.transporter_name
-		dn.custom_transporter_from_address = self.from_address_name
-		dn.custom_transporter_from_address_display = "500 Origin Booking Street\nChennai\nTamil Nadu"
-		dn.custom_is_godown_delivery = 1 if is_godown else 0
-		dn.custom_transporter_to_address = self.to_address_name if is_godown else None
-		dn.custom_transporter_to_address_display = (
-			"800 Destination Delivery Road\nSalem\nTamil Nadu" if is_godown else None
-		)
-		dn.db_update()
+		dn.db_set("transporter", self.transporter_name)
+		dn.db_set("custom_transporter_from_address", self.from_address_name)
+		dn.db_set("custom_transporter_from_address_display", "500 Origin Booking Street\nChennai\nTamil Nadu")
+		dn.db_set("custom_is_godown_delivery", 1 if is_godown else 0)
+		dn.db_set("custom_transporter_to_address", self.to_address_name if is_godown else None)
+		dn.db_set("custom_transporter_to_address_display", "800 Destination Delivery Road\nSalem\nTamil Nadu" if is_godown else None)
+		
+		# reload the doc to ensure all updates apply in memory
+		dn.reload()
 		return dn
 
 	def test_01_unified_label_print_format_exists(self):

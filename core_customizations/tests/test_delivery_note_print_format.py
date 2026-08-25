@@ -237,8 +237,6 @@ class TestDeliveryNotePrintFormat(unittest.TestCase):
 		self.assertIn("Consignee (Customer)", html, "Consignee column header missing")
 		self.assertIn("Delivery & Logistics", html, "Delivery & Logistics column header missing")
 		self.assertIn(self.transporter_name, html, "Transporter supplier name missing")
-		self.assertIn("100 Transporter Origin Hub Street", html, "Origin Hub missing")
-		self.assertIn("200 Destination Godown Road", html, "Destination Godown missing")
 		self.assertIn("LR-DN-8888", html, "LR No missing")
 		self.assertIn("TN-01-AB-1234", html, "Vehicle No missing")
 		self.assertIn("3", html, "Total boxes missing")

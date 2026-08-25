@@ -62,6 +62,7 @@ jobs:
           gosu frappe bash << 'FRAPPE_SETUP'
           set -e
           export PATH=$PATH:~/.local/bin
+          export NODE_OPTIONS="--dns-result-order=ipv4first"
           pip install frappe-bench
           rm -rf test-bench
           bench init test-bench --skip-redis-config-generation --no-backups --frappe-branch version-16

@@ -173,6 +173,8 @@ def update_lr_details(
 	Whitelisted method to update Lorry Receipt (LR) number, date, vehicle number,
 	transport mode, and LR receipt photo on a Delivery Note and all linked Sales Invoices.
 	Optionally triggers E-Way Bill Part B update via india_compliance if an active EWB is present.
+	
+	Business Purpose: Sync logistics details ([BR-LOG-002]) and enforce Consignor Part B Authority ([BR-EWB-003]).
 	"""
 	if not delivery_note:
 		frappe.throw(_("Delivery Note name is required"))
@@ -191,6 +193,7 @@ def update_lr_details(
 		"custom_lr_receipt_image": lr_receipt_image or None,
 	}, update_modified=True)
 
+	# @businessRule [BR-LOG-002] Sync LR Details
 	# 2. Synchronize to all linked Sales Invoices
 	linked_si_names = frappe.get_all(
 		"Sales Invoice Item",
@@ -326,6 +329,8 @@ def validate_delivery_note(doc, method=None):
 	ensures address display fields are populated and sanitized,
 	ensures shipping and billing contact details are auto-populated,
 	and clears destination address if Godown Delivery is disabled.
+	
+	Business Purpose: Enforce data consistency and Single Warehouse Confinement ([BR-INV-001]).
 	"""
 	# 1. Auto-populate shipping and billing contact details
 	auto_populate_shipping_contact_details(doc)
@@ -350,6 +355,7 @@ def validate_delivery_note(doc, method=None):
 	else:
 		doc.custom_transporter_to_address_display = ""
 
+	# @businessRule [BR-INV-001] Single Warehouse Confinement
 	# 5. Enforce Single Warehouse confinement across all Item rows
 	primary_warehouse = None
 	for item in doc.get("items", []):
@@ -370,6 +376,8 @@ def validate_delivery_note(doc, method=None):
 def before_submit_delivery_note(doc, method=None):
 	"""
 	Automatically submits all linked Draft Packing Slips before the Delivery Note is submitted.
+	
+	Business Purpose: Enforce Bulk Submission Synchronization ([BR-PAC-002]).
 	"""
 	draft_packing_slips = frappe.get_all(
 		"Packing Slip",
@@ -384,6 +392,8 @@ def before_submit_delivery_note(doc, method=None):
 def on_cancel_delivery_note(doc, method=None):
 	"""
 	Automatically cancels all linked Submitted Packing Slips when the Delivery Note is cancelled.
+	
+	Business Purpose: Maintain Document Dependency Guardrails ([BR-PAC-002], [BR-CAN-001]).
 	"""
 	submitted_packing_slips = frappe.get_all(
 		"Packing Slip",
@@ -490,6 +500,8 @@ def generate_packing_slips(delivery_note, packing_type="single", item_code=None,
 	Creates sequential Packing Slip documents for a Delivery Note.
 	- packing_type == "single": Generates `no_of_boxes` containing `qty_per_box` of `item_code`.
 	- packing_type == "mixed": Generates `no_of_boxes` each containing the items listed in `mixed_items`.
+	
+	Business Purpose: Supports Draft Carton Packing Slips generation ([BR-PAC-001]).
 	"""
 	if not delivery_note:
 		frappe.throw(_("Delivery Note name is required"))

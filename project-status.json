@@ -1,0 +1,57 @@
+{
+  "project_name": "core_customizations",
+  "framework": "Frappe/ERPNext",
+  "current_sprint": "Sprint 1",
+  "status": "In Progress",
+  "epics": [
+    {
+      "epic_id": "Epic 1",
+      "name": "Dual Sales & Fulfillment Architecture",
+      "status": "In Progress",
+      "completion_percentage": 90
+    },
+    {
+      "epic_id": "Epic 2",
+      "name": "Sales Returns & Credit Notes",
+      "status": "To Do",
+      "completion_percentage": 0
+    },
+    {
+      "epic_id": "Epic 3",
+      "name": "3PL Logistics & Transporter Management",
+      "status": "In Progress",
+      "completion_percentage": 50
+    },
+    {
+      "epic_id": "Epic 4",
+      "name": "Indian GST E-Way Bill Compliance",
+      "status": "To Do",
+      "completion_percentage": 0
+    },
+    {
+      "epic_id": "Epic 5",
+      "name": "Inventory Guardrails",
+      "status": "Done",
+      "completion_percentage": 100
+    },
+    {
+      "epic_id": "Epic 6",
+      "name": "Packing Slips & Carton Management",
+      "status": "Done",
+      "completion_percentage": 100
+    },
+    {
+      "epic_id": "Epic 7",
+      "name": "Document Dependency & Cancellation Guardrails",
+      "status": "Done",
+      "completion_percentage": 100
+    }
+  ],
+  "ci_cd": {
+    "status": "Passing",
+    "last_run": "2026-08-25T06:56:10Z",
+    "tests_passed": 72,
+    "tests_failed": 0
+  },
+  "current_focus": "Aligning project architecture to the new Agent Rules Ecosystem and ensuring CI/CD reliability."
+}

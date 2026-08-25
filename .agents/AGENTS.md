@@ -1,25 +1,22 @@
-# AI Agent Operating Guidelines
+# Project Agents & Roles
 
-You are an AI Agent assisting with the development of `core_customizations`, a Frappe Framework application. When developing features, fixing bugs, or refactoring code in this repository, you MUST strictly adhere to the following workflow and standards.
+This project utilizes specialized agents to assist with the development of the Frappe / ERPNext `core_customizations` application. These agents adhere strictly to our Agile Methodology, Test Driven Development (TDD) protocols, and Frappe-native architectural standards.
 
-## 1. Test-Driven Development (TDD)
-- **Tests First**: Before writing any implementation code (Python, JavaScript, or Frappe DocType configurations), you must write the failing test cases.
-- **Backend Tests**: Place all Python unit and integration tests in the `tests/` directory using the standard Frappe test runner (`unittest`).
-- **Frontend Tests**: Place all Cypress UI tests in the `cypress/integration/` directory. If your UI tests require specific background data, you must write a self-contained Python helper script (e.g. `test_ui_helpers.py`) and use `frappe.xcall` to provision the test data securely.
-- **Commit to Green**: Ensure all newly written tests pass natively in the backend before concluding your task.
+## Agent Roles
 
-## 2. AGILE Workflow
-- **Iterative Execution**: Break down large architectural requests into small, incremental chunks. Do not attempt monolithic code refactors in a single pass.
-- **Continuous Verification**: After every significant file edit, run the specific test file that covers that change to verify it. Do not wait until the end of a long execution chain to run tests.
-- **CI/CD Awareness**: Our repository relies on a self-hosted GitHub Actions CI runner (`msi-fedora-docker`) running Frappe Version 16. Ensure your changes will survive the automated CI pipeline.
+The following specialized roles (agents) operate within this workspace. Detailed instructions and behavioral guidelines for each agent are located in the `rules/` directory.
 
-## 3. Code Annotation & Documentation
-- **Docstrings**: All Python functions and classes MUST have clear, descriptive docstrings explaining their exact purpose, arguments, and return types.
-- **In-line Comments**: Add in-line comments for complex logic, especially when interacting with Frappe's ORM (`frappe.get_doc`, `frappe.db.sql`, etc.) or specific domain business rules.
-- **Why over What**: Your comments should explain *why* a technical or architectural decision was made (e.g. "We disable update_stock for 3PL items here to force them through the PR pipeline"), rather than just reciting what the code literally does.
-- **Maintain Best Practices**: Keep our documentation files up to date. If your code changes architectural paradigms or DevOps infrastructure, update `BEST_PRACTICES_3PL.md` and `DEVOPS.md` respectively.
+- **Frappe Backend Developer** (`rules/frappe_backend_developer.md`): The primary execution agent responsible for coding Python DocType logic, REST APIs, background jobs, and test fixtures.
+- **Frappe Frontend Developer** (`rules/frappe_frontend_developer.md`): Responsible for Client Scripts, Portal Pages, Print Formats, and Vue/JS implementations.
+- **Technical Lead** (`rules/tech_lead.md`): The architect responsible for Frappe system design, Schema (DocType) management, hooks configuration, server infrastructure, and enforcing coding standards.
+- **Product Owner / Scrum Master** (`rules/product_owner.md`): Manages the backlog, defines acceptance criteria, enforces business rules, and updates project status.
+- **DevOps Engineer** (`rules/devops_engineer.md`): Manages CI/CD pipelines, automated testing workflows, and environment deployments.
 
-## 4. Frappe Specific Standards
-- **ORM over SQL**: Never write direct SQL queries (`frappe.db.sql`) when standard ORM methods (`frappe.get_list`, `frappe.get_all`, or `frappe.get_doc`) can accomplish the task efficiently.
-- **Permissions**: Do not bypass permissions (`ignore_permissions=True`) in production code unless absolutely necessary (it is acceptable for test data setup).
-- **Version Awareness**: Keep in mind that this app runs on Frappe Version 16, which utilizes modern standards like `pyproject.toml` instead of `setup.py` and targets Node.js 24.x LTS.
+## Core Directives for All Agents
+1. **Frappe Best Practices**: All code must conform to the official Frappe framework guidelines (e.g., ORM over raw SQL, proper permission hooks).
+2. **Test Driven**: Follow the Red-Green-Refactor cycle. Use Python `unittest` for backend and Cypress for frontend. No feature is complete without passing tests natively via `bench run-tests`.
+3. **Modular Design**: Utilize Frappe hooks (`hooks.py`), custom apps, and isolated server scripts rather than modifying standard ERPNext core code. Keep files focused; decompose large controller logic into shared utilities.
+4. **Code Quality & Review**: All agents MUST strictly adhere to the guidelines provided in the `@frappe/skills` submodule (`.agents/skills/frappe-skills/skills/quality-code-review/SKILL.md`).
+5. **Documentation Standards**: All agents MUST strictly adhere to the project's metadata tagging standard defined in `rules/documentation_standards.md` for both Python and JS files.
+6. **Anti-Hallucination (Business Rules)**: Before writing any domain logic, you MUST review `rules/business_blueprint.md`. Do not invent business logic. You must explicitly map every custom service, validation hook, or condition you build to a specific `[BR-XXX-XXX]` rule using inline tags.
+7. **Anti-Hallucination (Architecture)**: Before designing structural changes, you MUST consult existing DocTypes and configurations rather than hallucinating generic solutions.

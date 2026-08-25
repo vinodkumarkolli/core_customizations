@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+
 from core_customizations.setup import after_migrate
 
 
@@ -36,22 +37,38 @@ class TestSetupPermissions(FrappeTestCase):
 			]
 			for dt in ess_doctypes:
 				self.assertTrue(
-					frappe.db.exists("Custom DocPerm", {"parent": dt, "role": "Employee Self Service", "permlevel": 0}),
-					f"Custom DocPerm for Employee Self Service on '{dt}' was not created."
+					frappe.db.exists(
+						"Custom DocPerm", {"parent": dt, "role": "Employee Self Service", "permlevel": 0}
+					),
+					f"Custom DocPerm for Employee Self Service on '{dt}' was not created.",
 				)
 
 			# Check Employee permlevel 1 for Employee Self Service (read-only)
 			self.assertTrue(
-				frappe.db.exists("Custom DocPerm", {"parent": "Employee", "role": "Employee Self Service", "permlevel": 1, "read": 1, "write": 0}),
-				"Custom DocPerm for Employee Self Service (permlevel 1) missing or has write enabled."
+				frappe.db.exists(
+					"Custom DocPerm",
+					{
+						"parent": "Employee",
+						"role": "Employee Self Service",
+						"permlevel": 1,
+						"read": 1,
+						"write": 0,
+					},
+				),
+				"Custom DocPerm for Employee Self Service (permlevel 1) missing or has write enabled.",
 			)
 		else:
-			self.skipTest("HRMS not installed: 'Employee Self Service' role does not exist, skipping ESS permission check.")
+			self.skipTest(
+				"HRMS not installed: 'Employee Self Service' role does not exist, skipping ESS permission check."
+			)
 
 		# Check Employee permlevel 1 for System Manager (read-write) — always runs
 		self.assertTrue(
-			frappe.db.exists("Custom DocPerm", {"parent": "Employee", "role": "System Manager", "permlevel": 1, "read": 1, "write": 1}),
-			"Custom DocPerm for System Manager on Employee (permlevel 1) missing or lacks write."
+			frappe.db.exists(
+				"Custom DocPerm",
+				{"parent": "Employee", "role": "System Manager", "permlevel": 1, "read": 1, "write": 1},
+			),
+			"Custom DocPerm for System Manager on Employee (permlevel 1) missing or lacks write.",
 		)
 
 	def test_02_standard_docperm_copied_when_custom_docperm_created(self):
@@ -59,11 +76,21 @@ class TestSetupPermissions(FrappeTestCase):
 		after_migrate()
 
 		# Workflow has standard DocPerms. Verify all standard roles have corresponding Custom DocPerms.
-		std_perms = frappe.get_all("DocPerm", filters={"parent": "Workflow"}, fields=["role", "permlevel", "if_owner"])
+		std_perms = frappe.get_all(
+			"DocPerm", filters={"parent": "Workflow"}, fields=["role", "permlevel", "if_owner"]
+		)
 		for sp in std_perms:
 			self.assertTrue(
-				frappe.db.exists("Custom DocPerm", {"parent": "Workflow", "role": sp.role, "permlevel": sp.permlevel, "if_owner": sp.if_owner}),
-				f"Standard DocPerm for role '{sp.role}' on Workflow was not migrated to Custom DocPerm."
+				frappe.db.exists(
+					"Custom DocPerm",
+					{
+						"parent": "Workflow",
+						"role": sp.role,
+						"permlevel": sp.permlevel,
+						"if_owner": sp.if_owner,
+					},
+				),
+				f"Standard DocPerm for role '{sp.role}' on Workflow was not migrated to Custom DocPerm.",
 			)
 
 	def test_03_obsolete_print_formats_cleaned_up(self):
@@ -71,13 +98,16 @@ class TestSetupPermissions(FrappeTestCase):
 		obsolete_pf = "Customer Delivery Address Label"
 		# Temporarily create the obsolete print format if it doesn't exist
 		if not frappe.db.exists("Print Format", obsolete_pf):
-			doc = frappe.get_doc({
-				"doctype": "Print Format",
-				"name": obsolete_pf,
-				"doc_type": "Delivery Note",
-				"format_data": "{}",
-				"standard": "No"
-			}).insert(ignore_permissions=True)
+			# [Ruff F841 Fix] Removed unused 'doc =' assignment because we only need to insert the record
+			frappe.get_doc(
+				{
+					"doctype": "Print Format",
+					"name": obsolete_pf,
+					"doc_type": "Delivery Note",
+					"format_data": "{}",
+					"standard": "No",
+				}
+			).insert(ignore_permissions=True)
 			frappe.db.commit()
 
 		self.assertTrue(frappe.db.exists("Print Format", obsolete_pf))
@@ -88,7 +118,7 @@ class TestSetupPermissions(FrappeTestCase):
 		# Assert obsolete print format is deleted
 		self.assertFalse(
 			frappe.db.exists("Print Format", obsolete_pf),
-			f"Obsolete print format '{obsolete_pf}' was not deleted by after_migrate."
+			f"Obsolete print format '{obsolete_pf}' was not deleted by after_migrate.",
 		)
 
 	def test_04_core_customizations_print_formats_synced(self):
@@ -107,6 +137,5 @@ class TestSetupPermissions(FrappeTestCase):
 		]
 		for pf in expected_formats:
 			self.assertTrue(
-				frappe.db.exists("Print Format", pf),
-				f"Print Format '{pf}' is missing after sync."
+				frappe.db.exists("Print Format", pf), f"Print Format '{pf}' is missing after sync."
 			)

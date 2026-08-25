@@ -3,8 +3,9 @@
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from core_customizations.utils import format_qty, get_code128_svg
+
 from core_customizations.tests.test_fixtures import ensure_test_fixtures
+from core_customizations.utils import format_qty, get_code128_svg
 
 
 class TestGSTInvoicePrintFormats(IntegrationTestCase):
@@ -35,12 +36,14 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		# Create a test transporter supplier if not present
 		cls.transporter_name = "_Test GST Transporter"
 		if not frappe.db.exists("Supplier", cls.transporter_name):
-			cls.supplier_doc = frappe.get_doc({
-				"doctype": "Supplier",
-				"supplier_name": cls.transporter_name,
-				"supplier_group": "Services",
-				"is_transporter": 1,
-			}).insert(ignore_permissions=True)
+			cls.supplier_doc = frappe.get_doc(
+				{
+					"doctype": "Supplier",
+					"supplier_name": cls.transporter_name,
+					"supplier_group": "Services",
+					"is_transporter": 1,
+				}
+			).insert(ignore_permissions=True)
 		else:
 			cls.supplier_doc = frappe.get_doc("Supplier", cls.transporter_name)
 			if not cls.supplier_doc.is_transporter:
@@ -79,28 +82,37 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		if addr_name and frappe.db.get_value("Address", addr_name, "address_title") == title:
 			return addr_name
 
-		addr = frappe.get_doc({
-			"doctype": "Address",
-			"address_title": title,
-			"address_type": "Billing",
-			"address_line1": line1,
-			"city": city,
-			"state": state,
-			"pincode": pincode,
-			"country": "India",
-			"links": [{"link_doctype": "Supplier", "link_name": supplier_name}],
-		}).insert(ignore_permissions=True)
+		addr = frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": title,
+				"address_type": "Billing",
+				"address_line1": line1,
+				"city": city,
+				"state": state,
+				"pincode": pincode,
+				"country": "India",
+				"links": [{"link_doctype": "Supplier", "link_name": supplier_name}],
+			}
+		).insert(ignore_permissions=True)
 		return addr.name
 
-	def _get_test_invoice(self, is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=0):
-		invoices = frappe.get_all("Sales Invoice", filters={"docstatus": 1, "is_pos": 0}, order_by="creation desc", limit=1)
+	def _get_test_invoice(
+		self, is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=0
+	):
+		invoices = frappe.get_all(
+			"Sales Invoice", filters={"docstatus": 1, "is_pos": 0}, order_by="creation desc", limit=1
+		)
 		if not invoices:
-			invoices = frappe.get_all("Sales Invoice", filters={"docstatus": ["!=", 2], "is_pos": 0}, order_by="creation desc", limit=1)
+			invoices = frappe.get_all(
+				"Sales Invoice",
+				filters={"docstatus": ["!=", 2], "is_pos": 0},
+				order_by="creation desc",
+				limit=1,
+			)
 		if not invoices:
 			self.skipTest("No Sales Invoice available for testing GST Invoice prints")
 		inv = frappe.get_doc("Sales Invoice", invoices[0].name)
-
-
 
 		if with_transporter:
 			update_values = {
@@ -129,13 +141,10 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 				"discount_amount": discount_amount,
 			}
 
-
 		inv.db_set(update_values)
 		frappe.db.commit()
 		inv.reload()
 		return inv
-
-
 
 	def test_01_all_gst_print_formats_exist(self):
 		"""Verify all 3 GST Print Formats exist with custom_format=1 and Jinja type."""
@@ -158,7 +167,9 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		for pf_name, badge in expected_badges.items():
 			pf = frappe.get_doc("Print Format", pf_name)
 			html_content = pf.html or ""
-			self.assertIn(badge, html_content, f"Expected badge '{badge}' missing in Print Format '{pf_name}'")
+			self.assertIn(
+				badge, html_content, f"Expected badge '{badge}' missing in Print Format '{pf_name}'"
+			)
 			self.assertIn("TAX INVOICE", html_content.upper())
 			self.assertIn("GSTIN:", html_content)
 			self.assertIn("Place of Supply:", html_content)
@@ -188,7 +199,9 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 
 		for pf_name in self.print_formats:
 			html = frappe.get_print("Sales Invoice", inv.name, print_format=pf_name)
-			self.assertIn("Shipping & Logistics Details", html, f"Dedicated Shipping details missing in '{pf_name}'")
+			self.assertIn(
+				"Shipping & Logistics Details", html, f"Dedicated Shipping details missing in '{pf_name}'"
+			)
 			self.assertIn(self.transporter_name, html, f"Transporter name missing in '{pf_name}'")
 			self.assertIn("100 Transporter Origin Hub Street", html, f"Origin Hub missing in '{pf_name}'")
 			self.assertIn("200 Destination Godown Road", html, f"Destination Godown missing in '{pf_name}'")
@@ -222,7 +235,9 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 
 	def test_09_discount_on_grand_total_rendering(self):
 		"""Verify Additional Discount is rendered after Taxes when applied on Grand Total."""
-		inv = self._get_test_invoice(is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=68.0)
+		inv = self._get_test_invoice(
+			is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=68.0
+		)
 		html = frappe.get_print("Sales Invoice", inv.name, print_format="GST Invoice - Original for Receiver")
 
 		self.assertIn("Additional Discount:", html)
@@ -232,20 +247,25 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		"""Verify POS Flow indicator renders 'Over-the-Counter / Point of Sale (POS)' on GST Invoice when is_pos=1."""
 		invoices = frappe.get_all("Sales Invoice", filters={"docstatus": ["!=", 2]}, limit=1)
 		inv = frappe.get_doc("Sales Invoice", invoices[0].name)
-		inv.db_set({
-			"is_pos": 1,
-			"pos_profile": "_Test POS Profile",
-			"transporter": None,
-			"custom_transporter": None,
-			"custom_transporter_from_address": None,
-			"custom_transporter_from_address_display": None,
-		})
+		inv.db_set(
+			{
+				"is_pos": 1,
+				"pos_profile": "_Test POS Profile",
+				"transporter": None,
+				"custom_transporter": None,
+				"custom_transporter_from_address": None,
+				"custom_transporter_from_address_display": None,
+			}
+		)
 		frappe.db.commit()
 		inv.reload()
 
 		for pf_name in self.print_formats:
 			html = frappe.get_print("Sales Invoice", inv.name, print_format=pf_name)
 			self.assertIn("Point of Sale (POS)", html, f"POS indicator missing in '{pf_name}'")
-			self.assertIn("Over-the-Counter / Point of Sale (POS)", html, f"Over-the-Counter mode missing in '{pf_name}'")
+			self.assertIn(
+				"Over-the-Counter / Point of Sale (POS)",
+				html,
+				f"Over-the-Counter mode missing in '{pf_name}'",
+			)
 			self.assertIn("_Test POS Profile", html, f"POS Profile name missing in '{pf_name}'")
-

@@ -38,7 +38,9 @@ def execute():
 	# Clean up Social Login Key custom field and client script
 	if frappe.db.exists("Custom Field", "Social Login Key-custom_default_login"):
 		try:
-			frappe.delete_doc("Custom Field", "Social Login Key-custom_default_login", force=1, ignore_permissions=True)
+			frappe.delete_doc(
+				"Custom Field", "Social Login Key-custom_default_login", force=1, ignore_permissions=True
+			)
 		except Exception:
 			pass
 

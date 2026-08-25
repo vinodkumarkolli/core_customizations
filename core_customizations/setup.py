@@ -18,13 +18,13 @@ def after_migrate():
 			{"parent": "Project", "read": 1, "write": 0, "create": 0, "delete": 0},
 			{"parent": "Mode of Payment", "read": 1, "write": 0, "create": 0, "delete": 0},
 			{"parent": "Employee", "read": 1, "write": 0, "permlevel": 1},
-			{"parent": "Supplier", "read": 1, "write": 0, "create": 0, "delete": 0,"permlevel": 0},
-			{"parent":"Item Price","read": 1, "write": 0, "create": 0, "delete": 0},
-			{"parent":"Item Tax Template","read": 1, "write": 0, "create": 0, "delete": 0}
+			{"parent": "Supplier", "read": 1, "write": 0, "create": 0, "delete": 0, "permlevel": 0},
+			{"parent": "Item Price", "read": 1, "write": 0, "create": 0, "delete": 0},
+			{"parent": "Item Tax Template", "read": 1, "write": 0, "create": 0, "delete": 0},
 		],
 		"System Manager": [
 			{"parent": "Employee", "read": 1, "write": 1, "permlevel": 1},
-		]
+		],
 	}
 
 	for role_name, permissions in roles_permissions.items():
@@ -42,7 +42,15 @@ def after_migrate():
 			# So we must ensure all standard permissions are migrated to Custom DocPerms.
 			standard_perms = frappe.get_all("DocPerm", filters={"parent": doctype}, fields="*")
 			for perm in standard_perms:
-				if not frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": perm.role, "permlevel": perm.permlevel, "if_owner": perm.if_owner}):
+				if not frappe.db.exists(
+					"Custom DocPerm",
+					{
+						"parent": doctype,
+						"role": perm.role,
+						"permlevel": perm.permlevel,
+						"if_owner": perm.if_owner,
+					},
+				):
 					d = frappe.new_doc("Custom DocPerm")
 					perm.pop("name", None)
 					perm.pop("creation", None)
@@ -56,7 +64,9 @@ def after_migrate():
 			try:
 				# Check if permission already exists for this role
 				permlevel = p.get("permlevel", 0)
-				doc_name = frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": role_name, "permlevel": permlevel})
+				doc_name = frappe.db.exists(
+					"Custom DocPerm", {"parent": doctype, "role": role_name, "permlevel": permlevel}
+				)
 				if doc_name:
 					d = frappe.get_doc("Custom DocPerm", doc_name)
 				else:

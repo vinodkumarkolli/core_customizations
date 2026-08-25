@@ -2,24 +2,25 @@
 # For license information, please see license.txt
 
 import json
+
 import frappe
-from frappe.utils import nowdate, nowtime
 from frappe.tests import IntegrationTestCase
-from core_customizations.tests.test_fixtures import ensure_test_fixtures
+from frappe.utils import nowdate, nowtime
 
 from core_customizations.core_customizations.delivery_note import (
-	update_transporter_details,
-	update_lr_details,
-	get_lr_dialog_info,
-	get_unpacked_items_summary,
-	generate_packing_slips,
-	get_packing_slips_list,
-	delete_packing_slips,
-	submit_packing_slips,
-	get_bulk_packing_labels_html,
 	_get_formatted_address,
+	delete_packing_slips,
+	generate_packing_slips,
+	get_bulk_packing_labels_html,
+	get_lr_dialog_info,
+	get_packing_slips_list,
+	get_unpacked_items_summary,
+	submit_packing_slips,
+	update_lr_details,
+	update_transporter_details,
 )
 from core_customizations.core_customizations.sales_invoice import validate_delivery_note_mandatory
+from core_customizations.tests.test_fixtures import ensure_test_fixtures
 
 
 class TestDeliveryNoteWorkflow(IntegrationTestCase):
@@ -39,25 +40,29 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		# 1. Create a Test Customer with default transporter settings
 		cls.customer_name = "_Test 3PL Customer"
 		if not frappe.db.exists("Customer", cls.customer_name):
-			cust = frappe.get_doc({
-				"doctype": "Customer",
-				"customer_name": cls.customer_name,
-				"customer_group": "Commercial",
-				"territory": "All Territories",
-				"default_price_list": "Standard Selling",
-			}).insert(ignore_permissions=True)
+			cust = frappe.get_doc(
+				{
+					"doctype": "Customer",
+					"customer_name": cls.customer_name,
+					"customer_group": "Commercial",
+					"territory": "All Territories",
+					"default_price_list": "Standard Selling",
+				}
+			).insert(ignore_permissions=True)
 		else:
 			cust = frappe.get_doc("Customer", cls.customer_name)
 
 		# 2. Create Transporter Supplier
 		cls.transporter_name = "_Test 3PL Transporter"
 		if not frappe.db.exists("Supplier", cls.transporter_name):
-			supp = frappe.get_doc({
-				"doctype": "Supplier",
-				"supplier_name": cls.transporter_name,
-				"supplier_group": "Services",
-				"is_transporter": 1,
-			}).insert(ignore_permissions=True)
+			supp = frappe.get_doc(
+				{
+					"doctype": "Supplier",
+					"supplier_name": cls.transporter_name,
+					"supplier_group": "Services",
+					"is_transporter": 1,
+				}
+			).insert(ignore_permissions=True)
 		else:
 			supp = frappe.get_doc("Supplier", cls.transporter_name)
 			if not supp.is_transporter:
@@ -94,27 +99,31 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		# 4. Create Test Items
 		cls.item_code = "_Test_3PL_Carton_Item"
 		if not frappe.db.exists("Item", cls.item_code):
-			frappe.get_doc({
-				"doctype": "Item",
-				"item_code": cls.item_code,
-				"item_name": "Test 3PL Carton Item",
-				"item_group": "Products",
-				"stock_uom": "Nos",
-				"is_stock_item": 0,
-				"gst_hsn_code": "30049011",
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "Item",
+					"item_code": cls.item_code,
+					"item_name": "Test 3PL Carton Item",
+					"item_group": "Products",
+					"stock_uom": "Nos",
+					"is_stock_item": 0,
+					"gst_hsn_code": "30049011",
+				}
+			).insert(ignore_permissions=True)
 
 		cls.item_code_2 = "_Test_3PL_Loose_Item"
 		if not frappe.db.exists("Item", cls.item_code_2):
-			frappe.get_doc({
-				"doctype": "Item",
-				"item_code": cls.item_code_2,
-				"item_name": "Test 3PL Loose Item",
-				"item_group": "Products",
-				"stock_uom": "Nos",
-				"is_stock_item": 0,
-				"gst_hsn_code": "30049011",
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "Item",
+					"item_code": cls.item_code_2,
+					"item_name": "Test 3PL Loose Item",
+					"item_group": "Products",
+					"stock_uom": "Nos",
+					"is_stock_item": 0,
+					"gst_hsn_code": "30049011",
+				}
+			).insert(ignore_permissions=True)
 
 		frappe.db.commit()
 
@@ -130,39 +139,43 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 				frappe.db.set_value("Address", addr_name, "gstin", gstin)
 			return addr_name
 
-		addr = frappe.get_doc({
-			"doctype": "Address",
-			"address_title": title,
-			"address_type": "Billing",
-			"address_line1": line1,
-			"city": city,
-			"state": state,
-			"pincode": pincode,
-			"country": "India",
-			"gstin": gstin,
-			"links": [{"link_doctype": "Supplier", "link_name": supplier_name}],
-		}).insert(ignore_permissions=True)
+		addr = frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": title,
+				"address_type": "Billing",
+				"address_line1": line1,
+				"city": city,
+				"state": state,
+				"pincode": pincode,
+				"country": "India",
+				"gstin": gstin,
+				"links": [{"link_doctype": "Supplier", "link_name": supplier_name}],
+			}
+		).insert(ignore_permissions=True)
 		return addr.name
 
 	def _create_test_delivery_note(self):
 		company = "Sravi Enterprises - Kolapakkam"
-		dn = frappe.get_doc({
-			"doctype": "Delivery Note",
-			"customer": self.customer_name,
-			"company": company,
-			"items": [
-				{
-					"item_code": self.item_code,
-					"qty": 500,
-					"uom": "Nos",
-				},
-				{
-					"item_code": self.item_code_2,
-					"qty": 100,
-					"uom": "Nos",
-				}
-			]
-		}).insert(ignore_permissions=True)
+		dn = frappe.get_doc(
+			{
+				"doctype": "Delivery Note",
+				"customer": self.customer_name,
+				"company": company,
+				"items": [
+					{
+						"item_code": self.item_code,
+						"qty": 500,
+						"uom": "Nos",
+					},
+					{
+						"item_code": self.item_code_2,
+						"qty": 100,
+						"uom": "Nos",
+					},
+				],
+			}
+		).insert(ignore_permissions=True)
 		return dn
 
 	def test_01_update_transporter_details_godown_enabled(self):
@@ -238,23 +251,25 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		self.assertFalse(info_before["has_sales_invoice"])
 
 		# 2. Create linked Sales Invoice
-		si = frappe.get_doc({
-			"doctype": "Sales Invoice",
-			"company": dn.company,
-			"customer": self.customer_name,
-			"update_stock": 0,
-			"items": [{
-				"item_code": self.item_code,
-				"qty": 500,
-				"rate": 100,
-				"delivery_note": dn.name,
-				"dn_detail": dn.items[0].name,
-				"cost_center": "Main - SE-K",
-			}]
-		})
+		si = frappe.get_doc(
+			{
+				"doctype": "Sales Invoice",
+				"company": dn.company,
+				"customer": self.customer_name,
+				"update_stock": 0,
+				"items": [
+					{
+						"item_code": self.item_code,
+						"qty": 500,
+						"rate": 100,
+						"delivery_note": dn.name,
+						"dn_detail": dn.items[0].name,
+					}
+				],
+			}
+		)
 		si.flags.ignore_mandatory = True
 		si.insert(ignore_permissions=True)
-
 
 		# 3. After Sales Invoice: get_lr_dialog_info indicates has_sales_invoice = True and threshold checked
 		info_after = get_lr_dialog_info(dn.name)
@@ -293,7 +308,6 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		self.assertEqual(si.mode_of_transport, "Road")
 		self.assertEqual(si.gst_vehicle_type, "Regular")
 		self.assertEqual(si.custom_lr_receipt_image, "/files/sample_lr_slip.png")
-
 
 	def test_05_packing_slip_generator_single_and_mixed(self):
 		"""Verify generating sequential packing slips with valid dn_detail references."""
@@ -389,7 +403,9 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		ps_name = gen_res["created_packing_slips"][0]
 
 		# 1. Test single print format
-		html = frappe.get_print("Packing Slip", ps_name, print_format="Carton Shipping Label (4x6)", no_letterhead=1)
+		html = frappe.get_print(
+			"Packing Slip", ps_name, print_format="Carton Shipping Label (4x6)", no_letterhead=1
+		)
 		self.assertIn(ps_name, html)
 		self.assertIn(dn.name, html)
 		self.assertIn("BOX NUMBER / TOTAL", html)
@@ -415,12 +431,15 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		direct_inv = frappe.new_doc("Sales Invoice")
 		direct_inv.customer = self.customer_name
 		direct_inv.company = company
-		direct_inv.append("items", {
-			"item_code": self.item_code,
-			"qty": 10,
-			"rate": 100,
-			"delivery_note": None,
-		})
+		direct_inv.append(
+			"items",
+			{
+				"item_code": self.item_code,
+				"qty": 10,
+				"rate": 100,
+				"delivery_note": None,
+			},
+		)
 
 		self.assertRaises(frappe.ValidationError, validate_delivery_note_mandatory, direct_inv)
 
@@ -429,12 +448,15 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		valid_inv = frappe.new_doc("Sales Invoice")
 		valid_inv.customer = self.customer_name
 		valid_inv.company = company
-		valid_inv.append("items", {
-			"item_code": self.item_code,
-			"qty": 10,
-			"rate": 100,
-			"delivery_note": dn.name,
-		})
+		valid_inv.append(
+			"items",
+			{
+				"item_code": self.item_code,
+				"qty": 10,
+				"rate": 100,
+				"delivery_note": dn.name,
+			},
+		)
 
 		# Should not raise exception
 		validate_delivery_note_mandatory(valid_inv)
@@ -500,7 +522,6 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		self.assertNotIn("<br>", dn.custom_transporter_from_address_display)
 		self.assertNotIn("<br>", dn.custom_transporter_to_address_display)
 
-
 	def test_12_delivery_note_submission_auto_submits_draft_packing_slips(self):
 		"""Verify submitting Delivery Note automatically submits all linked Draft Packing Slips."""
 		dn = self._create_test_delivery_note()
@@ -560,12 +581,15 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		inv.customer = self.customer_name
 		inv.company = company
 		inv.update_stock = 1
-		inv.append("items", {
-			"item_code": self.item_code,
-			"qty": 10,
-			"rate": 100,
-			"delivery_note": dn.name,
-		})
+		inv.append(
+			"items",
+			{
+				"item_code": self.item_code,
+				"qty": 10,
+				"rate": 100,
+				"delivery_note": dn.name,
+			},
+		)
 
 		# Should raise validation error because update_stock cannot be 1 when linked to DN
 		self.assertRaises(frappe.ValidationError, validate_delivery_note_mandatory, inv)
@@ -574,7 +598,6 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		inv.update_stock = 0
 		validate_delivery_note_mandatory(inv)
 
-
 	def test_15_batch_allocation_on_delivery_note_via_monkey_patch(self):
 		"""Verify monkey patch custom_update_stock triggers batch allocation for Delivery Note."""
 		from core_customizations.monkey_patches import custom_update_stock
@@ -582,32 +605,38 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		# Create a batched item for testing if not present
 		batch_item_code = "_Test_3PL_Batched_Item"
 		if not frappe.db.exists("Item", batch_item_code):
-			frappe.get_doc({
-				"doctype": "Item",
-				"item_code": batch_item_code,
-				"item_name": "Test 3PL Batched Item",
-				"item_group": "Products",
-				"stock_uom": "Nos",
-				"is_stock_item": 1,
-				"has_batch_no": 1,
-				"create_new_batch": 1,
-				"gst_hsn_code": "30049011",
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "Item",
+					"item_code": batch_item_code,
+					"item_name": "Test 3PL Batched Item",
+					"item_group": "Products",
+					"stock_uom": "Nos",
+					"is_stock_item": 1,
+					"has_batch_no": 1,
+					"create_new_batch": 1,
+					"gst_hsn_code": "30049011",
+				}
+			).insert(ignore_permissions=True)
 
-		ctx = frappe._dict({
-			"doctype": "Delivery Note",
-			"item_code": batch_item_code,
-			"warehouse": "Stores - SE-K",
-			"child_docname": "dn_detail_1",
-		})
-		out = frappe._dict({
-			"warehouse": "Stores - SE-K",
-			"stock_qty": 5,
-			"uom": "Nos",
-			"item_code": batch_item_code,
-			"has_batch_no": 1,
-			"has_serial_no": 0,
-		})
+		ctx = frappe._dict(
+			{
+				"doctype": "Delivery Note",
+				"item_code": batch_item_code,
+				"warehouse": "Stores - SE-K",
+				"child_docname": "dn_detail_1",
+			}
+		)
+		out = frappe._dict(
+			{
+				"warehouse": "Stores - SE-K",
+				"stock_qty": 5,
+				"uom": "Nos",
+				"item_code": batch_item_code,
+				"has_batch_no": 1,
+				"has_serial_no": 0,
+			}
+		)
 
 		# Calling custom_update_stock should execute without error for Delivery Note
 		custom_update_stock(ctx, out)
@@ -618,20 +647,24 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		"""Verify monkey patch custom_update_stock skips Sales Invoice when update_stock is 0."""
 		from core_customizations.monkey_patches import custom_update_stock
 
-		ctx = frappe._dict({
-			"doctype": "Sales Invoice",
-			"update_stock": 0,
-			"item_code": self.item_code,
-			"warehouse": "Stores - SE-K",
-		})
-		out = frappe._dict({
-			"warehouse": "Stores - SE-K",
-			"stock_qty": 5,
-			"uom": "Nos",
-			"item_code": self.item_code,
-			"has_batch_no": 1,
-			"has_serial_no": 0,
-		})
+		ctx = frappe._dict(
+			{
+				"doctype": "Sales Invoice",
+				"update_stock": 0,
+				"item_code": self.item_code,
+				"warehouse": "Stores - SE-K",
+			}
+		)
+		out = frappe._dict(
+			{
+				"warehouse": "Stores - SE-K",
+				"stock_qty": 5,
+				"uom": "Nos",
+				"item_code": self.item_code,
+				"has_batch_no": 1,
+				"has_serial_no": 0,
+			}
+		)
 
 		# For Sales Invoice without update_stock, batch allocation in custom_update_stock is bypassed
 		custom_update_stock(ctx, out)
@@ -642,12 +675,14 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		# 1. Create an alternate transporter and hub
 		alt_transporter_name = "_Test Alternate Transporter"
 		if not frappe.db.exists("Supplier", alt_transporter_name):
-			frappe.get_doc({
-				"doctype": "Supplier",
-				"supplier_name": alt_transporter_name,
-				"supplier_group": "Services",
-				"is_transporter": 1,
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "Supplier",
+					"supplier_name": alt_transporter_name,
+					"supplier_group": "Services",
+					"is_transporter": 1,
+				}
+			).insert(ignore_permissions=True)
 
 		alt_hub_address = self._create_address(
 			"_Test Alt Koyambedu Hub",
@@ -662,22 +697,24 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		company = "Sravi Enterprises - Kolapakkam"
 
 		# 2. Create a Delivery Note explicitly with the alternate transporter & Door Delivery (is_godown = 0)
-		dn = frappe.get_doc({
-			"doctype": "Delivery Note",
-			"customer": self.customer_name,
-			"company": company,
-			"transporter": alt_transporter_name,
-			"custom_transporter_from_address": alt_hub_address,
-			"custom_is_godown_delivery": 0,
-			"custom_transporter_to_address": None,
-			"items": [
-				{
-					"item_code": self.item_code,
-					"qty": 100,
-					"uom": "Nos",
-				}
-			]
-		}).insert(ignore_permissions=True)
+		dn = frappe.get_doc(
+			{
+				"doctype": "Delivery Note",
+				"customer": self.customer_name,
+				"company": company,
+				"transporter": alt_transporter_name,
+				"custom_transporter_from_address": alt_hub_address,
+				"custom_is_godown_delivery": 0,
+				"custom_transporter_to_address": None,
+				"items": [
+					{
+						"item_code": self.item_code,
+						"qty": 100,
+						"uom": "Nos",
+					}
+				],
+			}
+		).insert(ignore_permissions=True)
 
 		dn.reload()
 
@@ -754,49 +791,53 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		company = "Sravi Enterprises - Kolapakkam"
 
 		# 1. Delivery Note with single warehouse succeeds
-		dn = frappe.get_doc({
-			"doctype": "Delivery Note",
-			"company": company,
-			"customer": self.customer_name,
-			"posting_date": nowdate(),
-			"posting_time": nowtime(),
-			"items": [
-				{
-					"item_code": self.item_code,
-					"qty": 50,
-					"warehouse": "Stores - SE-K",
-				},
-				{
-					"item_code": self.item_code_2,
-					"qty": 30,
-					"warehouse": "Stores - SE-K",
-				}
-			]
-		})
+		dn = frappe.get_doc(
+			{
+				"doctype": "Delivery Note",
+				"company": company,
+				"customer": self.customer_name,
+				"posting_date": nowdate(),
+				"posting_time": nowtime(),
+				"items": [
+					{
+						"item_code": self.item_code,
+						"qty": 50,
+						"warehouse": "Stores - SE-K",
+					},
+					{
+						"item_code": self.item_code_2,
+						"qty": 30,
+						"warehouse": "Stores - SE-K",
+					},
+				],
+			}
+		)
 		dn.flags.ignore_mandatory = True
 		dn.insert(ignore_permissions=True)
 		self.assertTrue(dn.name)
 
 		# 2. Delivery Note with multiple distinct warehouses throws ValidationError
-		dn_multi_wh = frappe.get_doc({
-			"doctype": "Delivery Note",
-			"company": company,
-			"customer": self.customer_name,
-			"posting_date": nowdate(),
-			"posting_time": nowtime(),
-			"items": [
-				{
-					"item_code": self.item_code,
-					"qty": 50,
-					"warehouse": "Stores - SE-K",
-				},
-				{
-					"item_code": self.item_code_2,
-					"qty": 30,
-					"warehouse": "Coimbatore Goodown - SE-K",
-				}
-			]
-		})
+		dn_multi_wh = frappe.get_doc(
+			{
+				"doctype": "Delivery Note",
+				"company": company,
+				"customer": self.customer_name,
+				"posting_date": nowdate(),
+				"posting_time": nowtime(),
+				"items": [
+					{
+						"item_code": self.item_code,
+						"qty": 50,
+						"warehouse": "Stores - SE-K",
+					},
+					{
+						"item_code": self.item_code_2,
+						"qty": 30,
+						"warehouse": "Coimbatore Goodown - SE-K",
+					},
+				],
+			}
+		)
 		dn_multi_wh.flags.ignore_mandatory = True
 		with self.assertRaises(frappe.ValidationError) as ctx:
 			dn_multi_wh.insert(ignore_permissions=True)
@@ -811,50 +852,55 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		cg = frappe.get_all("Customer Group", filters={"is_group": 0}, limit=1)[0].name
 		territory = frappe.get_all("Territory", filters={"is_group": 0}, limit=1)[0].name
 		if not frappe.db.exists("Customer", cust_name):
-			cust = frappe.get_doc({
-				"doctype": "Customer",
-				"customer_name": cust_name,
-				"customer_group": cg,
-				"territory": territory,
-				"default_price_list": "Standard Selling",
-			}).insert(ignore_permissions=True)
+			cust = frappe.get_doc(
+				{
+					"doctype": "Customer",
+					"customer_name": cust_name,
+					"customer_group": cg,
+					"territory": territory,
+					"default_price_list": "Standard Selling",
+				}
+			).insert(ignore_permissions=True)
 		else:
 			cust = frappe.get_doc("Customer", cust_name)
-
-
 
 		# Create contact
 		contact_name = "_Test AutoPop Contact"
 		if not frappe.db.exists("Contact", contact_name):
-			contact = frappe.get_doc({
-				"doctype": "Contact",
-				"first_name": "_Test AutoPop",
-				"last_name": "Contact",
-				"phone_nos": [{"phone": "9876543210", "is_primary_mobile_no": 1}],
-				"email_ids": [{"email_id": "test.autopop@example.com", "is_primary": 1}],
-				"is_primary_contact": 1,
-				"links": [{"link_doctype": "Customer", "link_name": cust.name}],
-			}).insert(ignore_permissions=True)
+			contact = frappe.get_doc(
+				{
+					"doctype": "Contact",
+					"first_name": "_Test AutoPop",
+					"last_name": "Contact",
+					"phone_nos": [{"phone": "9876543210", "is_primary_mobile_no": 1}],
+					"email_ids": [{"email_id": "test.autopop@example.com", "is_primary": 1}],
+					"is_primary_contact": 1,
+					"links": [{"link_doctype": "Customer", "link_name": cust.name}],
+				}
+			).insert(ignore_permissions=True)
 		else:
 			contact = frappe.get_doc("Contact", contact_name)
-
 
 		cust.customer_primary_contact = contact.name
 		cust.save(ignore_permissions=True)
 
 		# 2. Create Delivery Note without explicitly passing shipping_contact_person
-		dn = frappe.get_doc({
-			"doctype": "Delivery Note",
-			"company": company,
-			"customer": cust.name,
-			"posting_date": nowdate(),
-			"posting_time": nowtime(),
-			"items": [{
-				"item_code": self.item_code,
-				"qty": 10,
-				"warehouse": "Stores - SE-K",
-			}]
-		})
+		dn = frappe.get_doc(
+			{
+				"doctype": "Delivery Note",
+				"company": company,
+				"customer": cust.name,
+				"posting_date": nowdate(),
+				"posting_time": nowtime(),
+				"items": [
+					{
+						"item_code": self.item_code,
+						"qty": 10,
+						"warehouse": "Stores - SE-K",
+					}
+				],
+			}
+		)
 		dn.flags.ignore_mandatory = True
 		dn.insert(ignore_permissions=True)
 
@@ -882,12 +928,12 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 
 		# Attempt to delete all of them
 		del_res = delete_packing_slips(dn.name)
-		
+
 		# Should delete 2 and fail 1 (the submitted one)
 		self.assertEqual(del_res["deleted_count"], 2)
 		self.assertTrue(del_res["partial"])
 		self.assertEqual(del_res["remaining_count"], 1)
-		
+
 		# Verify only the submitted one remains
 		remaining = frappe.get_all("Packing Slip", filters={"delivery_note": dn.name})
 		self.assertEqual(len(remaining), 1)
@@ -896,6 +942,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 	def test_22_cancel_packing_slips(self):
 		"""Verify cancellation of submitted packing slips."""
 		from core_customizations.core_customizations.delivery_note import cancel_packing_slips
+
 		dn = self._create_test_delivery_note()
 
 		gen_res = generate_packing_slips(
@@ -909,7 +956,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 
 		# Submit both
 		submit_packing_slips(dn.name, packing_slip_names=json.dumps(ps_names))
-		
+
 		# Cancel them
 		cancel_res = cancel_packing_slips(dn.name, packing_slip_names=json.dumps(ps_names))
 		self.assertEqual(cancel_res["cancelled_count"], 2)
@@ -917,14 +964,3 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 		# Verify they are now cancelled (docstatus 2)
 		for ps_name in ps_names:
 			self.assertEqual(frappe.db.get_value("Packing Slip", ps_name, "docstatus"), 2)
-
-
-
-
-
-
-
-
-
-
-

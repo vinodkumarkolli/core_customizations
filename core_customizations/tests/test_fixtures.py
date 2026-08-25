@@ -20,212 +20,202 @@ import frappe
 
 
 def ensure_test_fixtures():
-    """
-    Idempotently create the minimum ERPNext master data required for CI tests.
+	"""
+	Idempotently create the minimum ERPNext master data required for CI tests.
 
-    This function is safe to call multiple times — it checks for existence before
-    inserting. It creates:
-    - UOM: Nos
-    - Item Group: Products
-    - Customer Group: Commercial
-    - Territory: All Territories and India
-    - Price List: Standard Selling
-    - Supplier Group: Local, Services
-    - Warehouse: Stores (for the default company)
-    """
-    # --- Units of Measure ---
-    for uom in ["Nos", "Kg", "Litre"]:
-        if not frappe.db.exists("UOM", uom):
-            frappe.get_doc({"doctype": "UOM", "uom_name": uom}).insert(ignore_permissions=True)
+	This function is safe to call multiple times — it checks for existence before
+	inserting. It creates:
+	- UOM: Nos
+	- Item Group: Products
+	- Customer Group: Commercial
+	- Territory: All Territories and India
+	- Price List: Standard Selling
+	- Supplier Group: Local, Services
+	- Warehouse: Stores (for the default company)
+	"""
+	# --- Units of Measure ---
+	for uom in ["Nos", "Kg", "Litre"]:
+		if not frappe.db.exists("UOM", uom):
+			frappe.get_doc({"doctype": "UOM", "uom_name": uom}).insert(ignore_permissions=True)
 
-    # --- Item Groups ---
-    # The root "All Item Groups" must exist before creating children
-    if not frappe.db.exists("Item Group", "All Item Groups"):
-        frappe.get_doc({
-            "doctype": "Item Group",
-            "item_group_name": "All Item Groups",
-            "is_group": 1
-        }).insert(ignore_permissions=True)
+	# --- Item Groups ---
+	# The root "All Item Groups" must exist before creating children
+	if not frappe.db.exists("Item Group", "All Item Groups"):
+		frappe.get_doc({"doctype": "Item Group", "item_group_name": "All Item Groups", "is_group": 1}).insert(
+			ignore_permissions=True
+		)
 
-    if not frappe.db.exists("Item Group", "Products"):
-        frappe.get_doc({
-            "doctype": "Item Group",
-            "item_group_name": "Products",
-            "parent_item_group": "All Item Groups"
-        }).insert(ignore_permissions=True)
+	if not frappe.db.exists("Item Group", "Products"):
+		frappe.get_doc(
+			{"doctype": "Item Group", "item_group_name": "Products", "parent_item_group": "All Item Groups"}
+		).insert(ignore_permissions=True)
 
-    # --- Customer Groups ---
-    if not frappe.db.exists("Customer Group", "All Customer Groups"):
-        frappe.get_doc({
-            "doctype": "Customer Group",
-            "customer_group_name": "All Customer Groups",
-            "is_group": 1
-        }).insert(ignore_permissions=True)
+	# --- Customer Groups ---
+	if not frappe.db.exists("Customer Group", "All Customer Groups"):
+		frappe.get_doc(
+			{"doctype": "Customer Group", "customer_group_name": "All Customer Groups", "is_group": 1}
+		).insert(ignore_permissions=True)
 
-    if not frappe.db.exists("Customer Group", "Commercial"):
-        frappe.get_doc({
-            "doctype": "Customer Group",
-            "customer_group_name": "Commercial",
-            "parent_customer_group": "All Customer Groups"
-        }).insert(ignore_permissions=True)
+	if not frappe.db.exists("Customer Group", "Commercial"):
+		frappe.get_doc(
+			{
+				"doctype": "Customer Group",
+				"customer_group_name": "Commercial",
+				"parent_customer_group": "All Customer Groups",
+			}
+		).insert(ignore_permissions=True)
 
-    # --- Territories ---
-    if not frappe.db.exists("Territory", "All Territories"):
-        frappe.get_doc({
-            "doctype": "Territory",
-            "territory_name": "All Territories",
-            "is_group": 1
-        }).insert(ignore_permissions=True)
+	# --- Territories ---
+	if not frappe.db.exists("Territory", "All Territories"):
+		frappe.get_doc({"doctype": "Territory", "territory_name": "All Territories", "is_group": 1}).insert(
+			ignore_permissions=True
+		)
 
-    if not frappe.db.exists("Territory", "India"):
-        frappe.get_doc({
-            "doctype": "Territory",
-            "territory_name": "India",
-            "parent_territory": "All Territories"
-        }).insert(ignore_permissions=True)
+	if not frappe.db.exists("Territory", "India"):
+		frappe.get_doc(
+			{"doctype": "Territory", "territory_name": "India", "parent_territory": "All Territories"}
+		).insert(ignore_permissions=True)
 
-    # --- Price Lists ---
-    if not frappe.db.exists("Price List", "Standard Selling"):
-        frappe.get_doc({
-            "doctype": "Price List",
-            "price_list_name": "Standard Selling",
-            "selling": 1,
-            "currency": "INR"
-        }).insert(ignore_permissions=True)
+	# --- Price Lists ---
+	if not frappe.db.exists("Price List", "Standard Selling"):
+		frappe.get_doc(
+			{"doctype": "Price List", "price_list_name": "Standard Selling", "selling": 1, "currency": "INR"}
+		).insert(ignore_permissions=True)
 
-    if not frappe.db.exists("Price List", "Standard Buying"):
-        frappe.get_doc({
-            "doctype": "Price List",
-            "price_list_name": "Standard Buying",
-            "buying": 1,
-            "currency": "INR"
-        }).insert(ignore_permissions=True)
+	if not frappe.db.exists("Price List", "Standard Buying"):
+		frappe.get_doc(
+			{"doctype": "Price List", "price_list_name": "Standard Buying", "buying": 1, "currency": "INR"}
+		).insert(ignore_permissions=True)
 
-    # --- Supplier Groups ---
-    if not frappe.db.exists("Supplier Group", "All Supplier Groups"):
-        frappe.get_doc({
-            "doctype": "Supplier Group",
-            "supplier_group_name": "All Supplier Groups",
-            "is_group": 1
-        }).insert(ignore_permissions=True)
+	# --- Supplier Groups ---
+	if not frappe.db.exists("Supplier Group", "All Supplier Groups"):
+		frappe.get_doc(
+			{"doctype": "Supplier Group", "supplier_group_name": "All Supplier Groups", "is_group": 1}
+		).insert(ignore_permissions=True)
 
-    for sg in ["Local", "Services"]:
-        if not frappe.db.exists("Supplier Group", sg):
-            frappe.get_doc({
-                "doctype": "Supplier Group",
-                "supplier_group_name": sg,
-                "parent_supplier_group": "All Supplier Groups"
-            }).insert(ignore_permissions=True)
+	for sg in ["Local", "Services"]:
+		if not frappe.db.exists("Supplier Group", sg):
+			frappe.get_doc(
+				{
+					"doctype": "Supplier Group",
+					"supplier_group_name": sg,
+					"parent_supplier_group": "All Supplier Groups",
+				}
+			).insert(ignore_permissions=True)
 
-    # --- Company & Default Accounts ---
-    if not frappe.db.exists("Role", "Employee Self Service"):
-        frappe.get_doc({
-            "doctype": "Role",
-            "role_name": "Employee Self Service"
-        }).insert(ignore_permissions=True)
-        
-    # --- Pre-requisites for Company and Customer ---
-    if not frappe.db.exists("Warehouse Type", "Transit"):
-        frappe.get_doc({
-            "doctype": "Warehouse Type",
-            "name": "Transit",
-            "warehouse_type_name": "Transit"
-        }).insert(ignore_permissions=True)
-        
-    if not frappe.db.exists("Territory", "Direct Customers"):
-        # Territories usually have a tree structure. Use "All Territories" as parent if needed,
-        # but for tests, just inserting it should be fine.
-        parent = frappe.db.get_value("Territory", {"is_group": 1}, "name")
-        frappe.get_doc({
-            "doctype": "Territory",
-            "name": "Direct Customers",
-            "territory_name": "Direct Customers",
-            "parent_territory": parent or "All Territories"
-        }).insert(ignore_permissions=True)
+	# --- Company & Default Accounts ---
+	if not frappe.db.exists("Role", "Employee Self Service"):
+		frappe.get_doc({"doctype": "Role", "role_name": "Employee Self Service"}).insert(
+			ignore_permissions=True
+		)
 
-    if not frappe.db.exists("Company", "Sravi Enterprises - Kolapakkam"):
-        frappe.get_doc({
-            "doctype": "Company",
-            "company_name": "Sravi Enterprises - Kolapakkam",
-            "default_currency": "INR",
-            "country": "India",
-            "abbr": "SE-K"
-        }).insert(ignore_permissions=True)
+	# --- Pre-requisites for Company and Customer ---
+	if not frappe.db.exists("Warehouse Type", "Transit"):
+		frappe.get_doc(
+			{"doctype": "Warehouse Type", "name": "Transit", "warehouse_type_name": "Transit"}
+		).insert(ignore_permissions=True)
 
-    # Proactively ensure all critical stock accounts are set on the company
-    # The Chart of Accounts might not configure these automatically in a blank test site.
-    company_name = "Sravi Enterprises - Kolapakkam"
-    company_doc = frappe.get_doc("Company", company_name)
-    stock_accounts_map = {
-        "stock_received_but_not_billed": "Stock Received But Not Billed",
-        "stock_adjustment_account": "Stock Adjustment",
-        "expenses_included_in_valuation": "Expenses Included In Valuation",
-        "default_inventory_account": "Stock In Hand",
-        "cost_of_goods_sold": "Cost of Goods Sold",
-    }
-    needs_save = False
-    for field, acc_name in stock_accounts_map.items():
-        if not company_doc.get(field):
-            # Find the account created by Chart of Accounts
-            acc = frappe.db.get_value("Account", {"account_name": acc_name, "company": company_name})
-            if acc:
-                company_doc.set(field, acc)
-                needs_save = True
-    if needs_save:
-        company_doc.save(ignore_permissions=True)
+	if not frappe.db.exists("Territory", "Direct Customers"):
+		# Territories usually have a tree structure. Use "All Territories" as parent if needed,
+		# but for tests, just inserting it should be fine.
+		parent = frappe.db.get_value("Territory", {"is_group": 1}, "name")
+		frappe.get_doc(
+			{
+				"doctype": "Territory",
+				"name": "Direct Customers",
+				"territory_name": "Direct Customers",
+				"parent_territory": parent or "All Territories",
+			}
+		).insert(ignore_permissions=True)
 
-    # --- Fiscal Year ---
-    # ERPNext Fiscal Years must be exactly one year long.
-    if not frappe.db.exists("Fiscal Year", "2026-2027"):
-        frappe.get_doc({
-            "doctype": "Fiscal Year",
-            "year": "2026-2027",
-            "year_start_date": "2026-04-01",
-            "year_end_date": "2027-03-31",
-            "disabled": 0,
-            "companies": [
-                {"company": "Sravi Enterprises - Kolapakkam"}
-            ]
-        }).insert(ignore_permissions=True)
-    
-    # Ensure cache is cleared so the new Fiscal Year is picked up globally
-    frappe.cache().delete_key("fiscal_years")
-    frappe.clear_cache()
-    
-    # Sometimes creating a company creates the default warehouse, sometimes it doesn't.
-    if not frappe.db.exists("Warehouse", "Stores - SE-K"):
-        frappe.get_doc({
-            "doctype": "Warehouse",
-            "warehouse_name": "Stores",
-            "company": "Sravi Enterprises - Kolapakkam",
-            "is_group": 0
-        }).insert(ignore_permissions=True)
-        
-    if not frappe.db.exists("Warehouse", "Coimbatore Goodown - SE-K"):
-        frappe.get_doc({
-            "doctype": "Warehouse",
-            "warehouse_name": "Coimbatore Goodown",
-            "company": "Sravi Enterprises - Kolapakkam",
-            "is_group": 0
-        }).insert(ignore_permissions=True)
+	if not frappe.db.exists("Company", "Sravi Enterprises - Kolapakkam"):
+		frappe.get_doc(
+			{
+				"doctype": "Company",
+				"company_name": "Sravi Enterprises - Kolapakkam",
+				"default_currency": "INR",
+				"country": "India",
+				"abbr": "SE-K",
+			}
+		).insert(ignore_permissions=True)
 
-    # --- Default Address Template ---
-    # Required for get_address_display() which is called on ExtendedAddress save hooks
-    if not frappe.db.exists("Address Template", {"is_default": 1}):
-        frappe.get_doc({
-            "doctype": "Address Template",
-            "country": "India",
-            "template": "{{ address_line1 }}<br>{{ city }}<br>{{ state }} - {{ pincode }}<br>{{ country }}",
-            "is_default": 1
-        }).insert(ignore_permissions=True)
+	# Proactively ensure all critical stock accounts are set on the company
+	# The Chart of Accounts might not configure these automatically in a blank test site.
+	company_name = "Sravi Enterprises - Kolapakkam"
+	company_doc = frappe.get_doc("Company", company_name)
+	stock_accounts_map = {
+		"stock_received_but_not_billed": "Stock Received But Not Billed",
+		"stock_adjustment_account": "Stock Adjustment",
+		"expenses_included_in_valuation": "Expenses Included In Valuation",
+		"default_inventory_account": "Stock In Hand",
+		"cost_of_goods_sold": "Cost of Goods Sold",
+	}
+	needs_save = False
+	for field, acc_name in stock_accounts_map.items():
+		if not company_doc.get(field):
+			# Find the account created by Chart of Accounts
+			acc = frappe.db.get_value("Account", {"account_name": acc_name, "company": company_name})
+			if acc:
+				company_doc.set(field, acc)
+				needs_save = True
+	if needs_save:
+		company_doc.save(ignore_permissions=True)
 
-    # --- Mode of Payment ---
-    if not frappe.db.exists("Mode of Payment", "Cash"):
-        frappe.get_doc({
-            "doctype": "Mode of Payment",
-            "mode_of_payment": "Cash",
-            "enabled": 1,
-            "type": "Cash"
-        }).insert(ignore_permissions=True)
+	# --- Fiscal Year ---
+	# ERPNext Fiscal Years must be exactly one year long.
+	if not frappe.db.exists("Fiscal Year", "2026-2027"):
+		frappe.get_doc(
+			{
+				"doctype": "Fiscal Year",
+				"year": "2026-2027",
+				"year_start_date": "2026-04-01",
+				"year_end_date": "2027-03-31",
+				"disabled": 0,
+				"companies": [{"company": "Sravi Enterprises - Kolapakkam"}],
+			}
+		).insert(ignore_permissions=True)
 
-    frappe.db.commit()
+	# Ensure cache is cleared so the new Fiscal Year is picked up globally
+	frappe.cache().delete_key("fiscal_years")
+	frappe.clear_cache()
+
+	# Sometimes creating a company creates the default warehouse, sometimes it doesn't.
+	if not frappe.db.exists("Warehouse", "Stores - SE-K"):
+		frappe.get_doc(
+			{
+				"doctype": "Warehouse",
+				"warehouse_name": "Stores",
+				"company": "Sravi Enterprises - Kolapakkam",
+				"is_group": 0,
+			}
+		).insert(ignore_permissions=True)
+
+	if not frappe.db.exists("Warehouse", "Coimbatore Goodown - SE-K"):
+		frappe.get_doc(
+			{
+				"doctype": "Warehouse",
+				"warehouse_name": "Coimbatore Goodown",
+				"company": "Sravi Enterprises - Kolapakkam",
+				"is_group": 0,
+			}
+		).insert(ignore_permissions=True)
+
+	# --- Default Address Template ---
+	# Required for get_address_display() which is called on ExtendedAddress save hooks
+	if not frappe.db.exists("Address Template", {"is_default": 1}):
+		frappe.get_doc(
+			{
+				"doctype": "Address Template",
+				"country": "India",
+				"template": "{{ address_line1 }}<br>{{ city }}<br>{{ state }} - {{ pincode }}<br>{{ country }}",
+				"is_default": 1,
+			}
+		).insert(ignore_permissions=True)
+
+	# --- Mode of Payment ---
+	if not frappe.db.exists("Mode of Payment", "Cash"):
+		frappe.get_doc(
+			{"doctype": "Mode of Payment", "mode_of_payment": "Cash", "enabled": 1, "type": "Cash"}
+		).insert(ignore_permissions=True)
+
+	frappe.db.commit()

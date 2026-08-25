@@ -5,18 +5,29 @@ context("Wholesale Flow (SO -> DN -> SI)", () => {
 	before(() => {
 		cy.login();
 		// Create a fresh Submitted Sales Order
-		cy.window().its("frappe").then((frappe) => {
-			return frappe.xcall("core_customizations.tests.test_ui_wholesale_helpers.setup_cypress_wholesale_data").then((name) => {
-				so_name = name;
+		cy.window()
+			.its("frappe")
+			.then((frappe) => {
+				return frappe
+					.xcall(
+						"core_customizations.tests.test_ui_wholesale_helpers.setup_cypress_wholesale_data"
+					)
+					.then((name) => {
+						so_name = name;
+					});
 			});
-		});
 	});
 
 	after(() => {
 		if (so_name) {
-			cy.window().its("frappe").then((frappe) => {
-				return frappe.xcall("core_customizations.tests.test_ui_wholesale_helpers.cleanup_cypress_wholesale_data", { so_name: so_name });
-			});
+			cy.window()
+				.its("frappe")
+				.then((frappe) => {
+					return frappe.xcall(
+						"core_customizations.tests.test_ui_wholesale_helpers.cleanup_cypress_wholesale_data",
+						{ so_name: so_name }
+					);
+				});
 		}
 	});
 
@@ -30,10 +41,10 @@ context("Wholesale Flow (SO -> DN -> SI)", () => {
 
 		// Wait for DN to open
 		cy.get(".page-title").should("contain", "New Delivery Note");
-		
+
 		// Set warehouse to satisfy the single warehouse validation
 		cy.get("div[data-fieldname='set_warehouse'] input").clear().type("Stores - SE-K{enter}");
-		
+
 		// Wait for frappe to update rows
 		cy.wait(500);
 
@@ -41,13 +52,13 @@ context("Wholesale Flow (SO -> DN -> SI)", () => {
 		cy.get(".page-actions button.primary-action").contains("Save").click();
 		cy.wait(1000);
 		cy.get(".page-actions button.primary-action").contains("Submit").click();
-		
+
 		// Confirm Submission
 		cy.get(".modal-dialog .btn-primary").contains("Yes").click();
 		cy.wait(1000);
 
 		cy.get(".page-title").should("not.contain", "New Delivery Note");
-		
+
 		// Capture DN name for next test
 		cy.get(".page-title .title-text").then(($el) => {
 			dn_name = $el.text().trim();
@@ -72,7 +83,7 @@ context("Wholesale Flow (SO -> DN -> SI)", () => {
 		cy.get(".page-actions button.primary-action").contains("Save").click();
 		cy.wait(1000);
 		cy.get(".page-actions button.primary-action").contains("Submit").click();
-		
+
 		// Confirm Submission
 		cy.get(".modal-dialog .btn-primary").contains("Yes").click();
 		cy.wait(1000);

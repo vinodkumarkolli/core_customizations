@@ -36,15 +36,18 @@ def validate_delivery_note_mandatory(doc, method=None):
 
 	if not has_delivery_note:
 		frappe.throw(
-			_("Delivery Note is mandatory for creating a Sales Invoice. Please generate the Delivery Note from the Sales Order first, complete dispatch & packing, and create the invoice from the Delivery Note."),
-			title=_("Delivery Note Required")
+			_(
+				"Delivery Note is mandatory for creating a Sales Invoice. Please generate the Delivery Note from the Sales Order first, complete dispatch & packing, and create the invoice from the Delivery Note."
+			),
+			title=_("Delivery Note Required"),
 		)
 
 	# @businessRule [BR-SALES-001] Wholesale Dispatch-First Flow
 	# The subsequent Sales Invoice must not update stock
 	if getattr(doc, "update_stock", 0):
 		frappe.throw(
-			_("Update Stock cannot be enabled on a Sales Invoice created from a Delivery Note. Stock movement and batch allocation are already handled by the Delivery Note."),
-			title=_("Invalid Stock Update")
+			_(
+				"Update Stock cannot be enabled on a Sales Invoice created from a Delivery Note. Stock movement and batch allocation are already handled by the Delivery Note."
+			),
+			title=_("Invalid Stock Update"),
 		)
-

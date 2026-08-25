@@ -100,7 +100,7 @@ class TestPurchaseInvoice3PLValidation(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError) as context:
 			pi.insert()
 
-		self.assertTrue("cannot update stock directly from a Purchase Invoice" in str(context.exception))
+		self.assertIn("cannot update stock directly from a Purchase Invoice", str(context.exception))
 
 	def test_03_standalone_pi_with_regular_item_passes(self):
 		pi = frappe.get_doc(

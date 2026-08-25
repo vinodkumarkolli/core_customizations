@@ -79,6 +79,7 @@ jobs:
           
           bench get-app erpnext --branch version-16
           bench get-app hrms --branch version-16
+          bench get-app india_compliance --branch develop
           cp -r ../apps/core_customizations apps/core_customizations
           bench setup requirements
           
@@ -86,6 +87,7 @@ jobs:
           
           bench --site test.local install-app erpnext
           bench --site test.local install-app hrms
+          bench --site test.local install-app india_compliance
           bench --site test.local install-app core_customizations
 
           # Run migrate to apply all custom fields, fixtures, and patches

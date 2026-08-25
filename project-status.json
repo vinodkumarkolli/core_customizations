@@ -55,9 +55,9 @@
   ],
   "ci_cd": {
     "status": "Failing",
-    "last_run": "2026-08-25T07:12:00Z",
-    "tests_passed": 46,
-    "tests_failed": 4
+    "last_run": "2026-08-25T08:04:00Z",
+    "tests_passed": 43,
+    "tests_failed": 21
   },
   "bugs": [
     {
@@ -83,7 +83,13 @@
       "name": "Print Format Assertion Failures",
       "status": "Open",
       "symptom": "AssertionErrors regarding missing address lines in printed HTML"
+    },
+    {
+      "bug_id": "BUG-005",
+      "name": "Missing 'custom_3pl_item' on Item",
+      "status": "Open",
+      "symptom": "Unknown column 'custom_3pl_item' in 'SELECT' during Purchase Invoice validation"
     }
   ],
-  "current_focus": "Multi-agent codebase review and refactoring completed. Tracking active bugs found in CI tests."
+  "current_focus": "Fixing active bugs found in CI tests, specifically missing custom fields across multiple Doctypes."
 }

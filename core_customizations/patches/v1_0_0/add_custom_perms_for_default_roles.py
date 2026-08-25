@@ -33,7 +33,15 @@ def execute():
 			# So we must ensure all standard permissions are migrated to Custom DocPerms.
 			standard_perms = frappe.get_all("DocPerm", filters={"parent": doctype}, fields="*")
 			for perm in standard_perms:
-				if not frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": perm.role, "permlevel": perm.permlevel, "if_owner": perm.if_owner}):
+				if not frappe.db.exists(
+					"Custom DocPerm",
+					{
+						"parent": doctype,
+						"role": perm.role,
+						"permlevel": perm.permlevel,
+						"if_owner": perm.if_owner,
+					},
+				):
 					d = frappe.new_doc("Custom DocPerm")
 					perm.pop("name", None)
 					perm.pop("creation", None)
@@ -46,7 +54,9 @@ def execute():
 
 			try:
 				# Check if permission already exists for this role
-				doc_name = frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": role_name, "permlevel": 0})
+				doc_name = frappe.db.exists(
+					"Custom DocPerm", {"parent": doctype, "role": role_name, "permlevel": 0}
+				)
 				if doc_name:
 					d = frappe.get_doc("Custom DocPerm", doc_name)
 				else:

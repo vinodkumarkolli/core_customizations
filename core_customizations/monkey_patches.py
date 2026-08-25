@@ -7,8 +7,13 @@ This patch adds batch-based pricing and serial number filtering for stock update
 """
 
 import erpnext.stock.get_item_details
-from erpnext.stock.get_item_details import get_batch_based_item_price, filter_batches, has_incorrect_serial_nos, get_filtered_serial_nos
 import frappe
+from erpnext.stock.get_item_details import (
+	filter_batches,
+	get_batch_based_item_price,
+	get_filtered_serial_nos,
+	has_incorrect_serial_nos,
+)
 from frappe.utils import cint
 
 
@@ -17,12 +22,12 @@ def custom_update_stock(ctx, out, doc=None):
 	Custom stock update function for Delivery Note, POS Invoice, and Sales Invoice.
 
 	Args:
-		ctx (dict): Context containing doctype, item_code, warehouse, and other transaction details.
-		out (dict): Output dictionary to be updated with batch_no, rate, serial_no etc.
-		doc (Document, optional): Frappe document object for the transaction.
+	        ctx (dict): Context containing doctype, item_code, warehouse, and other transaction details.
+	        out (dict): Output dictionary to be updated with batch_no, rate, serial_no etc.
+	        doc (Document, optional): Frappe document object for the transaction.
 
 	Returns:
-		None: Modifies 'out' dictionary in place.
+	        None: Modifies 'out' dictionary in place.
 	"""
 	from erpnext.stock.doctype.batch.batch import get_available_batches
 	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos_for_outward
@@ -98,6 +103,7 @@ def custom_update_stock(ctx, out, doc=None):
 
 			out["serial_no"] = "\n".join(serial_nos[: cint(out.stock_qty)])
 
+
 # Apply the patch
 erpnext.stock.get_item_details.update_stock = custom_update_stock
 
@@ -129,17 +135,16 @@ def custom_validate_items(self):
 				{"name": item.dn_detail, "parent": self.delivery_note, "docstatus": ["<", 2]},
 			):
 				frappe.throw(
-					frappe._("Row {0}: Please provide a valid Delivery Note Item or Packed Item reference.").format(
-						item.idx
-					)
+					frappe._(
+						"Row {0}: Please provide a valid Delivery Note Item or Packed Item reference."
+					).format(item.idx)
 				)
 
 
 try:
 	import erpnext.stock.doctype.packing_slip.packing_slip as ps_module
+
 	ps_module.PackingSlip.validate_delivery_note = custom_validate_delivery_note
 	ps_module.PackingSlip.validate_items = custom_validate_items
 except Exception:
 	pass
-
-

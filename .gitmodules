@@ -1,0 +1,3 @@
+[submodule ".agents/skills/frappe-skills"]
+	path = .agents/skills/frappe-skills
+	url = https://github.com/frappe/skills.git

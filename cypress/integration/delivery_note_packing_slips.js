@@ -4,19 +4,30 @@ context("Delivery Note Packing Slips", () => {
 	before(() => {
 		cy.login();
 		// Create a fresh Delivery Note using our python helper
-		cy.window().its("frappe").then((frappe) => {
-			return frappe.xcall("core_customizations.tests.test_ui_helpers.setup_cypress_test_delivery_note").then((name) => {
-				dn_name = name;
+		cy.window()
+			.its("frappe")
+			.then((frappe) => {
+				return frappe
+					.xcall(
+						"core_customizations.tests.test_ui_helpers.setup_cypress_test_delivery_note"
+					)
+					.then((name) => {
+						dn_name = name;
+					});
 			});
-		});
 	});
 
 	after(() => {
 		// Clean up the created Delivery Note
 		if (dn_name) {
-			cy.window().its("frappe").then((frappe) => {
-				return frappe.xcall("core_customizations.tests.test_ui_helpers.cleanup_cypress_test_data", { dn_name: dn_name });
-			});
+			cy.window()
+				.its("frappe")
+				.then((frappe) => {
+					return frappe.xcall(
+						"core_customizations.tests.test_ui_helpers.cleanup_cypress_test_data",
+						{ dn_name: dn_name }
+					);
+				});
 		}
 	});
 
@@ -31,14 +42,14 @@ context("Delivery Note Packing Slips", () => {
 
 		// Wait for generator modal
 		cy.get(".modal-dialog").should("contain", "Generate Packing Slips");
-		
+
 		// Fill generator fields (Item should default to Cypress Test Item 1)
 		cy.get(".modal-dialog input[data-fieldname='qty_per_box']").clear().type("50");
 		cy.get(".modal-dialog input[data-fieldname='no_of_boxes']").clear().type("2");
-		
+
 		// Click Generate button
 		cy.get(".modal-dialog .btn-primary").contains("Generate Packing Slips").click();
-		
+
 		// Wait for completion (modal hides)
 		cy.get(".modal-dialog").should("not.exist");
 		cy.wait(500); // Give frappe a moment to reload/toast
@@ -52,18 +63,20 @@ context("Delivery Note Packing Slips", () => {
 
 		// Assert Draft restrictions
 		cy.get(".modal-dialog tbody tr").should("have.length", 2);
-		
-		cy.get(".modal-dialog tbody tr").first().within(() => {
-			// Ensure it has Draft badge
-			cy.get(".badge").should("contain", "Draft");
-			
-			// Ensure it has Delete and Submit buttons with correct classes
-			cy.get("button.delete-single-ps").should("exist").and("have.class", "btn-danger");
-			cy.get("button.submit-single-ps").should("exist").and("have.class", "btn-primary");
-			
-			// Ensure Print button does NOT exist
-			cy.get("a").contains("Print").should("not.exist");
-		});
+
+		cy.get(".modal-dialog tbody tr")
+			.first()
+			.within(() => {
+				// Ensure it has Draft badge
+				cy.get(".badge").should("contain", "Draft");
+
+				// Ensure it has Delete and Submit buttons with correct classes
+				cy.get("button.delete-single-ps").should("exist").and("have.class", "btn-danger");
+				cy.get("button.submit-single-ps").should("exist").and("have.class", "btn-primary");
+
+				// Ensure Print button does NOT exist
+				cy.get("a").contains("Print").should("not.exist");
+			});
 
 		// Check for disclaimer
 		cy.get(".modal-dialog").should("contain", "Draft Packing Slips cannot be printed");
@@ -77,9 +90,11 @@ context("Delivery Note Packing Slips", () => {
 		cy.get(".modal-dialog").should("be.visible");
 
 		// Click Submit on the first Draft packing slip
-		cy.get(".modal-dialog tbody tr").first().within(() => {
-			cy.get("button.submit-single-ps").click();
-		});
+		cy.get(".modal-dialog tbody tr")
+			.first()
+			.within(() => {
+				cy.get("button.submit-single-ps").click();
+			});
 
 		// Frappe will reload doc and close modal, so we have to wait and reopen
 		cy.get(".modal-dialog").should("not.exist");
@@ -90,16 +105,18 @@ context("Delivery Note Packing Slips", () => {
 		cy.get(".modal-dialog").should("be.visible");
 
 		// Now check the first row is Submitted
-		cy.get(".modal-dialog tbody tr").first().within(() => {
-			cy.get(".badge").should("contain", "Submitted");
-			
-			// Submit and Delete buttons should be gone
-			cy.get("button.submit-single-ps").should("not.exist");
-			
-			// Cancel and Print buttons should appear with correct classes
-			cy.get("button.cancel-single-ps").should("exist").and("have.class", "btn-danger");
-			cy.get("a").contains("Print").should("exist").and("have.class", "btn-primary");
-		});
+		cy.get(".modal-dialog tbody tr")
+			.first()
+			.within(() => {
+				cy.get(".badge").should("contain", "Submitted");
+
+				// Submit and Delete buttons should be gone
+				cy.get("button.submit-single-ps").should("not.exist");
+
+				// Cancel and Print buttons should appear with correct classes
+				cy.get("button.cancel-single-ps").should("exist").and("have.class", "btn-danger");
+				cy.get("a").contains("Print").should("exist").and("have.class", "btn-primary");
+			});
 	});
 
 	it("handles Bulk Delete action properly", () => {
@@ -110,10 +127,12 @@ context("Delivery Note Packing Slips", () => {
 		cy.get(".modal-dialog").should("be.visible");
 
 		// Click Bulk Delete button
-		cy.get(".modal-dialog .modal-footer button.btn-danger").contains("Delete All Packing Slips").click();
-		
+		cy.get(".modal-dialog .modal-footer button.btn-danger")
+			.contains("Delete All Packing Slips")
+			.click();
+
 		// Confirm standard JS confirm dialog
-		cy.on('window:confirm', () => true);
+		cy.on("window:confirm", () => true);
 
 		// Frappe will close dialog and reload
 		cy.get(".modal-dialog").should("not.exist");
@@ -127,10 +146,12 @@ context("Delivery Note Packing Slips", () => {
 		// Assert that the Draft slip was deleted, but the Submitted slip remains (1 total box left)
 		cy.get(".modal-dialog").should("contain", "Manage Packing Slips (1 Total Boxes)");
 		cy.get(".modal-dialog tbody tr").should("have.length", 1);
-		cy.get(".modal-dialog tbody tr").first().within(() => {
-			cy.get(".badge").should("contain", "Submitted");
-		});
-		
+		cy.get(".modal-dialog tbody tr")
+			.first()
+			.within(() => {
+				cy.get(".badge").should("contain", "Submitted");
+			});
+
 		// Close modal
 		cy.get(".modal-dialog .btn-modal-close").click();
 	});

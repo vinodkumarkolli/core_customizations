@@ -11,7 +11,7 @@ app_license = "bsd-3-clause"
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["erpnext", "hrms", "india_compliance"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -84,11 +84,9 @@ jinja = {
 	"methods": [
 		"core_customizations.utils.get_code128_svg",
 		"core_customizations.utils.get_barcode",
-		"core_customizations.utils.format_qty"
+		"core_customizations.utils.format_qty",
 	],
-	"filters": [
-		"core_customizations.utils.format_qty"
-	]
+	"filters": ["core_customizations.utils.format_qty"],
 }
 
 # Installation
@@ -162,7 +160,7 @@ doc_events = {
 		"validate": "core_customizations.core_customizations.delivery_note.validate_delivery_note",
 		"before_submit": "core_customizations.core_customizations.delivery_note.before_submit_delivery_note",
 		"on_cancel": "core_customizations.core_customizations.delivery_note.on_cancel_delivery_note",
-	}
+	},
 }
 
 # Scheduled Tasks
@@ -262,25 +260,11 @@ doc_events = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 fixtures = [
-    {
-        "doctype":"Custom Field", "filters":{"module":["in",["Core Customizations"]]}
-    },
-    {
-        "doctype":"Property Setter", "filters":{"module":["in",["Core Customizations"]]}
-    },
-    {
-        "doctype":"Print Format", "filters":{"module":["in",["Core Customizations"]]}
-    },
-    {
-        "doctype":"Client Script", "filters":{"module":["in",["Core Customizations"]]}
-    },
-    {
-        "doctype":"Workflow State", "filters":{"name":["in",["Draft"]]}
-    },
-    {
-        "doctype":"Workflow Action Master", "filters":{"name":["in",["Submit for Review"]]}
-    },
-    {
-        "doctype":"Workflow"
-    }
+	{"doctype": "Custom Field", "filters": {"module": ["in", ["Core Customizations"]]}},
+	{"doctype": "Property Setter", "filters": {"module": ["in", ["Core Customizations"]]}},
+	{"doctype": "Print Format", "filters": {"module": ["in", ["Core Customizations"]]}},
+	{"doctype": "Client Script", "filters": {"module": ["in", ["Core Customizations"]]}},
+	{"doctype": "Workflow State", "filters": {"name": ["in", ["Draft"]]}},
+	{"doctype": "Workflow Action Master", "filters": {"name": ["in", ["Submit for Review"]]}},
+	{"doctype": "Workflow"},
 ]

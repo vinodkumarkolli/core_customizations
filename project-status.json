@@ -1,0 +1,111 @@
+{
+  "project_name": "core_customizations",
+  "framework": "Frappe/ERPNext",
+  "current_sprint": "Sprint 1",
+  "status": "In Progress",
+  "epics": [
+    {
+      "epic_id": "Epic 1",
+      "name": "Dual Sales & Fulfillment Architecture",
+      "status": "In Progress",
+      "completion_percentage": 90
+    },
+    {
+      "epic_id": "Epic 2",
+      "name": "Sales Returns & Credit Notes",
+      "status": "To Do",
+      "completion_percentage": 0
+    },
+    {
+      "epic_id": "Epic 3",
+      "name": "3PL Logistics & Transporter Management",
+      "status": "In Progress",
+      "completion_percentage": 50
+    },
+    {
+      "epic_id": "Epic 4",
+      "name": "Indian GST E-Way Bill Compliance",
+      "status": "To Do",
+      "completion_percentage": 0
+    },
+    {
+      "epic_id": "Epic 5",
+      "name": "Inventory Guardrails",
+      "status": "Done",
+      "completion_percentage": 100
+    },
+    {
+      "epic_id": "Epic 6",
+      "name": "Packing Slips & Carton Management",
+      "status": "Done",
+      "completion_percentage": 100
+    },
+    {
+      "epic_id": "Epic 7",
+      "name": "Document Dependency & Cancellation Guardrails",
+      "status": "Done",
+      "completion_percentage": 100
+    },
+    {
+      "epic_id": "Epic 8",
+      "name": "Purchase & Inbound Logistics",
+      "status": "Done",
+      "completion_percentage": 100
+    }
+  ],
+  "ci_cd": {
+    "metrics": {
+      "total_tests": 82,
+      "open_bugs": 1,
+      "resolved_bugs": 8,
+      "last_updated": "2026-08-25T10:50:00Z"
+    },
+    "active_bugs": [
+      {
+        "id": "BUG-006",
+        "title": "Custom Fields Sync Failure",
+        "description": "Empty insert_after string in custom_field.json causes sync_fixtures to fail silently during bench migrate.",
+        "status": "In Progress"
+      },
+      {
+        "id": "BUG-007",
+        "title": "LinkValidationError on Item Tax Template",
+        "description": "test_04_update_lr_details_api attempts to use hardcoded GST 18% - SE-K which does not exist in CI DB.",
+        "status": "In Progress"
+      },
+      {
+        "id": "BUG-003",
+        "title": "POSInvoice Validation Conflict",
+        "description": "Wholesale POS flow tests failing due to strict delivery note validations.",
+        "status": "Open"
+      },
+      {
+        "id": "BUG-004",
+        "title": "Print Format Address Mapping",
+        "description": "Transporter address and godown details missing in print formats.",
+        "status": "Open"
+      }
+    ]
+  },
+  "bugs": [
+    {
+      "bug_id": "BUG-001",
+      "name": "Missing Custom Fields on Delivery Note",
+      "status": "Open",
+      "symptom": "MySQLdb.OperationalError: (1054, \"Unknown column ... in 'SET'\")"
+    },
+    {
+      "bug_id": "BUG-002",
+      "name": "Missing 'mode_of_transport' Attribute",
+      "status": "Open",
+      "symptom": "AttributeError: 'DeliveryNote' object has no attribute 'mode_of_transport'"
+    },
+    {
+      "bug_id": "BUG-005",
+      "name": "Missing 'custom_3pl_item' on Item",
+      "status": "Open",
+      "symptom": "Unknown column 'custom_3pl_item' in 'SELECT' during Purchase Invoice validation"
+    }
+  ],
+  "current_focus": "Fixing active bugs found in CI tests, specifically missing custom fields across multiple Doctypes."
+}

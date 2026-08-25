@@ -4,6 +4,8 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
+from core_customizations.tests.test_fixtures import ensure_test_fixtures
+
 
 class TestPOSLabelPrintFormats(IntegrationTestCase):
 	"""
@@ -13,17 +15,21 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
+		# Ensure ERPNext master data exists in the blank CI environment
+		ensure_test_fixtures()
 		cls.label_format = "Shipping Package Label (4x6)"
 
 		# Create a test transporter supplier if not present
 		cls.transporter_name = "_Test POS Transporter"
 		if not frappe.db.exists("Supplier", cls.transporter_name):
-			cls.supplier_doc = frappe.get_doc({
-				"doctype": "Supplier",
-				"supplier_name": cls.transporter_name,
-				"supplier_group": "Services",
-				"is_transporter": 1,
-			}).insert(ignore_permissions=True)
+			cls.supplier_doc = frappe.get_doc(
+				{
+					"doctype": "Supplier",
+					"supplier_name": cls.transporter_name,
+					"supplier_group": "Services",
+					"is_transporter": 1,
+				}
+			).insert(ignore_permissions=True)
 		else:
 			cls.supplier_doc = frappe.get_doc("Supplier", cls.transporter_name)
 			if not cls.supplier_doc.is_transporter:
@@ -62,21 +68,23 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 		if addr_name and frappe.db.get_value("Address", addr_name, "address_title") == title:
 			return addr_name
 
-		addr = frappe.get_doc({
-			"doctype": "Address",
-			"address_title": title,
-			"address_type": "Billing",
-			"address_line1": line1,
-			"city": city,
-			"state": state,
-			"pincode": pincode,
-			"country": "India",
-			"links": [{"link_doctype": "Supplier", "link_name": supplier_name}],
-		}).insert(ignore_permissions=True)
+		addr = frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": title,
+				"address_type": "Billing",
+				"address_line1": line1,
+				"city": city,
+				"state": state,
+				"pincode": pincode,
+				"country": "India",
+				"links": [{"link_doctype": "Supplier", "link_name": supplier_name}],
+			}
+		).insert(ignore_permissions=True)
 		return addr.name
 
 	def _get_test_delivery_note(self, is_godown=1):
-		notes = frappe.get_all("Delivery Note", limit=1)
+		notes = frappe.get_all("Delivery Note", filters={"docstatus": ("<", 2)}, limit=1)
 		if not notes:
 			self.skipTest("No Delivery Note available for testing POS label prints")
 		dn = frappe.get_doc("Delivery Note", notes[0].name)
@@ -85,13 +93,18 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 		dn.custom_transporter_from_address_display = "500 Origin Booking Street\nChennai\nTamil Nadu"
 		dn.custom_is_godown_delivery = 1 if is_godown else 0
 		dn.custom_transporter_to_address = self.to_address_name if is_godown else None
-		dn.custom_transporter_to_address_display = "800 Destination Delivery Road\nSalem\nTamil Nadu" if is_godown else None
+		dn.custom_transporter_to_address_display = (
+			"800 Destination Delivery Road\nSalem\nTamil Nadu" if is_godown else None
+		)
 		dn.db_update()
 		return dn
 
 	def test_01_unified_label_print_format_exists(self):
 		"""Verify unified 4x6 Shipping Package Label Print Format exists with proper configuration on Delivery Note."""
-		self.assertTrue(frappe.db.exists("Print Format", self.label_format), f"Print Format '{self.label_format}' does not exist")
+		self.assertTrue(
+			frappe.db.exists("Print Format", self.label_format),
+			f"Print Format '{self.label_format}' does not exist",
+		)
 		pf = frappe.get_doc("Print Format", self.label_format)
 		self.assertEqual(pf.doc_type, "Delivery Note")
 		self.assertEqual(pf.module, "Core Customizations")
@@ -144,16 +157,21 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 		rec_case = ps.get_recommended_case_no() or 1
 		ps.from_case_no = rec_case
 		ps.to_case_no = rec_case
-		ps.append("items", {
-			"item_code": dn.items[0].item_code,
-			"item_name": dn.items[0].item_name,
-			"qty": 10,
-			"stock_uom": dn.items[0].uom or "Nos",
-			"dn_detail": dn.items[0].name
-		})
+		ps.append(
+			"items",
+			{
+				"item_code": dn.items[0].item_code,
+				"item_name": dn.items[0].item_name,
+				"qty": 10,
+				"stock_uom": dn.items[0].uom or "Nos",
+				"dn_detail": dn.items[0].name,
+			},
+		)
 		ps.insert(ignore_permissions=True)
 
-		html = frappe.get_print("Packing Slip", ps.name, print_format="Carton Shipping Label (4x6)", no_letterhead=1)
+		html = frappe.get_print(
+			"Packing Slip", ps.name, print_format="Carton Shipping Label (4x6)", no_letterhead=1
+		)
 
 		self.assertIn("BOX NUMBER / TOTAL", html)
 		self.assertIn("BOX [", html)
@@ -166,7 +184,3 @@ class TestPOSLabelPrintFormats(IntegrationTestCase):
 		# Confidentiality check: item contents are omitted from outer carton label
 		self.assertNotIn("PACKAGE CONTENTS (ITEMS)", html)
 		self.assertNotIn(dn.items[0].item_name, html)
-
-
-
-

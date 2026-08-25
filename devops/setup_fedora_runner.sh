@@ -33,6 +33,14 @@ if ! command -v docker &> /dev/null; then
     echo "Docker installed. You may need to log out and log back in for group changes to take effect."
 fi
 
+# Check if runner already exists
+if [ -f ~/actions-runner/.runner ]; then
+    echo "Warning: A GitHub Actions runner is already configured in ~/actions-runner."
+    echo "You must remove the existing runner before setting up a new one."
+    echo "To remove it, run: cd ~/actions-runner && sudo ./svc.sh stop && sudo ./svc.sh uninstall && ./config.sh remove"
+    exit 1
+fi
+
 # 2. Download and configure the runner
 mkdir -p ~/actions-runner && cd ~/actions-runner
 

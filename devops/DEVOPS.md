@@ -30,6 +30,7 @@ Copy the provided setup script to your Fedora machine and execute it.
 4. The script will ask you to paste the **Repository URL** and the **Runner Token** you copied in Step 1.
 
 ## What the script does
+- **Existing Runner Check**: It checks if `~/actions-runner/.runner` exists and safely aborts with removal instructions if a runner is already configured, preventing messy duplicate configurations.
 - **Docker Installation**: It checks if Docker CE is installed. If not, it installs Docker and adds your user to the `docker` group.
 - **GitHub Runner Download**: Downloads and extracts the latest runner tarball to `~/actions-runner`.
 - **Runner Configuration**: Configures the runner and assigns it the label `msi-fedora-docker`.
@@ -37,9 +38,36 @@ Copy the provided setup script to your Fedora machine and execute it.
 
 ## Troubleshooting
 
+### Error: `203/EXEC Permission denied` when starting the runner service
+
+If `sudo ./svc.sh status` shows a `failed (Result: exit-code)` with `status=203/EXEC`, it means Fedora's strict SELinux security module is blocking `systemd` from executing the background service scripts located in your home directory.
+
+To fix this, run the following commands on your Fedora machine:
+
+1. Stop the failing service:
+   ```bash
+   cd ~/actions-runner
+   sudo ./svc.sh stop
+   ```
+2. Fix the SELinux security contexts to mark the directory as executable binaries:
+   ```bash
+   sudo chcon -R -t bin_t ~/actions-runner
+   ```
+   *(If `chcon` fails, you can try `sudo restorecon -Rv ~/actions-runner` instead).*
+3. Ensure the scripts have correct execute permissions:
+   ```bash
+   chmod -R +x ~/actions-runner/*.sh
+   chmod -R +x ~/actions-runner/bin/*
+   ```
+4. Start the service again:
+   ```bash
+   sudo ./svc.sh start
+   sudo ./svc.sh status
+   ```
+   It should now show `active (running)`.
+
 - **Permissions Error**: If Docker fails to start containers because of permissions, you may need to log out and log back in to apply the `usermod` group changes.
 - **Check Status**: To check if the runner is actively listening for jobs, run:
-  ```bash
-  cd ~/actions-runner
-  sudo ./svc.sh status
-  ```
+   ```bash
+   sudo ~/actions-runner/svc.sh status
+   ```

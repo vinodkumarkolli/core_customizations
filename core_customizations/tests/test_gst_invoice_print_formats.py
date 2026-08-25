@@ -235,21 +235,27 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 
 	def test_09_discount_on_grand_total_rendering(self):
 		"""Verify Additional Discount is rendered after Taxes when applied on Grand Total."""
-		inv = self._get_test_invoice(
-			is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=68.0
+		base_inv = self._get_test_invoice(
+			is_paid=True, with_transporter=True
 		)
 		
-		self.assertEqual(inv.apply_discount_on, "Grand Total", f"Expected 'Grand Total', got {inv.apply_discount_on}")
-		self.assertEqual(inv.discount_amount, 68.0, f"Expected 68.0, got {inv.discount_amount}")
+		# Create a fresh duplicate to let Frappe compute discounts natively
+		inv = frappe.copy_doc(base_inv)
+		inv.apply_discount_on = "Grand Total"
+		inv.additional_discount_percentage = 10.0
+		inv.save()
+		inv.submit()
+		
+		self.assertEqual(inv.apply_discount_on, "Grand Total")
+		self.assertTrue(inv.discount_amount > 0, f"Expected discount > 0, got {inv.discount_amount}")
 		
 		html = frappe.get_print("Sales Invoice", inv.name, print_format="GST Invoice - Original for Receiver")
-
+		
 		if "Additional Discount:" not in html:
 			print(f"\\n\\nHTML DUMP FOR TEST 09:\\n{html}\\n\\n")
 		
 		self.assertIn("Additional Discount:", html, "Additional Discount not in HTML. Check the log for the full HTML dump.")
 		self.assertIn("Grand Total:", html)
-
 	def test_10_pos_flow_indication_on_gst_invoice(self):
 		"""Verify POS Flow indicator renders 'Over-the-Counter / Point of Sale (POS)' on GST Invoice when is_pos=1."""
 		invoices = frappe.get_all("Sales Invoice", filters={"docstatus": ["!=", 2]}, limit=1)

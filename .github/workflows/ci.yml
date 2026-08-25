@@ -78,12 +78,14 @@ jobs:
           bench set-config -g redis_socketio "redis://redis-queue:6379"
           
           bench get-app erpnext --branch version-16
+          bench get-app hrms --branch version-16
           cp -r ../apps/core_customizations apps/core_customizations
           bench setup requirements
           
           bench new-site test.local --db-root-password root --admin-password admin --no-mariadb-socket
           
           bench --site test.local install-app erpnext
+          bench --site test.local install-app hrms
           bench --site test.local install-app core_customizations
 
           # Run migrate to apply all custom fields, fixtures, and patches

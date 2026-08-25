@@ -11,7 +11,7 @@ app_license = "bsd-3-clause"
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["erpnext", "hrms"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [

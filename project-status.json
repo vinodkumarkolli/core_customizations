@@ -56,9 +56,9 @@
   "ci_cd": {
     "metrics": {
       "total_tests": 82,
-      "passing": 45,
-      "failing": 37,
-      "coverage": 85.0
+      "open_bugs": 1,
+      "resolved_bugs": 7,
+      "last_updated": "2026-08-25T10:35:00Z"
     },
     "active_bugs": [
       {

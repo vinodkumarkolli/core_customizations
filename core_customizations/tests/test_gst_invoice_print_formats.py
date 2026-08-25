@@ -264,7 +264,6 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 				"is_pos": 1,
 				"pos_profile": "_Test POS Profile",
 				"transporter": None,
-				"custom_transporter_from_address_display": None,
 			}
 		)
 		frappe.db.commit()

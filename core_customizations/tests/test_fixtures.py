@@ -212,7 +212,10 @@ def ensure_test_fixtures():
 				"pincode": "641105",
 				"country": "India",
 				"phone": "8056496441",
-				"links": [{"link_doctype": "Warehouse", "link_name": "Coimbatore Goodown - SE-K"}],
+				"links": [
+					{"link_doctype": "Warehouse", "link_name": "Coimbatore Goodown - SE-K"},
+					{"link_doctype": "Company", "link_name": "Sravi Enterprises - Kolapakkam"}
+				],
 			}
 		).insert(ignore_permissions=True)
 

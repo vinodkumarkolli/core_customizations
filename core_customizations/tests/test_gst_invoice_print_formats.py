@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from unittest.mock import patch
 
 from core_customizations.tests.test_fixtures import ensure_test_fixtures
 from core_customizations.utils import format_qty, get_code128_svg
@@ -117,12 +118,13 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		if with_transporter:
 			update_values = {
 				"transporter": self.transporter_name,
-				"custom_transporter": self.transporter_name,
-				"custom_transporter_from_address": self.from_address_name,
 				"custom_transporter_from_address_display": "100 Transporter Origin Hub Street<br>Chennai<br>Tamil Nadu",
 				"custom_is_godown_delivery": 1,
-				"custom_transporter_to_address": self.to_address_name,
 				"custom_transporter_to_address_display": "200 Destination Godown Road<br>Salem<br>Tamil Nadu",
+				"po_no": "PO-TEST-100",
+				"company": "Sravi Enterprises - Kolapakkam",
+				"company_address_display": "SE-K Company Addr<br>Kolapakkam",
+				"company_gstin": "33AAECS5432R1Z8",
 				"outstanding_amount": 0 if is_paid else 5000.00,
 				"apply_discount_on": apply_discount_on,
 				"discount_amount": discount_amount,
@@ -130,11 +132,8 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		else:
 			update_values = {
 				"transporter": None,
-				"custom_transporter": None,
-				"custom_transporter_from_address": None,
 				"custom_transporter_from_address_display": None,
 				"custom_is_godown_delivery": 0,
-				"custom_transporter_to_address": None,
 				"custom_transporter_to_address_display": None,
 				"outstanding_amount": 0 if is_paid else 5000.00,
 				"apply_discount_on": apply_discount_on,
@@ -233,7 +232,8 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		self.assertIn("<rect", svg)
 		self.assertIn('fill="#000"', svg)
 
-	def test_09_discount_on_grand_total_rendering(self):
+	@patch("core_customizations.core_customizations.sales_invoice.validate_delivery_note_mandatory")
+	def test_09_discount_on_grand_total_rendering(self, mock_validate):
 		"""Verify Additional Discount is rendered after Taxes when applied on Grand Total."""
 		base_inv = self._get_test_invoice(
 			is_paid=True, with_transporter=True
@@ -241,9 +241,16 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		
 		# Create a fresh duplicate to let Frappe compute discounts natively
 		inv = frappe.copy_doc(base_inv)
+		for item in inv.items:
+			item.sales_order = None
+			item.so_detail = None
+			item.delivery_note = None
+			item.dn_detail = None
 		inv.apply_discount_on = "Grand Total"
 		inv.additional_discount_percentage = 10.0
+		inv.update_stock = 0
 		inv.save()
+		inv.reload()
 		inv.submit()
 		
 		self.assertEqual(inv.apply_discount_on, "Grand Total")
@@ -265,8 +272,6 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 				"is_pos": 1,
 				"pos_profile": "_Test POS Profile",
 				"transporter": None,
-				"custom_transporter": None,
-				"custom_transporter_from_address": None,
 				"custom_transporter_from_address_display": None,
 			}
 		)

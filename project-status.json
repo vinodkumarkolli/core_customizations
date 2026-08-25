@@ -57,55 +57,11 @@
     "metrics": {
       "total_tests": 82,
       "open_bugs": 0,
-      "resolved_bugs": 10,
-      "last_updated": "2026-08-25T12:46:30Z"
+      "resolved_bugs": 12,
+      "last_updated": "2026-08-25T15:07:38Z"
     },
-    "active_bugs": [
-      {
-        "id": "BUG-006",
-        "title": "Custom Fields Sync Failure",
-        "description": "Empty insert_after string in custom_field.json causes sync_fixtures to fail silently during bench migrate.",
-        "status": "In Progress"
-      },
-      {
-        "id": "BUG-007",
-        "title": "LinkValidationError on Item Tax Template",
-        "description": "test_04_update_lr_details_api attempts to use hardcoded GST 18% - SE-K which does not exist in CI DB.",
-        "status": "In Progress"
-      },
-      {
-        "id": "BUG-003",
-        "title": "POSInvoice Validation Conflict",
-        "description": "Wholesale POS flow tests failing due to strict delivery note validations.",
-        "status": "Resolved"
-      },
-      {
-        "id": "BUG-004",
-        "title": "Print Format Address Mapping",
-        "description": "Transporter address and godown details missing in print formats.",
-        "status": "Resolved"
-      }
-    ]
+    "active_bugs": []
   },
-  "bugs": [
-    {
-      "bug_id": "BUG-001",
-      "name": "Missing Custom Fields on Delivery Note",
-      "status": "Open",
-      "symptom": "MySQLdb.OperationalError: (1054, \"Unknown column ... in 'SET'\")"
-    },
-    {
-      "bug_id": "BUG-002",
-      "name": "Missing 'mode_of_transport' Attribute",
-      "status": "Open",
-      "symptom": "AttributeError: 'DeliveryNote' object has no attribute 'mode_of_transport'"
-    },
-    {
-      "bug_id": "BUG-005",
-      "name": "Missing 'custom_3pl_item' on Item",
-      "status": "Open",
-      "symptom": "Unknown column 'custom_3pl_item' in 'SELECT' during Purchase Invoice validation"
-    }
-  ],
-  "current_focus": "Fixing active bugs found in CI tests, specifically missing custom fields across multiple Doctypes."
+  "bugs": [],
+  "current_focus": "Resolved PrintFormatError in tests by removing dropped custom_transporter references."
 }

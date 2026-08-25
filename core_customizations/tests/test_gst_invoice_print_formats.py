@@ -245,7 +245,10 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		
 		html = frappe.get_print("Sales Invoice", inv.name, print_format="GST Invoice - Original for Receiver")
 
-		self.assertIn("Additional Discount:", html, f"Additional Discount not in HTML. HTML: {html[:200]}...")
+		if "Additional Discount:" not in html:
+			print(f"\\n\\nHTML DUMP FOR TEST 09:\\n{html}\\n\\n")
+		
+		self.assertIn("Additional Discount:", html, "Additional Discount not in HTML. Check the log for the full HTML dump.")
 		self.assertIn("Grand Total:", html)
 
 	def test_10_pos_flow_indication_on_gst_invoice(self):

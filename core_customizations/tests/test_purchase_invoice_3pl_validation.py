@@ -92,6 +92,7 @@ class TestPurchaseInvoice3PLValidation(FrappeTestCase):
 						"rate": 100,
 						"expense_account": self.expense_account,
 						"cost_center": self.cost_center,
+						"warehouse": "Stores - SE-K",
 					}
 				],
 			}

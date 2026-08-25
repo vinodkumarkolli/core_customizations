@@ -470,8 +470,12 @@ class TestDeliveryNotePrintFormat(unittest.TestCase):
 		dn.set_warehouse = "Coimbatore Goodown - SE-K"
 		for itm in dn.items:
 			itm.warehouse = "Coimbatore Goodown - SE-K"
-		dn.dispatch_address_name = None
-		dn.dispatch_address = None
+		dn.dispatch_address_name = frappe.db.get_value(
+			"Dynamic Link", 
+			{"link_doctype": "Warehouse", "link_name": "Coimbatore Goodown - SE-K", "parenttype": "Address"}, 
+			"parent"
+		)
+		dn.dispatch_address = frappe.db.get_value("Address", dn.dispatch_address_name, "address_line1")
 		dn.save(ignore_permissions=True)
 		
 		self.assertTrue(dn.dispatch_address_name, "dispatch_address_name is None after save")

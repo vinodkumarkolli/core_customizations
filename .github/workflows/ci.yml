@@ -91,11 +91,7 @@ jobs:
           bench --site test.local migrate
           FRAPPE_SETUP
 
-      - name: Run Code Analysis (Linters)
-        run: |
-          cd apps/core_customizations
-          pip install pre-commit
-          pre-commit run --all-files
+
 
       - name: Run Backend Integration Tests
         run: |

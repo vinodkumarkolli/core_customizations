@@ -56,9 +56,9 @@
   "ci_cd": {
     "metrics": {
       "total_tests": 82,
-      "open_bugs": 1,
-      "resolved_bugs": 8,
-      "last_updated": "2026-08-25T10:50:00Z"
+      "open_bugs": 0,
+      "resolved_bugs": 10,
+      "last_updated": "2026-08-25T12:46:30Z"
     },
     "active_bugs": [
       {
@@ -77,13 +77,13 @@
         "id": "BUG-003",
         "title": "POSInvoice Validation Conflict",
         "description": "Wholesale POS flow tests failing due to strict delivery note validations.",
-        "status": "Open"
+        "status": "Resolved"
       },
       {
         "id": "BUG-004",
         "title": "Print Format Address Mapping",
         "description": "Transporter address and godown details missing in print formats.",
-        "status": "Open"
+        "status": "Resolved"
       }
     ]
   },

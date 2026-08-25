@@ -25,6 +25,7 @@ class TestPOSDualWorkflow(IntegrationTestCase):
 		cls.company = "Sravi Enterprises - Kolapakkam"
 
 		# 1. Create a Test POS Profile if not present
+		frappe.db.set_value("POS Settings", None, "invoice_type", "POS Invoice")
 		cls.pos_profile_name = "_Test POS Profile"
 		cls.warehouse = "Stores - SE-K"
 		if not frappe.db.exists("Warehouse", cls.warehouse):

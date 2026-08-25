@@ -238,9 +238,14 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		inv = self._get_test_invoice(
 			is_paid=True, with_transporter=True, apply_discount_on="Grand Total", discount_amount=68.0
 		)
+		
+		# Assert DB values are correct
+		self.assertEqual(inv.apply_discount_on, "Grand Total", f"Expected 'Grand Total', got {inv.apply_discount_on}")
+		self.assertEqual(inv.discount_amount, 68.0, f"Expected 68.0, got {inv.discount_amount}")
+		
 		html = frappe.get_print("Sales Invoice", inv.name, print_format="GST Invoice - Original for Receiver")
 
-		self.assertIn("Additional Discount:", html)
+		self.assertIn("Additional Discount:", html, f"Additional Discount not in HTML. HTML: {html[:200]}...")
 		self.assertIn("Grand Total:", html)
 
 	def test_10_pos_flow_indication_on_gst_invoice(self):

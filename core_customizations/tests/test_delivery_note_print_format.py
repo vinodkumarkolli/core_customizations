@@ -473,6 +473,10 @@ class TestDeliveryNotePrintFormat(unittest.TestCase):
 		dn.dispatch_address_name = None
 		dn.dispatch_address = None
 		dn.save(ignore_permissions=True)
+		
+		self.assertTrue(dn.dispatch_address_name, "dispatch_address_name is None after save")
+		address = frappe.get_doc("Address", dn.dispatch_address_name)
+		self.assertIn("6/57", address.address_line1 or "", f"Expected address line 1 to contain 6/57, got {address.address_line1}")
 
 		html = frappe.get_print(
 			"Delivery Note", dn.name, print_format="Delivery Note - Original for Consignee", no_letterhead=1
@@ -480,7 +484,7 @@ class TestDeliveryNotePrintFormat(unittest.TestCase):
 		self.assertIn(
 			"6/57, MALAI Samy Kovil Street, Madukkarai",
 			html,
-			"Warehouse address line 1 missing in Consignor column",
+			f"Warehouse address line 1 missing in Consignor column. HTML: {html[:200]}...",
 		)
 		self.assertIn("Coimbatore", html, "Warehouse city missing in Consignor column")
 		self.assertIn("8056496441", html, "Warehouse phone missing in Consignor column")

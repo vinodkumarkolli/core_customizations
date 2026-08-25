@@ -511,7 +511,7 @@ def get_unpacked_items_summary(delivery_note):
 		"customer_name": dn.customer_name,
 		"docstatus": dn.docstatus,
 		"current_transporter": {
-			"transporter": dn.get("transporter") or dn.get("custom_transporter"),
+			"transporter": dn.get("transporter"),
 			"transporter_name": dn.get("transporter_name"),
 			"from_address": dn.get("custom_transporter_from_address"),
 			"from_address_display": dn.get("custom_transporter_from_address_display"),

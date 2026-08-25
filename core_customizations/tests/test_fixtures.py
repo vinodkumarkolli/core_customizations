@@ -200,6 +200,25 @@ def ensure_test_fixtures():
 			}
 		).insert(ignore_permissions=True)
 
+	if not frappe.db.exists("Address", {"address_title": "Coimbatore Goodown Address"}):
+		frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": "Coimbatore Goodown Address",
+				"address_type": "Warehouse",
+				"address_line1": "6/57, MALAI Samy Kovil Street, Madukkarai",
+				"city": "Coimbatore",
+				"state": "Tamil Nadu",
+				"pincode": "641105",
+				"country": "India",
+				"phone": "8056496441",
+				"links": [
+					{"link_doctype": "Warehouse", "link_name": "Coimbatore Goodown - SE-K"},
+					{"link_doctype": "Company", "link_name": "Sravi Enterprises - Kolapakkam"}
+				],
+			}
+		).insert(ignore_permissions=True)
+
 	# --- Default Address Template ---
 	# Required for get_address_display() which is called on ExtendedAddress save hooks
 	if not frappe.db.exists("Address Template", {"is_default": 1}):

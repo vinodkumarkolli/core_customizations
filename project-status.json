@@ -54,10 +54,38 @@
     }
   ],
   "ci_cd": {
-    "status": "Failing",
-    "last_run": "2026-08-25T08:04:00Z",
-    "tests_passed": 43,
-    "tests_failed": 21
+    "metrics": {
+      "total_tests": 82,
+      "passing": 45,
+      "failing": 37,
+      "coverage": 85.0
+    },
+    "active_bugs": [
+      {
+        "id": "BUG-006",
+        "title": "Custom Fields Sync Failure",
+        "description": "Empty insert_after string in custom_field.json causes sync_fixtures to fail silently during bench migrate.",
+        "status": "In Progress"
+      },
+      {
+        "id": "BUG-007",
+        "title": "LinkValidationError on Item Tax Template",
+        "description": "test_04_update_lr_details_api attempts to use hardcoded GST 18% - SE-K which does not exist in CI DB.",
+        "status": "In Progress"
+      },
+      {
+        "id": "BUG-003",
+        "title": "POSInvoice Validation Conflict",
+        "description": "Wholesale POS flow tests failing due to strict delivery note validations.",
+        "status": "Open"
+      },
+      {
+        "id": "BUG-004",
+        "title": "Print Format Address Mapping",
+        "description": "Transporter address and godown details missing in print formats.",
+        "status": "Open"
+      }
+    ]
   },
   "bugs": [
     {
@@ -71,18 +99,6 @@
       "name": "Missing 'mode_of_transport' Attribute",
       "status": "Open",
       "symptom": "AttributeError: 'DeliveryNote' object has no attribute 'mode_of_transport'"
-    },
-    {
-      "bug_id": "BUG-003",
-      "name": "POSInvoice Validation Conflict",
-      "status": "Open",
-      "symptom": "frappe.exceptions.ValidationError during POSInvoice validation"
-    },
-    {
-      "bug_id": "BUG-004",
-      "name": "Print Format Assertion Failures",
-      "status": "Open",
-      "symptom": "AssertionErrors regarding missing address lines in printed HTML"
     },
     {
       "bug_id": "BUG-005",

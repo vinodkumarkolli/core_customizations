@@ -249,7 +249,7 @@ class TestDeliveryNoteWorkflow(IntegrationTestCase):
 				"rate": 100,
 				"delivery_note": dn.name,
 				"dn_detail": dn.items[0].name,
-				"item_tax_template": "GST 18% - SE-K",
+				"cost_center": "Main - SE-K",
 			}]
 		})
 		si.flags.ignore_mandatory = True

@@ -5,6 +5,8 @@ def validate_3pl_items(doc, method):
     Validates that if a Purchase Invoice contains any 3PL Item (custom_3pl_item = 1):
     1. update_stock is not checked (it must be handled through PR).
     2. Every 3PL Item row has a linked Purchase Receipt.
+    
+    Business Purpose: Ensure inbound stock movements are recorded properly in 3PL warehouses ([BR-PUR-001]).
     """
     item_codes = [item.item_code for item in doc.get("items")]
     if not item_codes:
@@ -21,6 +23,7 @@ def validate_3pl_items(doc, method):
     if not items_3pl:
         return
         
+    # @businessRule [BR-PUR-001] 3PL Inbound Receipt Dependency
     if doc.update_stock:
         frappe.throw("3PL Items cannot update stock directly from a Purchase Invoice. Please use a Purchase Receipt.")
         

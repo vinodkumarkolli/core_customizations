@@ -432,13 +432,21 @@ def get_unpacked_items_summary(delivery_note):
 	# Calculate packed quantities per Delivery Note Item row (using dn_detail)
 	packed_qty_map = {}
 	max_case_no = 0
-	for ps in packing_slips:
-		ps_doc = frappe.get_doc("Packing Slip", ps.name)
-		to_case = cint(ps_doc.to_case_no) or cint(ps_doc.from_case_no) or 1
-		if to_case > max_case_no:
-			max_case_no = to_case
-
-		for item in ps_doc.items:
+	
+	if packing_slips:
+		ps_names = [ps.name for ps in packing_slips]
+		ps_items = frappe.get_all(
+			"Packing Slip Item",
+			filters={"parent": ["in", ps_names]},
+			fields=["dn_detail", "qty"]
+		)
+		
+		for ps in packing_slips:
+			to_case = cint(ps.to_case_no) or cint(ps.from_case_no) or 1
+			if to_case > max_case_no:
+				max_case_no = to_case
+				
+		for item in ps_items:
 			if item.dn_detail:
 				packed_qty_map[item.dn_detail] = packed_qty_map.get(item.dn_detail, 0) + flt(item.qty)
 

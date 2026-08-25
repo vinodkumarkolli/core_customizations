@@ -28,3 +28,6 @@ This document serves as the single source of truth for all domain logic and oper
 
 ## Epic 7: Document Dependency & Cancellation Guardrails
 * **`[BR-CAN-001]` Strict Reverse Cancellation Sequence**: Cancellation must strictly follow downstream reversal: `Payment Entry` -> `Sales Invoice` -> `Delivery Note` -> `Sales Order`. Attempting to cancel an upstream document with an active downstream dependency must be blocked by a `LinkValidationError`.
+
+## Epic 8: Purchase & Inbound Logistics
+* **`[BR-PUR-001]` 3PL Inbound Receipt Dependency**: When a Purchase Invoice contains any 3PL Item (custom_3pl_item = 1), it must not update stock directly. Every 3PL Item row must be billed against a linked Purchase Receipt to ensure the 3PL warehouse handles the actual inbound stock movement.

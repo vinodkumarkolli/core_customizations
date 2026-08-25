@@ -174,10 +174,21 @@ def ensure_test_fixtures():
     if needs_save:
         company_doc.save(ignore_permissions=True)
 
-    # --- Fiscal Year Extension ---
-    # ERPNext creates standard test fiscal years which might expire based on current date.
-    # Extend all fiscal years to 2030 so that nowdate() always falls within them.
-    frappe.db.sql("UPDATE `tabFiscal Year` SET year_end_date='2030-03-31'")
+    # --- Fiscal Year ---
+    # ERPNext Fiscal Years must be exactly one year long.
+    if not frappe.db.exists("Fiscal Year", "2026-2027"):
+        frappe.get_doc({
+            "doctype": "Fiscal Year",
+            "year": "2026-2027",
+            "year_start_date": "2026-04-01",
+            "year_end_date": "2027-03-31",
+            "disabled": 0,
+            "companies": [
+                {"company": "Sravi Enterprises - Kolapakkam"}
+            ]
+        }).insert(ignore_permissions=True)
+    
+    # Ensure cache is cleared so the new Fiscal Year is picked up globally
     frappe.cache().delete_key("fiscal_years")
     frappe.clear_cache()
     
@@ -206,6 +217,15 @@ def ensure_test_fixtures():
             "country": "India",
             "template": "{{ address_line1 }}<br>{{ city }}<br>{{ state }} - {{ pincode }}<br>{{ country }}",
             "is_default": 1
+        }).insert(ignore_permissions=True)
+
+    # --- Mode of Payment ---
+    if not frappe.db.exists("Mode of Payment", "Cash"):
+        frappe.get_doc({
+            "doctype": "Mode of Payment",
+            "mode_of_payment": "Cash",
+            "enabled": 1,
+            "type": "Cash"
         }).insert(ignore_permissions=True)
 
     frappe.db.commit()

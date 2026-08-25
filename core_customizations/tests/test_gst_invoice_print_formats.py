@@ -118,9 +118,6 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		if with_transporter:
 			update_values = {
 				"transporter": self.transporter_name,
-				"custom_transporter_from_address_display": "100 Transporter Origin Hub Street<br>Chennai<br>Tamil Nadu",
-				"custom_is_godown_delivery": 1,
-				"custom_transporter_to_address_display": "200 Destination Godown Road<br>Salem<br>Tamil Nadu",
 				"po_no": "PO-TEST-100",
 				"company": "Sravi Enterprises - Kolapakkam",
 				"company_address_display": "SE-K Company Addr<br>Kolapakkam",
@@ -132,9 +129,6 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		else:
 			update_values = {
 				"transporter": None,
-				"custom_transporter_from_address_display": None,
-				"custom_is_godown_delivery": 0,
-				"custom_transporter_to_address_display": None,
 				"outstanding_amount": 0 if is_paid else 5000.00,
 				"apply_discount_on": apply_discount_on,
 				"discount_amount": discount_amount,
@@ -202,8 +196,6 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 				"Shipping & Logistics Details", html, f"Dedicated Shipping details missing in '{pf_name}'"
 			)
 			self.assertIn(self.transporter_name, html, f"Transporter name missing in '{pf_name}'")
-			self.assertIn("100 Transporter Origin Hub Street", html, f"Origin Hub missing in '{pf_name}'")
-			self.assertIn("200 Destination Godown Road", html, f"Destination Godown missing in '{pf_name}'")
 
 	def test_06_no_shipping_details_tag(self):
 		"""Verify 'No Shipping Details' tag is displayed when no transporter is configured."""

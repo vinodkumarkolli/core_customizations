@@ -1,5 +1,7 @@
 import frappe
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 class TestMaterialRequestAutomation(unittest.TestCase):
 	@classmethod
@@ -177,3 +179,42 @@ class TestMaterialRequestAutomation(unittest.TestCase):
 			# Cleanup: remove the second supplier row so other tests are unaffected
 			frappe.db.delete("Item Supplier", {"parent": self.item_code, "supplier": second_supplier})
 			frappe.db.commit()
+
+	def test_04_po_pdf_uses_supplier_gstin_password(self):
+		from core_customizations.core_customizations import material_request
+
+		supplier_name = self.supplier
+		frappe.db.set_value("Supplier", supplier_name, "tax_id", "33AAGCR8772D1Z9")
+
+		po = SimpleNamespace(name="PUR-ORD-TEST-0001", supplier=supplier_name)
+
+		with patch("frappe.utils.print_utils.attach_print") as mock_attach_print:
+			mock_attach_print.return_value = {"fname": "PUR-ORD-TEST-0001.pdf", "fcontent": b"pdf"}
+			attachment = material_request.build_po_pdf_attachment(po)
+
+		mock_attach_print.assert_called_once()
+		_, kwargs = mock_attach_print.call_args
+		self.assertEqual(kwargs["doctype"], "Purchase Order")
+		self.assertEqual(kwargs["name"], "PUR-ORD-TEST-0001")
+		self.assertEqual(kwargs["print_format"], "GST Purchase Order")
+		self.assertEqual(kwargs["password"], "33AAGCR8772D1Z9")
+		self.assertEqual(attachment["fname"], "PUR-ORD-TEST-0001.pdf")
+
+	def test_05_po_pdf_falls_back_to_supplier_name_password(self):
+		from core_customizations.core_customizations import material_request
+
+		supplier_name = self.supplier
+		frappe.db.set_value("Supplier", supplier_name, "tax_id", "")
+		frappe.db.set_value("Supplier", supplier_name, "gstin", "")
+		frappe.db.set_value("Supplier", supplier_name, "supplier_name", "S 1@u_pp!?")
+
+		fallback = material_request.build_supplier_fallback_password(supplier_name)
+		self.assertEqual(fallback, "SUPP1234")
+
+		po = SimpleNamespace(name="PUR-ORD-TEST-0002", supplier=supplier_name)
+		with patch("frappe.utils.print_utils.attach_print") as mock_attach_print:
+			mock_attach_print.return_value = {"fname": "PUR-ORD-TEST-0002.pdf", "fcontent": b"pdf"}
+			material_request.build_po_pdf_attachment(po)
+
+		_, kwargs = mock_attach_print.call_args
+		self.assertEqual(kwargs["password"], "SUPP1234")

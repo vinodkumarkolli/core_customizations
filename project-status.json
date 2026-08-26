@@ -51,6 +51,12 @@
       "name": "Purchase & Inbound Logistics",
       "status": "Done",
       "completion_percentage": 100
+    },
+    {
+      "epic_id": "Epic 9",
+      "name": "Automated Procurement (MR → PO Automation)",
+      "status": "In Progress",
+      "completion_percentage": 85
     }
   ],
   "ci_cd": {
@@ -63,5 +69,5 @@
     "active_bugs": []
   },
   "bugs": [],
-  "current_focus": "Epic 3: Fixed Godown Pickup and Origin Hub addresses in 4x6 Shipping Label Print Formats. All 72 tests passing green."
+  "current_focus": "Epic 9: Added GST Purchase Order PDF attachment password fallback rules and fixed PO print format company header and warehouse Ship To rendering."
 }

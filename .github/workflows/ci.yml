@@ -49,6 +49,7 @@ jobs:
           curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
           apt-get install -y nodejs
           npm install -g yarn
+          echo "Node and Yarn are ready for Cypress."
           
       - name: Setup Frappe Bench
         run: |
@@ -112,5 +113,6 @@ jobs:
           set -e
           export PATH=$PATH:~/.local/bin
           cd test-bench
-          bench --site test.local run-ui-tests core_customizations --headless
+          export NODE_OPTIONS="--dns-result-order=ipv4first"
+          bench --site test.local run-ui-tests core_customizations --headless --browser chrome
           RUN_UI_TESTS

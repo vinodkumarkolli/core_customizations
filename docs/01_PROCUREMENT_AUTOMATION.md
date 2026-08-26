@@ -93,6 +93,23 @@ For the `GST Purchase Order` print format to display the correct delivery addres
    - **Link Name**: *(your warehouse name)*
 7. **Save** the Address.
 
+### 5. PDF Password Rule
+The auto-generated PO PDF uses a password rule for supplier privacy.
+
+1. If the supplier has a GSTIN in `Supplier.tax_id` or `Supplier.gstin`, use that value as the PDF password.
+2. If both fields are empty, keep the PDF attached and use a fallback password from the supplier name.
+3. Build the fallback password from the first 8 letters of the supplier name.
+4. Remove spaces, symbols, and numbers before you count the letters.
+5. If fewer than 8 letters remain, pad the password with digits in order until it reaches 8 characters.
+
+Examples:
+
+| Supplier name | Fallback password |
+|---------------|-------------------|
+| `S 1@u_pp!?` | `SUPP1234` |
+| `SUPPL` | `SUPPL123` |
+| `SUPPLI` | `SUPPLI12` |
+
 ---
 
 ## How It Works (Automatic)

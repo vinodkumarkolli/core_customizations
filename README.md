@@ -240,7 +240,45 @@ Available in 3 copies (`Original for Receiver`, `Duplicate for Transporter`, `Tr
 
 ---
 
-## 9. Running Automated Test Suites
+## 9. Automated Procurement: Material Request → Purchase Order
+
+When the ERPNext **Auto Reorder** raises a `Material Request` of type **Purchase**, the system automatically generates a draft Purchase Order — eliminating manual PO creation for re-order replenishments.
+
+```mermaid
+graph TD
+    AR[Auto Reorder Trigger] --> MR["Material Request\n(type: Purchase)"]
+    MR -->|on_submit hook| CHK{All items have\nexactly 1 supplier?}
+    CHK -->|NO| SKIP["Abort & Log Error\n(Manual PO required)"]
+    CHK -->|YES| PO["Draft Purchase Order\n(set_warehouse carried over)"]
+    PO --> EMAIL["Email Notification\nSupplier + Internal Team"]
+```
+
+### Business Rules
+| Rule | Constraint |
+|------|-----------|
+| **`[BR-PROC-001]`** | Supplier resolved from **Item Supplier** child table (Purchasing tab), not Item Default |
+| **`[BR-PROC-002]`** | Auto-generated POs always remain in **Draft** state for human review |
+| **`[BR-PROC-003]`** | Automation fires **only** when every item has **exactly 1 supplier** configured. Zero or multiple suppliers abort the automation and require manual PO |
+| **`[BR-PROC-004]`** | `set_warehouse` from the MR is propagated to the PO so the Warehouse shipping address resolves correctly on the print format |
+| **`[BR-PROC-005]`** | Email is sent to both the Supplier contact and the Company's purchasing email on every successful PO creation |
+| **`[BR-PROC-006]`** | Idempotency: if a PO already references this MR, the hook exits silently without creating a duplicate |
+
+### Configuring Items for Automation
+1. Open the **Item** master → **Purchasing** tab.
+2. Under **Supplier Details → Item Supplier** table, add exactly **one** Supplier row.
+3. Ensure the target **Warehouse** has a linked `Address` record so the `GST Purchase Order` print format renders the correct delivery address in the *Ship To* column.
+
+### GST Purchase Order Print Format
+Auto-generated POs use the **`GST Purchase Order`** custom print format (A4, Jinja) which mirrors the GST Sales Invoice aesthetic:
+* **Supplier Details** (left): Supplier name, address, GSTIN, phone.
+* **Order Details** (centre): PO number, transaction date, required-by date.
+* **Ship To** (right): Company name + Warehouse shipping address + Company GSTIN.
+* **Items Table**: Item, Qty, List Rate, Discount %, Taxable Amount.
+* **GST Tax Breakup Table**: Rate, taxable base, tax amount per row.
+
+---
+
+## 10. Running Automated Test Suites
 
 Run integration tests for the entire app or by specific module:
 

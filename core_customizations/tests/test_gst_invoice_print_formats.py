@@ -238,6 +238,16 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 			item.so_detail = None
 			item.delivery_note = None
 			item.dn_detail = None
+		if not inv.taxes:
+			tax_account = frappe.db.get_value("Account", {"company": inv.company, "account_type": "Tax", "is_group": 0})
+			if not tax_account:
+				tax_account = frappe.db.get_value("Account", {"company": inv.company, "is_group": 0})
+			inv.append("taxes", {
+				"charge_type": "On Net Total",
+				"account_head": tax_account,
+				"description": "CGST @ 9%",
+				"rate": 9,
+			})
 		inv.apply_discount_on = "Grand Total"
 		inv.additional_discount_percentage = 10.0
 		inv.update_stock = 0

@@ -150,6 +150,9 @@ after_migrate = "core_customizations.setup.after_migrate"
 # Hook on document methods and events
 
 doc_events = {
+	"Material Request": {
+		"on_submit": "core_customizations.core_customizations.material_request.auto_create_po"
+	},
 	"Purchase Invoice": {
 		"validate": "core_customizations.core_customizations.purchase_invoice.validate_3pl_items",
 	},

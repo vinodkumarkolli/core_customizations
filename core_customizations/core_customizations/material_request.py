@@ -1,5 +1,4 @@
 import frappe
-from erpnext.stock.doctype.material_request.mapper import make_purchase_order
 
 def auto_create_po(doc, method):
 	"""
@@ -26,14 +25,28 @@ def auto_create_po(doc, method):
 		frappe.log_error("Existing PO found")
 		return
 
-	# @businessFormula Collect all unique default suppliers from the requested items
+	# @businessFormula Collect all unique suppliers from the Item Supplier child table
+	# [BR-PROC-001] Supplier is defined per-item in the "Item Supplier" child table
+	# (Purchasing tab of the Item master), not in Item Default.
+	# [BR-PROC-003] Automation is strictly limited to MRs where every item
+	# has exactly ONE configured supplier. Mixed or ambiguous supplier
+	# configurations require manual PO creation.
 	suppliers = set()
 	for item in doc.items:
-		supplier = getattr(item, "default_supplier", None)
-		if not supplier:
-			supplier = frappe.db.get_value("Item Default", {"parent": item.item_code, "company": doc.company}, "default_supplier")
-		if supplier:
-			suppliers.add(supplier)
+		item_suppliers = frappe.db.get_all(
+			"Item Supplier", filters={"parent": item.item_code}, fields=["supplier"]
+		)
+		if len(item_suppliers) != 1:
+			frappe.log_error(
+				title=f"MR→PO Automation Skipped: {doc.name}",
+				message=(
+					f"Item '{item.item_code}' has {len(item_suppliers)} supplier(s) configured. "
+					f"Automation requires exactly 1 supplier per item. "
+					f"Please create the Purchase Order manually."
+				)
+			)
+			return
+		suppliers.add(item_suppliers[0].supplier)
 
 	frappe.log_error("Suppliers found: " + str(suppliers))
 	if not suppliers:
@@ -42,7 +55,14 @@ def auto_create_po(doc, method):
 
 	for supplier in suppliers:
 		try:
-			# Native ERPNext mapper to build the PO
+			# [BR-PROC-001] Native ERPNext mapper to build the PO.
+			# Use a lazy import for cross-version compatibility:
+			# - ERPNext v16+: make_purchase_order lives in the main material_request module.
+			# - ERPNext v14/v15: it lived in the separate mapper module.
+			try:
+				from erpnext.stock.doctype.material_request.material_request import make_purchase_order
+			except ImportError:
+				from erpnext.stock.doctype.material_request.mapper import make_purchase_order  # v14/v15 fallback
 			po = make_purchase_order(doc.name)
 			po.supplier = supplier
 			if doc.set_warehouse:
@@ -52,11 +72,10 @@ def auto_create_po(doc, method):
 			if len(suppliers) > 1:
 				valid_items = []
 				for po_item in po.items:
-					mr_item = frappe.get_doc("Material Request Item", po_item.material_request_item)
-					item_supplier = getattr(mr_item, "default_supplier", None)
-					if not item_supplier:
-						item_supplier = frappe.db.get_value("Item Default", {"parent": mr_item.item_code, "company": doc.company}, "default_supplier")
-					
+					# Lookup supplier from Item Supplier child table
+					item_supplier = frappe.db.get_value(
+						"Item Supplier", {"parent": po_item.item_code}, "supplier"
+					)
 					if item_supplier == supplier:
 						valid_items.append(po_item)
 				

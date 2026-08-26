@@ -31,3 +31,11 @@ This document serves as the single source of truth for all domain logic and oper
 
 ## Epic 8: Purchase & Inbound Logistics
 * **`[BR-PUR-001]` 3PL Inbound Receipt Dependency**: When a Purchase Invoice contains any 3PL Item (custom_3pl_item = 1), it must not update stock directly. Every 3PL Item row must be billed against a linked Purchase Receipt to ensure the 3PL warehouse handles the actual inbound stock movement.
+
+## Epic 9: Automated Procurement (MR → PO Automation)
+* **`[BR-PROC-001]` Supplier Source of Truth**: The authoritative source for an Item's supplier is the **"Item Supplier"** child table on the Item master (Purchasing tab), not Item Default. All automation logic must query `tabItem Supplier` for supplier resolution.
+* **`[BR-PROC-002]` Draft PO Generation**: All auto-generated Purchase Orders must remain in **Draft** state (`docstatus = 0`) for mandatory human review and approval before submission. The system must never auto-submit a PO.
+* **`[BR-PROC-003]` Single-Supplier Constraint**: The MR → PO automation is **only triggered when every item on the Material Request has exactly one (1) supplier** configured in its Item Supplier table. If any item has zero or more than one supplier, the automation must abort and log a descriptive error message, requiring the purchasing team to create the PO manually.
+* **`[BR-PROC-004]` Warehouse Propagation**: The `set_warehouse` from the originating Material Request must be explicitly carried over to the auto-generated Purchase Order so that the shipping address resolves to the correct Warehouse delivery address on the `GST Purchase Order` print format.
+* **`[BR-PROC-005]` Email Notification on PO Creation**: Upon successful draft PO creation, email notifications must be dispatched to both (a) the Supplier's primary contact email and (b) the Company's purchasing email. If neither is found, the notification falls back to the System Manager.
+* **`[BR-PROC-006]` Idempotency Guard**: If a Purchase Order already exists that references the originating Material Request (checked via `Purchase Order Item.material_request`), the automation must detect this and silently exit without creating a duplicate PO.

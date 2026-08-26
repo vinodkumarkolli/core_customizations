@@ -132,6 +132,7 @@ class TestSetupPermissions(FrappeTestCase):
 			"GST Invoice - Original for Receiver",
 			"GST Invoice - Duplicate for Transporter",
 			"GST Invoice - Triplicate for Supplier",
+			"GST Purchase Order",
 			"Carton Shipping Label (4x6)",
 			"Shipping Package Label (4x6)",
 		]

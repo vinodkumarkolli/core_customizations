@@ -139,6 +139,24 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		inv.reload()
 		return inv
 
+	def _get_test_invoice_with_order_links(self):
+		base_inv = self._get_test_invoice(is_paid=True, with_transporter=True)
+		inv = frappe.copy_doc(base_inv)
+		inv.name = None
+		inv.set("items", [])
+		for row in base_inv.items:
+			item = row.as_dict()
+			item.pop("name", None)
+			item.pop("parent", None)
+			item.pop("parenttype", None)
+			item.pop("parentfield", None)
+			item["sales_order"] = "SO-TEST-0001"
+			item["delivery_note"] = "DN-TEST-0001"
+			inv.append("items", item)
+		inv.save()
+		inv.submit()
+		return inv
+
 	def test_01_all_gst_print_formats_exist(self):
 		"""Verify all 3 GST Print Formats exist with custom_format=1 and Jinja type."""
 		for pf_name in self.print_formats:
@@ -288,3 +306,14 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 				f"Over-the-Counter mode missing in '{pf_name}'",
 			)
 			self.assertIn("_Test POS Profile", html, f"POS Profile name missing in '{pf_name}'")
+
+	def test_11_sales_order_and_delivery_note_rendering(self):
+		"""Verify Sales Order and Delivery Note references render in the invoice details section."""
+		inv = self._get_test_invoice_with_order_links()
+
+		for pf_name in self.print_formats:
+			html = frappe.get_print("Sales Invoice", inv.name, print_format=pf_name)
+			self.assertIn("Sales Order:", html, f"Sales Order reference missing in '{pf_name}'")
+			self.assertIn("SO-TEST-0001", html, f"Sales Order value missing in '{pf_name}'")
+			self.assertIn("Delivery Note:", html, f"Delivery Note reference missing in '{pf_name}'")
+			self.assertIn("DN-TEST-0001", html, f"Delivery Note value missing in '{pf_name}'")

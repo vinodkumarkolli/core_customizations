@@ -8,7 +8,7 @@
       "epic_id": "Epic 1",
       "name": "Dual Sales & Fulfillment Architecture",
       "status": "In Progress",
-      "completion_percentage": 90
+      "completion_percentage": 92
     },
     {
       "epic_id": "Epic 2",
@@ -69,5 +69,5 @@
     "active_bugs": []
   },
   "bugs": [],
-  "current_focus": "Epic 9: Added GST Purchase Order PDF attachment password fallback rules and fixed PO print format company header and warehouse Ship To rendering."
+  "current_focus": "Epic 1: Added Sales Order and Delivery Note references to GST Invoice print formats and covered them with regression tests."
 }

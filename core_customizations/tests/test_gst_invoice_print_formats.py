@@ -238,6 +238,13 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 			item.so_detail = None
 			item.delivery_note = None
 			item.dn_detail = None
+		if not inv.taxes:
+			inv.append("taxes", {
+				"charge_type": "On Net Total",
+				"account_head": "_Test Account CGST - _TC",
+				"description": "CGST @ 9%",
+				"rate": 9,
+			})
 		inv.apply_discount_on = "Grand Total"
 		inv.additional_discount_percentage = 10.0
 		inv.update_stock = 0

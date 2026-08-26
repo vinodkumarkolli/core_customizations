@@ -37,7 +37,9 @@ class TestMaterialRequestAutomation(unittest.TestCase):
 				"item_name": cls.item_code,
 				"item_group": "Products",
 				"is_stock_item": 1,
+				"stock_uom": "Nos",
 				"gst_hsn_code": "999999",
+				"uoms": [{"uom": "Nos", "conversion_factor": 1.0}],
 				"item_defaults": [{"company": cls.company, "default_supplier": cls.supplier}]
 			}).insert(ignore_permissions=True)
 		

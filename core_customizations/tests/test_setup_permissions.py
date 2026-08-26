@@ -140,3 +140,15 @@ class TestSetupPermissions(FrappeTestCase):
 			self.assertTrue(
 				frappe.db.exists("Print Format", pf), f"Print Format '{pf}' is missing after sync."
 			)
+
+	def test_05_gst_purchase_order_template_includes_company_and_warehouse_details(self):
+		"""Verify the GST Purchase Order template references company and warehouse data."""
+		after_migrate()
+		pf = frappe.get_doc("Print Format", "GST Purchase Order")
+		html = pf.html
+
+		self.assertIn("{{ doc.company }}", html)
+		self.assertIn("{{ doc.company_gstin }}", html)
+		self.assertIn("{{ doc.supplier_name or doc.supplier }}", html)
+		self.assertIn("{{ doc.shipping_address_display", html)
+		self.assertIn("{{ doc.set_warehouse }}", html)

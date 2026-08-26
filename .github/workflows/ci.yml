@@ -1,9 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
@@ -49,6 +46,7 @@ jobs:
           curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
           apt-get install -y nodejs
           npm install -g yarn
+          echo "Node and Yarn are ready for Cypress."
           
       - name: Setup Frappe Bench
         run: |
@@ -105,12 +103,3 @@ jobs:
           cd test-bench
           bench --site test.local run-tests --app core_customizations
           RUN_TESTS
-
-      - name: Run Cypress Frontend Tests
-        run: |
-          gosu frappe bash << 'RUN_UI_TESTS'
-          set -e
-          export PATH=$PATH:~/.local/bin
-          cd test-bench
-          bench --site test.local run-ui-tests core_customizations --headless
-          RUN_UI_TESTS

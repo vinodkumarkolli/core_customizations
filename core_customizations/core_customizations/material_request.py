@@ -1,4 +1,5 @@
 import frappe
+import re
 
 def auto_create_po(doc, method):
 	"""
@@ -127,6 +128,15 @@ def send_po_email(po):
 		if system_managers:
 			recipients.append(system_managers[0].parent)
 
+	attachments = []
+	try:
+		attachments.append(build_po_pdf_attachment(po))
+	except Exception:
+		frappe.log_error(
+			title=f"Failed to build PO PDF attachment for {po.name}",
+			message=frappe.get_traceback(),
+		)
+
 	frappe.sendmail(
 		recipients=list(set(recipients)),
 		subject=f"New Purchase Order Created: {po.name}",
@@ -137,5 +147,56 @@ def send_po_email(po):
 		<p>Thank you.</p>
 		""",
 		reference_doctype="Purchase Order",
-		reference_name=po.name
+		reference_name=po.name,
+		attachments=attachments,
 	)
+
+
+def build_po_pdf_attachment(po):
+	"""Build a password-protected GST Purchase Order PDF attachment."""
+	from frappe.utils.print_utils import attach_print
+
+	password = get_supplier_gstin(po.supplier)
+	if not password:
+		password = build_supplier_fallback_password(po.supplier)
+	file_name = f"{po.name}.pdf"
+
+	return attach_print(
+		doctype="Purchase Order",
+		name=po.name,
+		file_name=file_name,
+		print_format="GST Purchase Order",
+		doc=po,
+		password=password,
+	)
+
+
+def get_supplier_gstin(supplier):
+	"""Return the supplier GSTIN / tax ID if available."""
+	if not supplier:
+		return None
+
+	supplier_doc = frappe.get_cached_doc("Supplier", supplier)
+	return (supplier_doc.get("tax_id") or supplier_doc.get("gstin") or "").strip() or None
+
+
+def build_supplier_fallback_password(supplier):
+	"""Build a stable fallback password from the supplier name.
+
+	Use the first 8 alphabetic characters from the supplier name. If fewer than 8
+	remain after stripping spaces, symbols, and numbers, pad with sequential digits
+	so the result stays 8 characters long.
+	"""
+	if not supplier:
+		return None
+
+	supplier_doc = frappe.get_cached_doc("Supplier", supplier)
+	letters_only = re.sub(r"[^A-Za-z]", "", supplier_doc.supplier_name or supplier_doc.name or supplier)
+	base = letters_only[:8].upper()
+	if not base:
+		return None
+
+	if len(base) < 8:
+		base += "".join(str(i) for i in range(1, 9))[: 8 - len(base)]
+
+	return base

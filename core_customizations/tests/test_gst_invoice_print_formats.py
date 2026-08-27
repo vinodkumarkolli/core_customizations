@@ -143,18 +143,14 @@ class TestGSTInvoicePrintFormats(IntegrationTestCase):
 		base_inv = self._get_test_invoice(is_paid=True, with_transporter=True)
 		inv = frappe.copy_doc(base_inv)
 		inv.name = None
-		inv.set("items", [])
-		for row in base_inv.items:
-			item = row.as_dict()
-			item.pop("name", None)
-			item.pop("parent", None)
-			item.pop("parenttype", None)
-			item.pop("parentfield", None)
-			item["sales_order"] = "SO-TEST-0001"
-			item["delivery_note"] = "DN-TEST-0001"
-			inv.append("items", item)
+		inv.docstatus = 0
+		for row in inv.items:
+			row.sales_order = "SO-TEST-0001"
+			row.delivery_note = "DN-TEST-0001"
+		inv.flags.ignore_links = True
+		inv.flags.ignore_validate = True
 		inv.save()
-		inv.submit()
+		inv.reload()
 		return inv
 
 	def test_01_all_gst_print_formats_exist(self):

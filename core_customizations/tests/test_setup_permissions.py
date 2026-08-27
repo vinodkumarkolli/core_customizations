@@ -150,5 +150,6 @@ class TestSetupPermissions(FrappeTestCase):
 		self.assertIn("{{ doc.company }}", html)
 		self.assertIn("doc.company_tax_id or doc.company_gstin", html)  # GSTIN rendered via company_tax_id or company_gstin
 		self.assertIn("{{ doc.supplier_name or doc.supplier }}", html)
-		self.assertIn("doc.shipping_address", html)  # Warehouse / shipping address block
-		self.assertIn("{{ doc.set_warehouse }}", html)
+		self.assertIn("Ship To Warehouse Address", html)
+		self.assertIn("ship_warehouse_name = doc.set_warehouse", html)
+		self.assertIn('warehouse_address = frappe.get_doc("Address", warehouse_address_name)', html)

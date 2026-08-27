@@ -7,7 +7,7 @@
 
 ## Overview
 
-When stock falls below the reorder level, ERPNext raises a **Material Request** of type `Purchase`. This app intercepts the MR submission and automatically generates a **Draft Purchase Order**, sends email notifications, and carries over the target warehouse — eliminating manual PO creation for routine replenishments.
+When stock falls below the reorder level, ERPNext raises a **Material Request** of type `Purchase`. This app intercepts the MR submission and automatically generates one or more **Draft Purchase Orders** grouped by **warehouse + supplier**, sends email notifications, and carries over the target warehouse for each group — eliminating manual PO creation for routine replenishments.
 
 ```
 Auto Reorder Trigger
@@ -17,8 +17,10 @@ Material Request (type: Purchase) — Submitted
   Single supplier per item? ──NO──→ Abort + Log Error (Manual PO)
         │ YES
         ↓
-  Draft Purchase Order created
-  (set_warehouse carried over)
+  Group by warehouse + supplier
+        ↓
+  Draft Purchase Order(s) created
+  (one PO per warehouse/supplier pair)
         ↓
   Email → Supplier + Internal Team
 ```
@@ -81,7 +83,7 @@ Material Request (type: Purchase) — Submitted
 
 ### 4. Configure Internal Purchasing Email (Company)
 
-### 4. Configure Warehouse Address (for Print Format)
+### 5. Configure Warehouse Address (for Print Format)
 For the `GST Purchase Order` print format to display the correct delivery address in the *Ship To* column:
 1. Go to **Stock → Warehouse** → open the target warehouse (e.g. `WIP Godown - Sravi`).
 2. Click **Edit** and note the Warehouse name.
@@ -93,7 +95,7 @@ For the `GST Purchase Order` print format to display the correct delivery addres
    - **Link Name**: *(your warehouse name)*
 7. **Save** the Address.
 
-### 5. PDF Password Rule
+### 6. PDF Password Rule
 The auto-generated PO PDF uses a password rule for supplier privacy.
 
 1. If the supplier has a GSTIN in `Supplier.tax_id` or `Supplier.gstin`, use that value as the PDF password.
@@ -120,13 +122,15 @@ Once the above is configured, the automation is fully transparent:
 2. **MR is auto-submitted** by the reorder job.
 3. **`auto_create_po` hook fires** on MR submission:
    - Validates `material_request_type == "Purchase"`.
-   - Checks idempotency (no duplicate PO for same MR).
+   - Checks idempotency per warehouse + supplier group so reruns do not duplicate POs.
    - Verifies exactly 1 supplier per item — aborts with error log if not.
-   - Calls ERPNext's native `make_purchase_order` mapper.
-   - Assigns `supplier` and `set_warehouse` from the MR.
-   - Calls `set_missing_values()` to resolve taxes, addresses, etc.
-   - Inserts the PO as **Draft**.
-   - Dispatches email to Supplier contact + Company purchasing email.
+   - Resolves the target warehouse from the MR line first, then the MR header, then reorder context.
+   - Groups MR items by warehouse + supplier.
+   - Calls ERPNext's native `make_purchase_order` mapper once per group.
+   - Assigns `supplier` and `set_warehouse` for that group.
+   - Calls `set_missing_values()` to resolve taxes, addresses, and print-path defaults.
+   - Inserts each PO as **Draft**.
+   - Dispatches email to Supplier contact + Company purchasing email for each created PO.
 4. **Purchasing team receives email** and reviews the Draft PO in ERPNext.
 5. **Purchasing team submits the PO** after review.
 
@@ -152,6 +156,7 @@ To test the automation without waiting for the overnight scheduler:
 |---------|-------|-----|
 | No PO created after MR submit | Item has 0 or 2+ suppliers | Check `Item → Purchasing → Item Supplier` table — ensure exactly 1 row |
 | No PO created | MR type is not `Purchase` | Set `material_request_type = Purchase` on the MR |
+| PO created but grouped incorrectly | Item rows are missing warehouse values | Ensure the MR line has a warehouse or the reorder context can resolve one before automation runs |
 | PO created but no email sent | Supplier has no Contact with email | Add Contact with email to the Supplier master |
 | PO created with wrong address | Warehouse has no linked Address | Create an Address record linked to the Warehouse (see setup step 4) |
 | Duplicate PO not prevented | Idempotency check failing | Check `[BR-PROC-006]`: verify `Purchase Order Item.material_request` field is set |
@@ -165,6 +170,6 @@ Check **Frappe Error Log** (Settings → Error Log) for detailed `MR→PO Automa
 - `[BR-PROC-001]` Supplier resolved from Item Supplier child table
 - `[BR-PROC-002]` POs always remain Draft for human review
 - `[BR-PROC-003]` Single-supplier constraint — automation aborts if != 1 supplier
-- `[BR-PROC-004]` `set_warehouse` propagated from MR to PO
+- `[BR-PROC-004]` POs are split by warehouse + supplier and keep the group's `set_warehouse` / Ship To context
 - `[BR-PROC-005]` Email to both Supplier and internal team on PO creation
 - `[BR-PROC-006]` Idempotency — no duplicate PO for same MR

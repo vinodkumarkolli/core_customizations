@@ -96,7 +96,7 @@ The **Ship To** column renders the Warehouse shipping address. For this to work 
 1. Create an `Address` record (Contacts → Address → New).
 2. Set **Address Type** to `Shipping`.
 3. In the **Links** table, link it to your **Warehouse**.
-4. The PO's `shipping_address_display` will automatically resolve to this address when the `set_warehouse` is set on the PO.
+4. The PO print path resolves the warehouse-linked address first. If `set_warehouse` is not available, the print format falls back to the first PO item's warehouse and then to the PO shipping/dispatch address.
 
 ### Selecting the Print Format
 1. Open a Purchase Order.
@@ -215,6 +215,6 @@ bench --site zap.localhost run-tests --module core_customizations.tests.test_set
 |---------|-------|-----|
 | Print format not appearing in dropdown | Module filter mismatch | Check that `module = "Core Customizations"` in the fixture |
 | UPI QR not showing | Outstanding amount = 0 or UPI ID not set | Add UPI ID in Company → Bank Details for Printing |
-| Warehouse address not in PO "Ship To" | No Address linked to Warehouse | Create an Address record linked to the Warehouse (Contacts → Address) |
+| Warehouse address not in PO "Ship To" | No Address linked to Warehouse, or PO warehouse was not resolved | Create an Address record linked to the Warehouse (Contacts → Address) and ensure the MR automation sets the PO warehouse per group |
 | Packing slip IDs not showing on DN print | Packing slips are Draft (not submitted) | Submit packing slips first; Draft slips are excluded from print |
 | Old/deleted format still showing | Frappe cached print format list | Clear cache: `bench --site ... clear-cache` |

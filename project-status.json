@@ -54,9 +54,9 @@
     },
     {
       "epic_id": "Epic 9",
-      "name": "Automated Procurement (MR → PO Automation)",
+      "name": "Automated Procurement (MR \u2192 PO Automation)",
       "status": "In Progress",
-      "completion_percentage": 85
+      "completion_percentage": 92
     }
   ],
   "ci_cd": {
@@ -64,10 +64,10 @@
       "total_tests": 72,
       "open_bugs": 0,
       "resolved_bugs": 13,
-      "last_updated": "2026-08-25T16:35:00Z"
+      "last_updated": "2026-08-27T00:00:00Z"
     },
     "active_bugs": []
   },
   "bugs": [],
-  "current_focus": "Epic 1: Added Sales Order and Delivery Note references to GST Invoice print formats and covered them with regression tests."
+  "current_focus": "Epic 9: Updated MR \u2192 PO automation to split Draft POs by warehouse + supplier and documented the warehouse-aware Ship To flow."
 }

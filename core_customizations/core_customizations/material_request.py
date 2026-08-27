@@ -1,129 +1,137 @@
-import frappe
 import re
 
+import frappe
+
+
 def auto_create_po(doc, method):
-	"""
-	Intercepts the Material Request submission event to automatically generate a Purchase Order.
-	
-	Business Purpose: Streamlines the procurement process by eliminating manual PO creation 
-	when the system Auto Reorder logic raises a Material Request.
-	
-	Args:
-		doc (Document): The Material Request document being submitted.
-		method (str): The hook method name (e.g., 'on_submit').
-		
-	Raises:
-		Exception: Logs to Frappe Error Log if PO creation or email dispatch fails.
-	"""
+	"""Create draft Purchase Orders from a Purchase Material Request."""
 	if doc.material_request_type != "Purchase":
 		return
 
 	frappe.log_error("auto_create_po triggered for " + doc.name)
-	# @businessRule [BR-PROC-001] Automated PO Idempotency Check
-	# Ensures that if a Material Request is re-submitted or modified, duplicate POs are not created.
-	existing_po = frappe.db.get_value("Purchase Order Item", {"material_request": doc.name}, "parent")
-	if existing_po:
-		frappe.log_error("Existing PO found")
+	groups = build_po_groups(doc)
+	if not groups:
+		frappe.log_error(title=f"MR→PO Automation Skipped: {doc.name}", message="No valid warehouse/supplier groups found.")
 		return
 
-	# @businessFormula Collect all unique suppliers from the Item Supplier child table
-	# [BR-PROC-001] Supplier is defined per-item in the "Item Supplier" child table
-	# (Purchasing tab of the Item master), not in Item Default.
-	# [BR-PROC-003] Automation is strictly limited to MRs where every item
-	# has exactly ONE configured supplier. Mixed or ambiguous supplier
-	# configurations require manual PO creation.
-	suppliers = set()
-	for item in doc.items:
-		item_suppliers = frappe.db.get_all(
-			"Item Supplier", filters={"parent": item.item_code}, fields=["supplier"]
-		)
-		if len(item_suppliers) != 1:
+	for group in groups:
+		if existing_purchase_order_for_group(doc.name, group["warehouse"], group["supplier"]):
 			frappe.log_error(
 				title=f"MR→PO Automation Skipped: {doc.name}",
 				message=(
-					f"Item '{item.item_code}' has {len(item_suppliers)} supplier(s) configured. "
-					f"Automation requires exactly 1 supplier per item. "
-					f"Please create the Purchase Order manually."
-				)
+					f"Purchase Order already exists for MR {doc.name}, warehouse {group['warehouse']}, "
+					f"and supplier {group['supplier']}."
+				),
 			)
-			return
-		suppliers.add(item_suppliers[0].supplier)
+			continue
 
-	frappe.log_error("Suppliers found: " + str(suppliers))
-	if not suppliers:
-		frappe.log_error("No suppliers found, aborting PO creation")
-		return
-
-	for supplier in suppliers:
 		try:
-			# [BR-PROC-001] Native ERPNext mapper to build the PO.
-			# Use a lazy import for cross-version compatibility:
-			# - ERPNext v16+: make_purchase_order lives in the main material_request module.
-			# - ERPNext v14/v15: it lived in the separate mapper module.
-			try:
-				from erpnext.stock.doctype.material_request.material_request import make_purchase_order
-			except ImportError:
-				from erpnext.stock.doctype.material_request.mapper import make_purchase_order  # v14/v15 fallback
 			po = make_purchase_order(doc.name)
-			po.supplier = supplier
-			if doc.set_warehouse:
-				po.set_warehouse = doc.set_warehouse
-			
-			# Filter items for this specific supplier only if there are multiple suppliers
-			if len(suppliers) > 1:
-				valid_items = []
-				for po_item in po.items:
-					# Lookup supplier from Item Supplier child table
-					item_supplier = frappe.db.get_value(
-						"Item Supplier", {"parent": po_item.item_code}, "supplier"
-					)
-					if item_supplier == supplier:
-						valid_items.append(po_item)
-				
-				po.items = valid_items
-				
+			po.supplier = group["supplier"]
+			if group["warehouse"]:
+				po.set_warehouse = group["warehouse"]
+
+			po.items = [item for item in po.items if item.material_request == doc.name and item.warehouse == group["warehouse"] and item.item_code in group["item_codes"]]
 			if not po.items:
 				continue
 
-			# Set standard defaults like taxes, pricing, etc.
 			po.set_missing_values()
-			
-			# @businessRule [BR-PROC-002] Draft PO Generation
-			# All auto-generated POs must remain in Draft state for human review prior to submission.
 			po.insert(ignore_permissions=True)
-			
-			# Dispatch Emails
 			send_po_email(po)
-			
-		except Exception as e:
+		except Exception:
 			frappe.log_error(title=f"Failed to auto-create PO for {doc.name}", message=frappe.get_traceback())
 
+
+def build_po_groups(doc):
+	groups = {}
+	for item in doc.items:
+		supplier = get_single_supplier(item.item_code)
+		if not supplier:
+			frappe.log_error(
+				title=f"MR→PO Automation Skipped: {doc.name}",
+				message=(
+					f"Item '{item.item_code}' has zero or multiple suppliers configured. "
+					"Automation requires exactly 1 supplier per item."
+				),
+			)
+			return []
+
+		warehouse = resolve_target_warehouse(doc, item)
+		if not warehouse:
+			frappe.log_error(
+				title=f"MR→PO Automation Skipped: {doc.name}",
+				message=(
+					f"Item '{item.item_code}' does not resolve to a warehouse. "
+					"Automation requires a warehouse to split Purchase Orders."
+				),
+			)
+			return []
+
+		key = (warehouse, supplier)
+		if key not in groups:
+			groups[key] = {
+				"warehouse": warehouse,
+				"supplier": supplier,
+				"item_codes": set(),
+			}
+		groups[key]["item_codes"].add(item.item_code)
+
+	return list(groups.values())
+
+
+def resolve_target_warehouse(doc, item):
+	if item.warehouse:
+		return item.warehouse
+	if doc.set_warehouse:
+		return doc.set_warehouse
+	return frappe.db.get_value("Item Reorder", {"parent": item.item_code}, "warehouse")
+
+
+def get_single_supplier(item_code):
+	item_suppliers = frappe.db.get_all("Item Supplier", filters={"parent": item_code}, fields=["supplier"])
+	if len(item_suppliers) != 1:
+		return None
+	return item_suppliers[0].supplier
+
+
+def existing_purchase_order_for_group(mr_name, warehouse, supplier):
+	po_items = frappe.get_all(
+		"Purchase Order Item",
+		filters={"material_request": mr_name, "warehouse": warehouse},
+		fields=["parent"],
+		distinct=True,
+	)
+	for row in po_items:
+		if frappe.db.get_value("Purchase Order", row.parent, "supplier") == supplier:
+			return row.parent
+	return None
+
+
+def make_purchase_order(mr_name):
+	try:
+		from erpnext.stock.doctype.material_request.material_request import make_purchase_order
+	except ImportError:
+		from erpnext.stock.doctype.material_request.mapper import make_purchase_order
+	return make_purchase_order(mr_name)
+
+
 def send_po_email(po):
-	"""
-	Dispatches an email notification to both the Supplier and the internal purchasing team.
-	
-	Business Purpose: Ensures all stakeholders are immediately aware of newly auto-generated POs.
-	
-	Args:
-		po (Document): The newly created Purchase Order document.
-	"""
 	recipients = []
-	
-	# 1. Supplier Email
-	supplier_contact = frappe.db.get_value("Dynamic Link", {"link_doctype": "Supplier", "link_name": po.supplier, "parenttype": "Contact"}, "parent")
+	supplier_contact = frappe.db.get_value(
+		"Dynamic Link",
+		{"link_doctype": "Supplier", "link_name": po.supplier, "parenttype": "Contact"},
+		"parent",
+	)
 	if supplier_contact:
 		supplier_email = frappe.db.get_value("Contact", supplier_contact, "email_id")
 		if supplier_email:
 			recipients.append(supplier_email)
-	
-	# 2. Internal Purchasing Email
-	# Send to the company's default email or a specific purchase email if available
+
 	company_email = frappe.db.get_value("Company", po.company, "email")
 	if company_email:
 		recipients.append(company_email)
-	
+
 	if not recipients:
-		# Fallback to system manager if no emails found
 		system_managers = frappe.get_all("Has Role", filters={"role": "System Manager", "parenttype": "User"}, fields=["parent"])
 		if system_managers:
 			recipients.append(system_managers[0].parent)
@@ -132,10 +140,7 @@ def send_po_email(po):
 	try:
 		attachments.append(build_po_pdf_attachment(po))
 	except Exception:
-		frappe.log_error(
-			title=f"Failed to build PO PDF attachment for {po.name}",
-			message=frappe.get_traceback(),
-		)
+		frappe.log_error(title=f"Failed to build PO PDF attachment for {po.name}", message=frappe.get_traceback())
 
 	frappe.sendmail(
 		recipients=list(set(recipients)),
@@ -153,18 +158,16 @@ def send_po_email(po):
 
 
 def build_po_pdf_attachment(po):
-	"""Build a password-protected GST Purchase Order PDF attachment."""
 	from frappe.utils.print_utils import attach_print
 
 	password = get_supplier_gstin(po.supplier)
 	if not password:
 		password = build_supplier_fallback_password(po.supplier)
-	file_name = f"{po.name}.pdf"
 
 	return attach_print(
 		doctype="Purchase Order",
 		name=po.name,
-		file_name=file_name,
+		file_name=f"{po.name}.pdf",
 		print_format="GST Purchase Order",
 		doc=po,
 		password=password,
@@ -172,31 +175,20 @@ def build_po_pdf_attachment(po):
 
 
 def get_supplier_gstin(supplier):
-	"""Return the supplier GSTIN / tax ID if available."""
 	if not supplier:
 		return None
-
 	supplier_doc = frappe.get_cached_doc("Supplier", supplier)
 	return (supplier_doc.get("tax_id") or supplier_doc.get("gstin") or "").strip() or None
 
 
 def build_supplier_fallback_password(supplier):
-	"""Build a stable fallback password from the supplier name.
-
-	Use the first 8 alphabetic characters from the supplier name. If fewer than 8
-	remain after stripping spaces, symbols, and numbers, pad with sequential digits
-	so the result stays 8 characters long.
-	"""
 	if not supplier:
 		return None
-
 	supplier_doc = frappe.get_cached_doc("Supplier", supplier)
 	letters_only = re.sub(r"[^A-Za-z]", "", supplier_doc.supplier_name or supplier_doc.name or supplier)
 	base = letters_only[:8].upper()
 	if not base:
 		return None
-
 	if len(base) < 8:
 		base += "".join(str(i) for i in range(1, 9))[: 8 - len(base)]
-
 	return base

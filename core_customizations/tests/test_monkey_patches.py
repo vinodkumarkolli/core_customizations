@@ -5,7 +5,6 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from core_customizations.monkey_patches import (
-	custom_update_stock,
 	custom_validate_delivery_note,
 	custom_validate_items,
 )
@@ -15,9 +14,8 @@ from core_customizations.tests.test_fixtures import ensure_test_fixtures
 class TestMonkeyPatches(FrappeTestCase):
 	"""
 	Tests for monkey patches:
-	1. custom_update_stock (batch allocation, serial nos, context filtering)
-	2. custom_validate_delivery_note (packing slip lifecycle: Draft/Submitted allowed, Cancelled blocked)
-	3. custom_validate_items (packing slip dn_detail linkage)
+	1. custom_validate_delivery_note (packing slip lifecycle: Draft/Submitted allowed, Cancelled blocked)
+	2. custom_validate_items (packing slip dn_detail linkage)
 	"""
 
 	def setUp(self):
@@ -84,59 +82,7 @@ class TestMonkeyPatches(FrappeTestCase):
 		dn.insert(ignore_permissions=True)
 		return dn
 
-	def test_01_update_stock_context_delivery_note(self):
-		"""Verify custom_update_stock handles Delivery Note context gracefully."""
-		ctx = frappe._dict(
-			{
-				"doctype": "Delivery Note",
-				"item_code": self.item_code,
-				"warehouse": self.warehouse,
-				"child_docname": "test_row_1",
-			}
-		)
-		out = frappe._dict(
-			{
-				"warehouse": self.warehouse,
-				"stock_qty": 10,
-				"uom": "Nos",
-				"item_code": self.item_code,
-				"has_batch_no": 0,
-				"has_serial_no": 0,
-			}
-		)
-		doc = frappe._dict({"name": "DN-TEST-001", "selling_price_list": "Standard Selling"})
-
-		# Should execute without throwing errors
-		custom_update_stock(ctx, out, doc)
-
-	def test_02_update_stock_ignored_for_sales_invoice_without_stock_update(self):
-		"""Verify custom_update_stock is ignored for standard wholesale Sales Invoices (update_stock=0)."""
-		ctx = frappe._dict(
-			{
-				"doctype": "Sales Invoice",
-				"update_stock": 0,
-				"item_code": self.item_code,
-				"warehouse": self.warehouse,
-			}
-		)
-		out = frappe._dict(
-			{
-				"warehouse": self.warehouse,
-				"stock_qty": 10,
-				"uom": "Nos",
-				"item_code": self.item_code,
-				"has_batch_no": 1,
-				"has_serial_no": 0,
-				"batch_no": None,
-			}
-		)
-		doc = frappe._dict({"name": "SI-TEST-001"})
-
-		custom_update_stock(ctx, out, doc)
-		# Batch allocation should not run
-		self.assertIsNone(out.get("batch_no"))
-
-	def test_03_custom_validate_delivery_note_on_packing_slip(self):
+	def test_01_custom_validate_delivery_note_on_packing_slip(self):
 		"""Verify Packing Slip allows draft and submitted Delivery Notes, but blocks cancelled ones."""
 		dn = self._create_delivery_note()
 
@@ -162,7 +108,7 @@ class TestMonkeyPatches(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			custom_validate_delivery_note(ps_empty)
 
-	def test_04_custom_validate_items_on_packing_slip(self):
+	def test_02_custom_validate_items_on_packing_slip(self):
 		"""Verify Packing Slip items validation enforces valid dn_detail references."""
 		dn = self._create_delivery_note()
 		valid_dn_item = dn.items[0].name

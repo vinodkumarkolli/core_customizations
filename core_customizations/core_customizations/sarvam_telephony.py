@@ -239,12 +239,14 @@ def _get_issue_phone_and_name(issue):
 def trigger_support_call(issue_name: str):
 	"""
 	Business Purpose: [BR-TEL-002] [BR-TEL-003] Places an outbound Sarvam call
-	for a Support ticket's contact via Sarvam's instant-outbound REST API.
-	The Sarvam agent only greets the customer and immediately blind-transfers
-	the live call to the calling user's own registered mobile number - the
-	actual conversation is human-to-human, not with the AI - and logs the
-	attempt as a CRM Call Log so it appears alongside Twilio/Exotel calls
-	(see [BR-TEL-001] for how it is then resolved back to the Issue).
+	for a Support ticket via Sarvam's instant-outbound REST API. Sarvam dials
+	the calling user's own registered mobile first, briefs them on the
+	ticket, then immediately blind-transfers to the customer - so by the
+	time the customer's phone rings, the staff member is already live and
+	speaks to them directly, with no AI greeting on the customer's side at
+	all. Logs the attempt as a CRM Call Log so it appears alongside
+	Twilio/Exotel calls (see [BR-TEL-001] for how it is then resolved back
+	to the Issue).
 
 	Args:
 		issue_name (str): Name of the Issue to call about.
@@ -319,10 +321,16 @@ def trigger_support_call(issue_name: str):
 				"issue_subject": issue.subject or "",
 				"customer_name": customer_name or "",
 				"ticket_status": issue.status or "",
-				"transfer_to": caller_mobile,
+				# @businessRule [BR-TEL-003] Sarvam dials the STAFF member
+				# first (user_phone_number below) and briefs them, then
+				# blind-transfers to transfer_to (the customer) - so by the
+				# time the customer's phone rings, the staff member is
+				# already live and speaks to them directly, with no AI
+				# greeting on the customer's side at all.
+				"transfer_to": phone_number,
 			},
 		},
-		"user_config": {"user_phone_number": phone_number},
+		"user_config": {"user_phone_number": caller_mobile},
 		"webhook_config": {
 			"url": webhook_url,
 			"metadata": {"call_log": call_log.name},

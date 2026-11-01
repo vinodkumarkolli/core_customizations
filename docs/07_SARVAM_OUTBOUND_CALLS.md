@@ -8,29 +8,29 @@
 
 This app lets a registered support agent place an outbound call about an open **Issue** (Support ticket) through **Sarvam AI**, and have it logged as a **CRM Call Log** alongside Twilio/Exotel calls.
 
-**Important — this is a human-to-human call, not an AI conversation.** The Sarvam voice agent does not negotiate with the customer. It:
+**Important — this is a human-to-human call, not an AI conversation.** The Sarvam voice agent never speaks to the customer at all. It:
 
-1. Dials the Issue's contact.
-2. Says one or two short sentences confirming it's Sravi Enterprises Support calling about the ticket.
-3. Immediately **blind-transfers** the live call to the mobile number of the staff member who triggered it.
+1. Dials the **triggering staff member's own mobile first** (their `CRM Telephony Agent.mobile_no`).
+2. Briefs them in one or two short sentences: which ticket, which customer, current status.
+3. Immediately **blind-transfers** the live call to the customer.
 
-From that point on, the staff member and the customer are talking directly — Sarvam's only remaining job is to have bridged the call and, if the AI agent's own speech recognition is still in the audio path, to turn the resulting audio into a transcript. See [Known Limitations](#known-limitations) for why that last part isn't guaranteed.
+This ordering is deliberate: the customer's phone only starts ringing once the staff member is already live on the line, so when they pick up they're speaking directly to a human with no AI greeting or dead air on their end. (An earlier version of this flow dialed the customer first — worse, since the customer would hear the AI, then wait while the staff member's phone rang.)
 
 ```
 Frappe (trigger_support_call)
    │  POST /outbounds  (fire-and-forget)
    ▼
-Sarvam platform ── dials customer ──► "Hi, this is Sravi Enterprises Support
-                                        calling about ticket ...  Connecting
-                                        you now."
-                                        │
-                                        ▼ blind call_transfer
-                                   Staff member's own mobile rings
-                                        │
-                                        ▼
-                         Customer <──────────► Staff member (live call)
-                                        │
-                                        ▼ (call ends)
+Sarvam platform ── dials staff member ──► "Hi, this is about ticket ... for
+                                            <customer>, status ...
+                                            Connecting you now."
+                                            │
+                                            ▼ blind call_transfer
+                                       Customer's own mobile rings
+                                            │
+                                            ▼
+                         Staff member <──────────► Customer (live call)
+                                            │
+                                            ▼ (call ends)
 Frappe (handle_outbound_webhook) ◄── webhook POST ── Sarvam platform
    │
    ▼
@@ -48,7 +48,7 @@ This feature was built against one Sarvam workspace with:
 | Telephony connection | `8cbb7cc8-d8-abd294c3-1f9b` (provider: vobiz) | Sarvam dashboard → Telephony |
 | Onboarded number | `+918064276261` | Same connection |
 | Voice agent | `Support-Out-2128e33d-0fd3` ("Support Outbound") | Cloned from the existing Order Desk agent |
-| Committed agent version | `3` | Bumped every time the agent's prompt/config is recommitted |
+| Committed agent version | `4` | Bumped every time the agent's prompt/config is recommitted — **update `Sarvam Outbound Settings.support_agent_version` to match whenever this changes** |
 | Org ID | `01a163ae-efc7-75ff-8021-ba55a92f10b1` | Sarvam dashboard |
 | Workspace ID | `01a163ae-efd3-770f-b264-6bc423b9c34b` | Sarvam dashboard |
 
@@ -113,7 +113,7 @@ It will:
 1. Check the calling user has a `CRM Telephony Agent` record (refuses otherwise).
 2. Resolve a phone number from the Issue's linked `Contact`.
 3. Create a `CRM Call Log` (`telephony_medium = Sarvam`, `type = Outgoing`, `status = Initiated`, `caller = <you>`, `from = <Sarvam caller ID>`, `to = <customer number>`, `reference_doctype = Issue`).
-4. POST to Sarvam's instant-outbound API with the Issue's context (`issue_subject`, `customer_name`, `ticket_status`) and your mobile number as `transfer_to`.
+4. POST to Sarvam's instant-outbound API with your own mobile as `user_phone_number` (the number Sarvam dials first) and the Issue's context (`issue_subject`, `customer_name`, `ticket_status`) plus the customer's number as `transfer_to` (where Sarvam blind-transfers once it's briefed you).
 5. Store Sarvam's `attempt_id` on the Call Log's `id` field if the response includes one (best-effort — not always populated; the webhook's `webhook_config.metadata.call_log` is the reliable match, see below).
 
 ---
@@ -183,7 +183,7 @@ bench --site <site> set-config sarvam_webhook_base_url "https://<your-tunnel-sub
 | Call Log shows `Completed` for a call you know failed/was busy | Running code predates the `SARVAM_STATUS_MAP` fix — the old handler read `connectivity_status`/`completion_status`, fields that don't exist on this endpoint's real payload, and silently defaulted to `"Completed"` | Make sure `sarvam_telephony.py` has `_map_sarvam_call_status(status)` reading the flat `status` field, not the two-field version |
 | Phone rings very briefly then disconnects, Call Log ends up `Busy` | Sarvam/Vobiz got a busy signal on one of the two legs — check `channel_info` in the logged payload; it doesn't say which leg | Confirm both numbers are reachable and not already on another call: the Issue's contact, and the triggering user's `CRM Telephony Agent.mobile_no` |
 | Call connects but transfer never happens | Connection isn't Vobiz, or `call_transfer_config`/`transfer_to` got reset on a later agent edit | Re-check the agent's `interaction_config.call_transfer_config` on the Sarvam dashboard |
-| Customer hears the wrong greeting ("order desk" etc.) | Agent was recommitted from a fresh clone, losing the Support-specific prompt/intro | Re-apply the Support prompt and intro message, then recommit and bump `support_agent_version` |
+| Staff member hears the wrong greeting ("order desk" etc.), or the customer's phone rings before the staff member's | Agent was recommitted from a fresh clone, losing the Support-specific prompt/intro, or `user_config.user_phone_number`/`transfer_to` got swapped back | Re-apply the Support prompt and intro message, recommit and bump `support_agent_version`; confirm `trigger_support_call` sends `caller_mobile` as `user_phone_number` and the customer's number as `transfer_to` |
 
 ---
 

@@ -1,0 +1,461 @@
+# Copyright (c) 2026, Vinod Kumar K and contributors
+# For license information, please see license.txt
+
+import frappe
+import requests
+from frappe import _
+from frappe.integrations.utils import create_request_log
+
+from crm.fcrm.doctype.crm_call_log.crm_call_log import get_call_log as _crm_get_call_log
+from crm.integrations.api import get_contact_by_phone_number as _crm_get_contact_by_phone_number
+from crm.integrations.api import is_call_integration_enabled as _crm_is_call_integration_enabled
+
+OPEN_ISSUE_STATUSES = ("Open", "Replied", "On Hold")
+
+# Sarvam's instant-outbound REST API - a single call, distinct from its
+# campaign/cohort API used for bulk dialing. Auth is X-API-Key, not the
+# api-subscription-key the Sarvam STT/TTS/LLM SDKs use.
+SARVAM_OUTBOUND_API_BASE = "https://apps.sarvam.ai/api/outbounds/v1"
+
+SARVAM_SETTINGS_DOCTYPE = "Sarvam Outbound Settings"
+
+# @businessRule [BR-TEL-002] Required fields on Sarvam Outbound Settings to
+# place a Support outbound call - mirrors how CRM Twilio/Exotel Settings
+# store their own per-workspace config, instead of site_config.json, so it is
+# editable from the Desk UI with secrets held as Password fields.
+SARVAM_OUTBOUND_REQUIRED_FIELDS = (
+	"outbound_api_key",
+	"webhook_secret",
+	"org_id",
+	"workspace_id",
+	"support_connection_id",
+	"support_agent_phone_number",
+	"support_agent_id",
+	"support_agent_version",
+)
+
+
+def _is_sarvam_enabled():
+	"""
+	Business Purpose: [BR-TEL-002] Reports Sarvam AI as configured once
+	Sarvam Outbound Settings is enabled, mirroring how CRM Twilio/Exotel
+	Settings report their own `enabled` flag.
+
+	Returns:
+		bool: True when Sarvam Outbound Settings is enabled for this site.
+	"""
+	return bool(frappe.db.get_single_value(SARVAM_SETTINGS_DOCTYPE, "enabled"))
+
+
+@frappe.whitelist()
+def is_call_integration_enabled():
+	"""
+	Business Purpose: [BR-TEL-002] Extends CRM's call-integration status with
+	a `sarvam` flag so the frontend can offer Sarvam AI as a calling medium
+	alongside Twilio/Exotel.
+
+	Returns:
+		dict: The original CRM payload with an added `integrations.sarvam` flag.
+	"""
+	result = _crm_is_call_integration_enabled()
+	result["integrations"]["sarvam"] = _is_sarvam_enabled()
+	return result
+
+
+def get_latest_open_issue_for_contact(contact_name):
+	"""
+	Business Purpose: [BR-TEL-001] Finds the Support ticket a caller is most
+	likely calling about, so outbound Sarvam calls and inbound webhooks can
+	be linked to the right Issue instead of a bare Contact.
+
+	Args:
+		contact_name (str): Name of the Contact matched from the phone number.
+
+	Returns:
+		str | None: Name of the most recently opened matching Issue, if any.
+	"""
+	if not contact_name:
+		return None
+
+	return frappe.db.get_value(
+		"Issue",
+		{"contact": contact_name, "status": ("in", OPEN_ISSUE_STATUSES)},
+		"name",
+		order_by="opening_date desc, creation desc",
+	)
+
+
+@frappe.whitelist()
+def get_contact_by_phone_number(phone_number: str):
+	"""
+	Business Purpose: [BR-TEL-001] Enriches CRM's contact lookup with an
+	`issue` key when the matched Contact has no CRM Lead/Deal but does have
+	an open Support ticket.
+
+	Args:
+		phone_number (str): Raw phone number from the call payload.
+
+	Returns:
+		dict: The original CRM contact dict, with `issue` added when relevant.
+	"""
+	contact = _crm_get_contact_by_phone_number(phone_number)
+
+	# @businessRule [BR-TEL-001] Lead/Deal still outrank a Support ticket -
+	# only fall back to Issue once CRM itself found neither.
+	if contact.get("name") and not contact.get("lead") and not contact.get("deal"):
+		issue = get_latest_open_issue_for_contact(contact["name"])
+		if issue:
+			contact["issue"] = issue
+
+	return contact
+
+
+@frappe.whitelist()
+def get_contact_lead_or_deal_from_number(number: str):
+	"""
+	Business Purpose: [BR-TEL-001] Resolves a phone number to the record a
+	call should be linked against, adding `Issue` below `CRM Lead`/`CRM Deal`
+	and above a bare `Contact` in priority.
+
+	Args:
+		number (str): Raw phone number from the call payload.
+
+	Returns:
+		tuple[str | None, str | None]: (docname, doctype) of the best match.
+	"""
+	contact = get_contact_by_phone_number(number)
+	if not contact.get("name"):
+		return None, None
+
+	if contact.get("lead"):
+		return contact["lead"], "CRM Lead"
+	if contact.get("deal"):
+		return contact["deal"], "CRM Deal"
+	if contact.get("issue"):
+		return contact["issue"], "Issue"
+
+	return contact["name"], "Contact"
+
+
+@frappe.whitelist()
+def get_call_log(name: str):
+	"""
+	Business Purpose: [BR-TEL-001] Surfaces a linked Support ticket on the
+	call log detail payload, the same way CRM surfaces `_lead`/`_deal`.
+
+	Args:
+		name (str): Name of the CRM Call Log.
+
+	Returns:
+		dict: CRM's own call log payload, with `_issue` added when the call
+		references or links to an Issue the user can read.
+	"""
+	call = _crm_get_call_log(name)
+
+	issue = None
+	if call.get("reference_doctype") == "Issue" and call.get("reference_docname"):
+		issue = call["reference_docname"]
+	else:
+		for link in call.get("links") or []:
+			if link.get("link_doctype") == "Issue":
+				issue = link.get("link_name")
+				break
+
+	if issue and frappe.has_permission("Issue", "read", issue):
+		call["_issue"] = issue
+
+	return call
+
+
+def _get_sarvam_outbound_config():
+	"""
+	Business Purpose: [BR-TEL-002] Reads Sarvam Outbound Settings and fails
+	loudly, naming every missing field, rather than letting a partially
+	configured integration fail deep inside a requests call.
+
+	Returns:
+		dict: {fieldname: value} for every field in
+		SARVAM_OUTBOUND_REQUIRED_FIELDS, with `outbound_api_key` decrypted.
+
+	Raises:
+		frappe.ValidationError: If Sarvam Outbound Settings is disabled, or
+			any required field is missing.
+	"""
+	settings = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE)
+	if not settings.enabled:
+		frappe.throw(_("Sarvam Outbound Settings is not enabled"))
+
+	password_fields = ("outbound_api_key", "webhook_secret")
+	config = {
+		field: (settings.get_password(field) if field in password_fields else settings.get(field))
+		for field in SARVAM_OUTBOUND_REQUIRED_FIELDS
+	}
+	missing = [field for field, value in config.items() if not value]
+	if missing:
+		frappe.throw(
+			_("Sarvam Outbound Settings is missing: {0}").format(", ".join(missing))
+		)
+	return config
+
+
+def _get_outbound_caller_mobile(user):
+	"""
+	Business Purpose: [BR-TEL-003] Only a user already registered as a
+	telephony agent (same gate CRM's own Twilio/Exotel make_a_call uses) may
+	place a Sarvam outbound call - this doubles as both the authorization
+	check and the lookup for which mobile number the call blind-transfers to.
+
+	Args:
+		user (str): The Frappe user triggering the call.
+
+	Returns:
+		str | None: The user's registered mobile number, or None if the user
+		is not a registered CRM Telephony Agent.
+	"""
+	return frappe.db.get_value("CRM Telephony Agent", {"user": user}, "mobile_no")
+
+
+def _get_issue_phone_and_name(issue):
+	"""
+	Business Purpose: [BR-TEL-002] Finds the number and display name to call
+	for a Support ticket, from its linked Contact.
+
+	Args:
+		issue (Document): The Issue being called about.
+
+	Returns:
+		tuple[str | None, str | None]: (phone_number, display_name).
+	"""
+	if issue.contact:
+		contact = frappe.db.get_value(
+			"Contact", issue.contact, ["mobile_no", "phone", "full_name"], as_dict=True
+		)
+		if contact and (contact.mobile_no or contact.phone):
+			return contact.mobile_no or contact.phone, contact.full_name
+
+	return None, issue.customer
+
+
+@frappe.whitelist()
+def trigger_support_call(issue_name: str):
+	"""
+	Business Purpose: [BR-TEL-002] [BR-TEL-003] Places an outbound Sarvam call
+	for a Support ticket's contact via Sarvam's instant-outbound REST API.
+	The Sarvam agent only greets the customer and immediately blind-transfers
+	the live call to the calling user's own registered mobile number - the
+	actual conversation is human-to-human, not with the AI - and logs the
+	attempt as a CRM Call Log so it appears alongside Twilio/Exotel calls
+	(see [BR-TEL-001] for how it is then resolved back to the Issue).
+
+	Args:
+		issue_name (str): Name of the Issue to call about.
+
+	Returns:
+		str: Name of the created CRM Call Log.
+
+	Raises:
+		frappe.PermissionError: If the user cannot read the Issue, or is not
+			a registered CRM Telephony Agent ([BR-TEL-003]).
+		frappe.ValidationError: If the Issue has no resolvable phone number,
+			Sarvam outbound calling is not configured, or the call could not
+			be placed.
+	"""
+	if not frappe.has_permission("Issue", "read", issue_name):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+	# @businessRule [BR-TEL-003] Outbound calling is restricted to users
+	# already registered as a CRM Telephony Agent - the same gate CRM's own
+	# Twilio/Exotel make_a_call uses - and that record's mobile number is
+	# also where the call gets blind-transferred to.
+	caller_mobile = _get_outbound_caller_mobile(frappe.session.user)
+	if not caller_mobile:
+		frappe.throw(
+			_("You are not registered as a CRM Telephony Agent, so you cannot place outbound calls."),
+			frappe.PermissionError,
+		)
+
+	issue = frappe.get_doc("Issue", issue_name)
+	phone_number, customer_name = _get_issue_phone_and_name(issue)
+	if not phone_number:
+		frappe.throw(_("Issue {0} has no contact phone number to call").format(issue_name))
+
+	config = _get_sarvam_outbound_config()
+
+	call_log = frappe.get_doc(
+		{
+			"doctype": "CRM Call Log",
+			"caller": frappe.session.user,
+			"type": "Outgoing",
+			"status": "Initiated",
+			"telephony_medium": "Sarvam",
+			"to": phone_number,
+			"reference_doctype": "Issue",
+			"reference_docname": issue_name,
+		}
+	).insert(ignore_permissions=True)
+
+	webhook_url = frappe.utils.get_url(
+		"/api/method/core_customizations.core_customizations.sarvam_telephony.handle_outbound_webhook"
+		f"?key={config['webhook_secret']}"
+	)
+
+	payload = {
+		"app_config": {
+			"app_id": config["support_agent_id"],
+			"app_version": config["support_agent_version"],
+			"connection_config": {
+				"connection_id": config["support_connection_id"],
+				"agent_phone_number": config["support_agent_phone_number"],
+			},
+			"agent_variables": {
+				"issue_name": issue.name,
+				"issue_subject": issue.subject or "",
+				"customer_name": customer_name or "",
+				"ticket_status": issue.status or "",
+				"transfer_to": caller_mobile,
+			},
+		},
+		"user_config": {"user_phone_number": phone_number},
+		"webhook_config": {
+			"url": webhook_url,
+			"metadata": {"call_log": call_log.name},
+		},
+	}
+
+	try:
+		response = requests.post(
+			f"{SARVAM_OUTBOUND_API_BASE}/orgs/{config['org_id']}"
+			f"/workspaces/{config['workspace_id']}/outbounds",
+			json=payload,
+			headers={"X-API-Key": config["outbound_api_key"]},
+			timeout=30,
+		)
+		response.raise_for_status()
+	except requests.RequestException:
+		call_log.db_set("status", "Failed", update_modified=False)
+		frappe.log_error(title="Sarvam outbound call failed")
+		frappe.throw(_("Could not place the Sarvam outbound call. See the error log for details."))
+
+	attempt_id = (response.json() or {}).get("attempt_id")
+	if attempt_id:
+		call_log.db_set("id", attempt_id, update_modified=False)
+
+	return call_log.name
+
+
+def _find_call_log_by_attempt(attempt_id):
+	"""Match a Sarvam webhook back to the CRM Call Log it belongs to."""
+	if not attempt_id:
+		return None
+	return frappe.db.get_value("CRM Call Log", {"id": attempt_id}, "name")
+
+
+def _map_sarvam_call_status(connectivity_status, completion_status):
+	"""
+	Business Purpose: [BR-TEL-002] Maps Sarvam's two-field call outcome
+	(connectivity_status: busy/failed/connected/no_answer; completion_status:
+	failed/partial/completed - confirmed via sarvam://schemas/webhook-payload)
+	onto CRM Call Log's single `status` field, preferring connectivity_status
+	since it uses CRM's own Busy/No Answer/Failed vocabulary directly.
+
+	Args:
+		connectivity_status (str | None): Whether/how the call connected.
+		completion_status (str | None): How the interaction concluded.
+
+	Returns:
+		str: One of CRM Call Log's status options.
+	"""
+	by_connectivity = {
+		"busy": "Busy",
+		"no_answer": "No Answer",
+		"failed": "Failed",
+	}.get((connectivity_status or "").lower())
+	if by_connectivity:
+		return by_connectivity
+
+	if (completion_status or "").lower() == "failed":
+		return "Failed"
+
+	return "Completed"
+
+
+@frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
+def handle_outbound_webhook(**kwargs):
+	"""
+	Business Purpose: [BR-TEL-002] Receives Sarvam's call-end webhook for an
+	outbound Support call and updates the matching CRM Call Log.
+
+	Sarvam's public docs confirm this payload shape (completion_status,
+	connectivity_status, duration, interaction_transcript,
+	output_agent_variables, attempt_id, ...) for campaign webhooks; the
+	instant-outbound endpoint's webhook is assumed - not confirmed - to reuse
+	the same fields minus campaign_id/cohort_id. Every payload is logged via
+	create_request_log regardless, so a shape mismatch is visible and
+	correctable without losing the raw payload.
+
+	Webhook authenticity is enforced by the `key` query param (matched
+	against Sarvam Outbound Settings' `webhook_secret`), the same workaround
+	CRM's own Exotel handler uses since Sarvam, like Exotel, does not sign
+	its webhook.
+
+	Args:
+		**kwargs: The webhook body, forwarded as request args by Frappe.
+	"""
+	key = frappe.request.args.get("key")
+	webhook_secret = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE).get_password(
+		"webhook_secret", raise_exception=False
+	)
+	if not key or not webhook_secret or key != webhook_secret:
+		frappe.throw(_("Unauthorized request"), exc=frappe.PermissionError)
+
+	payload = frappe.request.get_json(silent=True) or kwargs
+
+	request_log = create_request_log(
+		payload,
+		request_description="Sarvam Outbound Call",
+		service_name="Sarvam",
+		request_headers=frappe.request.headers,
+		is_remote_request=1,
+	)
+
+	try:
+		call_log_name = (payload.get("metadata") or {}).get("call_log") or _find_call_log_by_attempt(
+			payload.get("attempt_id")
+		)
+		if not call_log_name:
+			raise frappe.ValidationError(f"Could not match Sarvam webhook payload to a CRM Call Log: {payload}")
+
+		call_log = frappe.get_doc("CRM Call Log", call_log_name)
+		call_log.status = _map_sarvam_call_status(
+			payload.get("connectivity_status"), payload.get("completion_status")
+		)
+		if payload.get("duration") is not None:
+			call_log.duration = payload.get("duration")
+		if payload.get("recording_url"):
+			call_log.recording_url = payload.get("recording_url")
+		call_log.save(ignore_permissions=True)
+
+		# @businessRule [BR-TEL-002] interaction_transcript is turn-by-turn
+		# STT/TTS from the AI's OWN side of the call only - after the blind
+		# call_transfer hands off to the human agent, Sarvam's agent (and its
+		# STT) is no longer confirmed to be in the audio path, so this is
+		# likely just the brief greeting, not the human-customer conversation.
+		# Logged as a comment (CRM Call Log has no transcript field) so it is
+		# visible without asserting it is complete.
+		transcript = payload.get("interaction_transcript")
+		if transcript:
+			transcript_text = "\n".join(
+				f"{turn.get('role', '?')}: {turn.get('en_text', '')}" for turn in transcript
+			)
+			call_log.add_comment("Comment", _("Sarvam transcript (AI side only):\n{0}").format(transcript_text))
+
+		request_log.status = "Completed"
+	except Exception:
+		request_log.status = "Failed"
+		request_log.error = frappe.get_traceback()
+		frappe.db.rollback()
+		frappe.log_error(title="Error while updating CRM Call Log from Sarvam webhook")
+		frappe.db.commit()
+	finally:
+		request_log.save(ignore_permissions=True)
+		frappe.db.commit()

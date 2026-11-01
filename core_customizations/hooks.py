@@ -150,6 +150,9 @@ after_migrate = "core_customizations.setup.after_migrate"
 # Hook on document methods and events
 
 doc_events = {
+	"Quotation": {
+		"before_validate": "core_customizations.core_customizations.quotation_gst.apply_gst_template",
+	},
 	"Material Request": {
 		"on_submit": "core_customizations.core_customizations.material_request.auto_create_po"
 	},

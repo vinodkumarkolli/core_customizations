@@ -3,12 +3,11 @@
 
 import frappe
 import requests
-from frappe import _
-from frappe.integrations.utils import create_request_log
-
 from crm.fcrm.doctype.crm_call_log.crm_call_log import get_call_log as _crm_get_call_log
 from crm.integrations.api import get_contact_by_phone_number as _crm_get_contact_by_phone_number
 from crm.integrations.api import is_call_integration_enabled as _crm_is_call_integration_enabled
+from frappe import _
+from frappe.integrations.utils import create_request_log
 
 OPEN_ISSUE_STATUSES = ("Open", "Replied", "On Hold")
 

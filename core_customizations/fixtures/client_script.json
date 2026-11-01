@@ -97,5 +97,16 @@
   "name": "Packing Slip Custom List",
   "script": "frappe.listview_settings['Packing Slip'] = {\n\tonload: function(listview) {\n\t\tlistview.page.hide_menu_item('Print');\n\t},\n\trefresh: function(listview) {\n\t\t// Periodically remove print from actions menu if it keeps reappearing\n\t\tsetTimeout(() => {\n\t\t\tlet print_btn = listview.page.actions.find('[data-label=\"Print\"]');\n\t\t\tif (print_btn) print_btn.hide();\n\t\t}, 200);\n\t}\n};",
   "view": "List"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Client Script",
+  "dt": "Issue",
+  "enabled": 1,
+  "modified": "2026-11-01 00:00:00.000000",
+  "module": "Core Customizations",
+  "name": "Issue Sarvam Call Script",
+  "script": "/**\n * @functionalPurpose Adds a \"Call via Sarvam\" button to the Issue form that\n * triggers an outbound Sarvam call for the ticket's contact.\n * @businessPurpose Lets a registered support agent connect to the customer\n * with one click instead of needing console/API access.\n */\nfrappe.ui.form.on('Issue', {\n\trefresh(frm) {\n\t\tif (frm.is_new()) {\n\t\t\treturn;\n\t\t}\n\n\t\t// @businessRule [BR-TEL-003] Server enforces the CRM Telephony Agent\n\t\t// gate and the blind transfer to the clicking user's own mobile;\n\t\t// this button is just the entry point, not an authorization check.\n\t\tfrm.add_custom_button(__('Call via Sarvam'), () => {\n\t\t\tfrappe.call({\n\t\t\t\tmethod: 'core_customizations.core_customizations.sarvam_telephony.trigger_support_call',\n\t\t\t\targs: { issue_name: frm.doc.name },\n\t\t\t\tfreeze: true,\n\t\t\t\tfreeze_message: __('Placing call...'),\n\t\t\t}).then((r) => {\n\t\t\t\tif (r.message) {\n\t\t\t\t\tfrappe.show_alert({\n\t\t\t\t\t\tmessage: __('Call placed. Your phone should ring shortly to connect you to the customer.'),\n\t\t\t\t\t\tindicator: 'green',\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t});\n\t\t}, __('Actions'));\n\t},\n});",
+  "view": "Form"
  }
 ]

@@ -287,15 +287,23 @@ def trigger_support_call(issue_name: str):
 			"type": "Outgoing",
 			"status": "Initiated",
 			"telephony_medium": "Sarvam",
+			"from": config["support_agent_phone_number"],
 			"to": phone_number,
 			"reference_doctype": "Issue",
 			"reference_docname": issue_name,
 		}
 	).insert(ignore_permissions=True)
 
-	webhook_url = frappe.utils.get_url(
-		"/api/method/core_customizations.core_customizations.sarvam_telephony.handle_outbound_webhook"
-		f"?key={config['webhook_secret']}"
+	# @businessRule [BR-TEL-002] Sarvam's servers must reach this webhook over
+	# the public internet, which a local/dev site_name (e.g. development.localhost)
+	# never is. sarvam_webhook_base_url is a site_config.json-only escape hatch
+	# (e.g. a cloudflared/ngrok tunnel URL during local testing) - deliberately
+	# not on Sarvam Outbound Settings, since it's a site-identity concern, not a
+	# Sarvam workspace one, and get_url() remains correct for production.
+	webhook_base_url = frappe.conf.get("sarvam_webhook_base_url") or frappe.utils.get_url()
+	webhook_url = (
+		f"{webhook_base_url}/api/method/core_customizations.core_customizations."
+		f"sarvam_telephony.handle_outbound_webhook?key={config['webhook_secret']}"
 	)
 
 	payload = {
@@ -349,33 +357,49 @@ def _find_call_log_by_attempt(attempt_id):
 	return frappe.db.get_value("CRM Call Log", {"id": attempt_id}, "name")
 
 
-def _map_sarvam_call_status(connectivity_status, completion_status):
+# @businessRule [BR-TEL-002] Confirmed by a real webhook delivery (2026-11-02):
+# this endpoint's actual payload has a single flat `status` field, NOT the
+# connectivity_status/completion_status pair documented at
+# sarvam://schemas/webhook-payload for campaign webhooks - that schema does
+# not describe the instant-outbound endpoint. Observed value: "busy". The
+# rest of this map is a best-effort guess at the sibling values pending more
+# real deliveries; anything unrecognised defaults to "Failed", not
+# "Completed" - a terminal webhook with an unknown status should never be
+# silently reported as a successful call.
+SARVAM_STATUS_MAP = {
+	"busy": "Busy",
+	"no_answer": "No Answer",
+	"noanswer": "No Answer",
+	"failed": "Failed",
+	"cancelled": "Canceled",
+	"canceled": "Canceled",
+	"completed": "Completed",
+	"connected": "Completed",
+	"in_progress": "In Progress",
+	"ringing": "Ringing",
+	"queued": "Queued",
+	"initiated": "Initiated",
+}
+
+
+def _map_sarvam_call_status(status):
 	"""
-	Business Purpose: [BR-TEL-002] Maps Sarvam's two-field call outcome
-	(connectivity_status: busy/failed/connected/no_answer; completion_status:
-	failed/partial/completed - confirmed via sarvam://schemas/webhook-payload)
-	onto CRM Call Log's single `status` field, preferring connectivity_status
-	since it uses CRM's own Busy/No Answer/Failed vocabulary directly.
+	Business Purpose: [BR-TEL-002] Maps Sarvam's call-outcome `status` string
+	onto CRM Call Log's own `status` Select options.
 
 	Args:
-		connectivity_status (str | None): Whether/how the call connected.
-		completion_status (str | None): How the interaction concluded.
+		status (str | None): Sarvam's reported outcome (e.g. "busy").
 
 	Returns:
-		str: One of CRM Call Log's status options.
+		str: One of CRM Call Log's status options; "Failed" for anything
+		unrecognised.
 	"""
-	by_connectivity = {
-		"busy": "Busy",
-		"no_answer": "No Answer",
-		"failed": "Failed",
-	}.get((connectivity_status or "").lower())
-	if by_connectivity:
-		return by_connectivity
+	mapped = SARVAM_STATUS_MAP.get((status or "").lower().replace("-", "_"))
+	if mapped:
+		return mapped
 
-	if (completion_status or "").lower() == "failed":
-		return "Failed"
-
-	return "Completed"
+	frappe.log_error(title="Unrecognised Sarvam call status", message=f"status={status!r}")
+	return "Failed"
 
 
 @frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
@@ -384,12 +408,12 @@ def handle_outbound_webhook(**kwargs):
 	Business Purpose: [BR-TEL-002] Receives Sarvam's call-end webhook for an
 	outbound Support call and updates the matching CRM Call Log.
 
-	Sarvam's public docs confirm this payload shape (completion_status,
-	connectivity_status, duration, interaction_transcript,
-	output_agent_variables, attempt_id, ...) for campaign webhooks; the
-	instant-outbound endpoint's webhook is assumed - not confirmed - to reuse
-	the same fields minus campaign_id/cohort_id. Every payload is logged via
-	create_request_log regardless, so a shape mismatch is visible and
+	Confirmed by a real delivery (2026-11-02): this endpoint's payload is
+	flatter than the documented campaign-webhook schema - a single `status`
+	string instead of connectivity_status/completion_status, no
+	campaign_id/cohort_id, and `metadata` nested under the echoed
+	`webhook_config`, not at the top level. Every payload is logged via
+	create_request_log regardless, so any further shape drift is visible and
 	correctable without losing the raw payload.
 
 	Webhook authenticity is enforced by the `key` query param (matched
@@ -418,16 +442,13 @@ def handle_outbound_webhook(**kwargs):
 	)
 
 	try:
-		call_log_name = (payload.get("metadata") or {}).get("call_log") or _find_call_log_by_attempt(
-			payload.get("attempt_id")
-		)
+		metadata = (payload.get("webhook_config") or {}).get("metadata") or payload.get("metadata") or {}
+		call_log_name = metadata.get("call_log") or _find_call_log_by_attempt(payload.get("attempt_id"))
 		if not call_log_name:
 			raise frappe.ValidationError(f"Could not match Sarvam webhook payload to a CRM Call Log: {payload}")
 
 		call_log = frappe.get_doc("CRM Call Log", call_log_name)
-		call_log.status = _map_sarvam_call_status(
-			payload.get("connectivity_status"), payload.get("completion_status")
-		)
+		call_log.status = _map_sarvam_call_status(payload.get("status"))
 		if payload.get("duration") is not None:
 			call_log.duration = payload.get("duration")
 		if payload.get("recording_url"):

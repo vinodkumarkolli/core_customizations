@@ -1,4 +1,4 @@
-# Manual 07 — Sarvam AI Outbound Support Calls
+# Manual 07 — Sarvam AI Outbound Calls
 
 **Files**: `sarvam_telephony.py`, `monkey_patches.py`, `doctype/sarvam_outbound_settings/`, `fixtures/property_setter.json`, `fixtures/client_script.json`
 
@@ -6,21 +6,21 @@
 
 ## Overview
 
-This app lets a registered support agent place an outbound call about an open **Issue** (Support ticket) through **Sarvam AI**, and have it logged as a **CRM Call Log** alongside Twilio/Exotel calls.
+This app lets a registered agent place an outbound call about an **Issue** (Support ticket), **CRM Lead**, or **CRM Deal** through **Sarvam AI**, and have it logged as a **CRM Call Log** alongside Twilio/Exotel calls. It's one generic mechanism (`trigger_sarvam_call(reference_doctype, reference_name)`) — adding another doctype means registering a resolver, not building a new feature; see `SARVAM_CALL_CONTEXT_RESOLVERS` in `sarvam_telephony.py`.
 
 **Important — this is a human-to-human call, not an AI conversation.** The Sarvam voice agent never speaks to the customer at all. It:
 
 1. Dials the **triggering staff member's own mobile first** (their `CRM Telephony Agent.mobile_no`).
-2. Briefs them in one or two short sentences: which ticket, which customer, current status.
+2. Briefs them in one or two short sentences: what kind of record, which customer, current status.
 3. Immediately **blind-transfers** the live call to the customer.
 
 This ordering is deliberate: the customer's phone only starts ringing once the staff member is already live on the line, so when they pick up they're speaking directly to a human with no AI greeting or dead air on their end. (An earlier version of this flow dialed the customer first — worse, since the customer would hear the AI, then wait while the staff member's phone rang.)
 
 ```
-Frappe (trigger_support_call)
+Frappe (trigger_sarvam_call)
    │  POST /outbounds  (fire-and-forget)
    ▼
-Sarvam platform ── dials staff member ──► "Hi, this is about ticket ... for
+Sarvam platform ── dials staff member ──► "Hi, this is about <record> for
                                             <customer>, status ...
                                             Connecting you now."
                                             │
@@ -48,7 +48,7 @@ This feature was built against one Sarvam workspace with:
 | Telephony connection | `8cbb7cc8-d8-abd294c3-1f9b` (provider: vobiz) | Sarvam dashboard → Telephony |
 | Onboarded number | `+918064276261` | Same connection |
 | Voice agent | `Support-Out-2128e33d-0fd3` ("Support Outbound") | Cloned from the existing Order Desk agent |
-| Committed agent version | `4` | Bumped every time the agent's prompt/config is recommitted — **update `Sarvam Outbound Settings.support_agent_version` to match whenever this changes** |
+| Committed agent version | `5` | Bumped every time the agent's prompt/config is recommitted — **update `Sarvam Outbound Settings.support_agent_version` to match whenever this changes** |
 | Org ID | `01a163ae-efc7-75ff-8021-ba55a92f10b1` | Sarvam dashboard |
 | Workspace ID | `01a163ae-efd3-770f-b264-6bc423b9c34b` | Sarvam dashboard |
 
@@ -65,7 +65,7 @@ Transfer only works on **Vobiz** telephony connections — if the connection is 
 Outbound calling is restricted to users who already have a **CRM Telephony Agent** record ([BR-TEL-003](../.agents/rules/business_blueprint.md)) — the same record CRM's own Twilio/Exotel calling uses. That record's `mobile_no` is also where the call gets transferred to.
 
 1. Go to **CRM Telephony Agent** (list).
-2. Create one record per staff member who should be able to place Support outbound calls.
+2. Create one record per staff member who should be able to place Sarvam outbound calls.
 3. Set `user` to their Frappe user, and `mobile_no` to their own mobile number (E.164, e.g. `+919876543210`).
 
 A user with no record here is refused with a clear error, not silently skipped.
@@ -80,7 +80,7 @@ Go to **Sarvam Outbound Settings** (Single DocType) and fill in:
 | `org_id` | `01a163ae-efc7-75ff-8021-ba55a92f10b1` |
 | `workspace_id` | `01a163ae-efd3-770f-b264-6bc423b9c34b` |
 | `support_agent_id` | `Support-Out-2128e33d-0fd3` |
-| `support_agent_version` | `3` (the current committed version — bump this if the agent is recommitted) |
+| `support_agent_version` | `5` (the current committed version — bump this if the agent is recommitted) |
 | `support_connection_id` | `8cbb7cc8-d8-abd294c3-1f9b` |
 | `support_agent_phone_number` | `+918064276261` |
 | `outbound_api_key` | Your Sarvam workspace API key (`X-API-Key` header — **not** the `api-subscription-key` used by Sarvam's STT/TTS/LLM SDKs, that's a different API surface) |
@@ -100,20 +100,26 @@ bench --site <site> migrate
 
 ## Triggering a Call
 
-A **"Call via Sarvam"** button appears in the Issue form's **Actions** menu (added via the `Issue Sarvam Call Script` Client Script fixture). It just calls `trigger_support_call(issue_name)` and shows a toast — all the real logic is server-side.
+A **"Call via Sarvam"** button appears in the **Actions** menu on:
+
+- The Issue form (classic Desk view) — `Issue Sarvam Call Script`.
+- The CRM Lead form (classic Desk view, `/app/crm-lead/...` or `/desk/fcrm/crm-lead/...` — **not** CRM's own Vue frontend at `/crm/leads/...`, which has its own separate "Make a Call" dialog hardcoded to Twilio/Exotel and isn't touched by this) — `CRM Lead Sarvam Call Script`.
+
+Both just call `trigger_sarvam_call(reference_doctype, reference_name)` and show a toast — all the real logic is server-side. There is no button on CRM Deal yet, though the server-side resolver already supports it (see below).
 
 You can also call it directly from the console:
 
 ```bash
-bench --site <site> execute core_customizations.core_customizations.sarvam_telephony.trigger_support_call --args '["ISS-00123"]'
+bench --site <site> execute core_customizations.core_customizations.sarvam_telephony.trigger_sarvam_call --args '["Issue", "ISS-00123"]'
+bench --site <site> execute core_customizations.core_customizations.sarvam_telephony.trigger_sarvam_call --args '["CRM Lead", "CRM-LEAD-2026-00001"]'
 ```
 
 It will:
 
-1. Check the calling user has a `CRM Telephony Agent` record (refuses otherwise).
-2. Resolve a phone number from the Issue's linked `Contact`.
-3. Create a `CRM Call Log` (`telephony_medium = Sarvam`, `type = Outgoing`, `status = Initiated`, `caller = <you>`, `from = <Sarvam caller ID>`, `to = <customer number>`, `reference_doctype = Issue`).
-4. POST to Sarvam's instant-outbound API with your own mobile as `user_phone_number` (the number Sarvam dials first) and the Issue's context (`issue_subject`, `customer_name`, `ticket_status`) plus the customer's number as `transfer_to` (where Sarvam blind-transfers once it's briefed you).
+1. Check `reference_doctype` is supported (`Issue`, `CRM Lead`, `CRM Deal` — see `SARVAM_CALL_CONTEXT_RESOLVERS`), and the calling user has a `CRM Telephony Agent` record (refuses otherwise).
+2. Resolve a phone number and context (subject, contact name, status) from the record — an Issue's linked `Contact`, a CRM Lead's own `mobile_no`/`phone`, or a CRM Deal's primary `CRM Contacts` row.
+3. Create a `CRM Call Log` (`telephony_medium = Sarvam`, `type = Outgoing`, `status = Initiated`, `caller = <you>`, `from = <Sarvam caller ID>`, `to = <customer number>`, `reference_doctype = <Issue/CRM Lead/CRM Deal>`).
+4. POST to Sarvam's instant-outbound API with your own mobile as `user_phone_number` (the number Sarvam dials first) and the record's context (`record_doctype_label`, `record_name`, `record_subject`, `contact_name`, `record_status`) plus the customer's number as `transfer_to` (where Sarvam blind-transfers once it's briefed you).
 5. Store Sarvam's `attempt_id` on the Call Log's `id` field if the response includes one (best-effort — not always populated; the webhook's `webhook_config.metadata.call_log` is the reliable match, see below).
 
 ---
@@ -156,7 +162,7 @@ The handler maps `status` onto the Call Log's own `status` field via `SARVAM_STA
 bench --site <site> set-config sarvam_webhook_base_url "https://<your-tunnel-subdomain>.trycloudflare.com"
 ```
 
-`trigger_support_call` uses this site-config key in preference to `frappe.utils.get_url()` when present. Unset it (or leave it unset in production, where the real domain is reachable) once you're done — a stale tunnel URL here means every subsequent call's webhook silently goes nowhere.
+`trigger_sarvam_call` uses this site-config key in preference to `frappe.utils.get_url()` when present. Unset it (or leave it unset in production, where the real domain is reachable) once you're done — a stale tunnel URL here means every subsequent call's webhook silently goes nowhere.
 
 ---
 
@@ -164,9 +170,10 @@ bench --site <site> set-config sarvam_webhook_base_url "https://<your-tunnel-sub
 
 - **Webhook payload shape is only partially confirmed.** One real delivery (status `"busy"`) confirmed the overall shape and that `status` is flat, not `connectivity_status`/`completion_status`. The sibling status values (`completed`, `no_answer`, `failed`, etc.) and whether `interaction_transcript` is ever populated for a *connected and transferred* call are still unconfirmed — a call that was busy obviously never got far enough to produce one. **Place a test call that actually connects and transfers, and check the resulting webhook payload, before relying on transcript or status values beyond "busy".**
 - **No call-status polling.** Sarvam's instant-outbound endpoint returns only `{"attempt_id": ...}` with no documented GET-by-id status endpoint — the Call Log stays `Initiated` until the webhook arrives. There is no timeout/retry handling for a webhook that never arrives.
-- **`attempt_id` capture on the Call Log is unreliable.** `trigger_support_call` stores it on the Call Log's `id` field only if Sarvam's synchronous POST response includes it — observed inconsistently across test calls (present on one, absent on another, cause not yet root-caused). Harmless in practice since the webhook matches via `webhook_config.metadata.call_log` instead, which is reliable — but don't depend on the Call Log's `id` field alone to find a Sarvam attempt.
-- **Leftover tool bindings.** The "Support Outbound" agent was cloned from the Order Desk agent and still lists ~19 inherited Order Desk tool bindings (`global_tool_names`) it has no reason to call. Harmless — the prompt never invokes them — but worth pruning on the Sarvam dashboard for clarity.
-- **A "busy" result can come from either leg.** The payload's `channel_info` names the Sarvam-side number, not which leg (customer or transfer target) reported busy. If a call keeps coming back `"busy"`, check both the Issue's contact number and the triggering user's own `CRM Telephony Agent.mobile_no` — it could be either one.
+- **`attempt_id` capture on the Call Log is unreliable.** `trigger_sarvam_call` stores it on the Call Log's `id` field only if Sarvam's synchronous POST response includes it — observed inconsistently across test calls (present on one, absent on another, cause not yet root-caused). Harmless in practice since the webhook matches via `webhook_config.metadata.call_log` instead, which is reliable — but don't depend on the Call Log's `id` field alone to find a Sarvam attempt.
+- **Leftover tool bindings.** The Sarvam agent was cloned from an existing Order Desk agent and still lists ~19 inherited Order Desk tool bindings (`global_tool_names`) it has no reason to call. Harmless — the prompt never invokes them — but worth pruning on the Sarvam dashboard for clarity.
+- **A "busy" result can come from either leg.** The payload's `channel_info` names the Sarvam-side number, not which leg (customer or triggering staff member) reported busy. If a call keeps coming back `"busy"`, check both the record's contact number and the triggering user's own `CRM Telephony Agent.mobile_no` — it could be either one.
+- **No button on CRM Deal yet.** The resolver (`_get_crm_deal_call_context`) exists and is wired into `trigger_sarvam_call`, but no Client Script adds the button there — only console/API access for now.
 
 ---
 
@@ -177,13 +184,14 @@ bench --site <site> set-config sarvam_webhook_base_url "https://<your-tunnel-sub
 | `PermissionError: You are not registered as a CRM Telephony Agent` | Caller has no `CRM Telephony Agent` record | Create one for them with their `mobile_no` set |
 | `Sarvam Outbound Settings is not enabled` | `enabled` unchecked, or doc never filled in | Fill in and enable **Sarvam Outbound Settings** |
 | `Sarvam Outbound Settings is missing: ...` | One or more required fields blank | Fill in the named fields |
-| `Issue {name} has no contact phone number to call` | Issue's `contact` is blank, or that Contact has no `mobile_no`/`phone` | Set a Contact with a phone number on the Issue |
+| `Sarvam calling does not support {doctype}` | `reference_doctype` isn't registered in `SARVAM_CALL_CONTEXT_RESOLVERS` | Only `Issue`, `CRM Lead`, `CRM Deal` are supported; add a resolver for anything else |
+| `{doctype} {name} has no contact phone number to call` | Issue's `contact` is blank (or that Contact has no `mobile_no`/`phone`), or the CRM Lead/Deal itself has no number on it | Set a phone number on the record (or its Contact, for Issue/Deal) |
 | Call Log stuck on `Initiated` forever, no `Integration Request` for "Sarvam Outbound Call" at all | Webhook never reached this site — almost certainly `development.localhost` (or similar) isn't publicly reachable | Set up a tunnel and `sarvam_webhook_base_url`, see [Testing the webhook locally](#testing-the-webhook-locally) |
 | `401`/`Unauthorized request` in Integration Request error | `key` query param doesn't match `webhook_secret` | Re-check `Sarvam Outbound Settings.webhook_secret` |
 | Call Log shows `Completed` for a call you know failed/was busy | Running code predates the `SARVAM_STATUS_MAP` fix — the old handler read `connectivity_status`/`completion_status`, fields that don't exist on this endpoint's real payload, and silently defaulted to `"Completed"` | Make sure `sarvam_telephony.py` has `_map_sarvam_call_status(status)` reading the flat `status` field, not the two-field version |
-| Phone rings very briefly then disconnects, Call Log ends up `Busy` | Sarvam/Vobiz got a busy signal on one of the two legs — check `channel_info` in the logged payload; it doesn't say which leg | Confirm both numbers are reachable and not already on another call: the Issue's contact, and the triggering user's `CRM Telephony Agent.mobile_no` |
+| Phone rings very briefly then disconnects, Call Log ends up `Busy` | Sarvam/Vobiz got a busy signal on one of the two legs — check `channel_info` in the logged payload; it doesn't say which leg | Confirm both numbers are reachable and not already on another call: the record's contact, and the triggering user's `CRM Telephony Agent.mobile_no` |
 | Call connects but transfer never happens | Connection isn't Vobiz, or `call_transfer_config`/`transfer_to` got reset on a later agent edit | Re-check the agent's `interaction_config.call_transfer_config` on the Sarvam dashboard |
-| Staff member hears the wrong greeting ("order desk" etc.), or the customer's phone rings before the staff member's | Agent was recommitted from a fresh clone, losing the Support-specific prompt/intro, or `user_config.user_phone_number`/`transfer_to` got swapped back | Re-apply the Support prompt and intro message, recommit and bump `support_agent_version`; confirm `trigger_support_call` sends `caller_mobile` as `user_phone_number` and the customer's number as `transfer_to` |
+| Staff member hears the wrong greeting ("order desk" etc.), or the customer's phone rings before the staff member's | Agent was recommitted from a fresh clone, losing the Sarvam-calling prompt/intro, or `user_config.user_phone_number`/`transfer_to` got swapped back | Re-apply the prompt and intro message, recommit and bump `support_agent_version`; confirm `trigger_sarvam_call` sends `caller_mobile` as `user_phone_number` and the customer's number as `transfer_to` |
 
 ---
 

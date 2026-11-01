@@ -214,54 +214,136 @@ def _get_outbound_caller_mobile(user):
 	return frappe.db.get_value("CRM Telephony Agent", {"user": user}, "mobile_no")
 
 
-def _get_issue_phone_and_name(issue):
+def _get_issue_call_context(issue_name):
 	"""
-	Business Purpose: [BR-TEL-002] Finds the number and display name to call
-	for a Support ticket, from its linked Contact.
+	Business Purpose: [BR-TEL-002] Resolves the phone number and Sarvam
+	call-context variables for an Issue (Support ticket).
 
 	Args:
-		issue (Document): The Issue being called about.
+		issue_name (str): Name of the Issue being called about.
 
 	Returns:
-		tuple[str | None, str | None]: (phone_number, display_name).
+		dict: {phone_number, record_doctype_label, record_subject,
+		contact_name, record_status}. phone_number is None if unresolvable.
 	"""
+	issue = frappe.get_doc("Issue", issue_name)
+	phone_number, contact_name = None, issue.customer
 	if issue.contact:
 		contact = frappe.db.get_value(
 			"Contact", issue.contact, ["mobile_no", "phone", "full_name"], as_dict=True
 		)
 		if contact and (contact.mobile_no or contact.phone):
-			return contact.mobile_no or contact.phone, contact.full_name
+			phone_number, contact_name = contact.mobile_no or contact.phone, contact.full_name
 
-	return None, issue.customer
+	return {
+		"phone_number": phone_number,
+		"record_doctype_label": "Support ticket",
+		"record_subject": issue.subject or "",
+		"contact_name": contact_name or "",
+		"record_status": issue.status or "",
+	}
+
+
+def _get_crm_lead_call_context(lead_name):
+	"""
+	Business Purpose: [BR-TEL-002] Resolves the phone number and Sarvam
+	call-context variables for a CRM Lead.
+
+	Args:
+		lead_name (str): Name of the CRM Lead being called about.
+
+	Returns:
+		dict: {phone_number, record_doctype_label, record_subject,
+		contact_name, record_status}. phone_number is None if unresolvable.
+	"""
+	lead = frappe.get_doc("CRM Lead", lead_name)
+	return {
+		"phone_number": lead.mobile_no or lead.phone,
+		"record_doctype_label": "Sales lead",
+		"record_subject": lead.organization or lead.lead_name or "",
+		"contact_name": lead.lead_name or "",
+		"record_status": lead.status or "",
+	}
+
+
+def _get_crm_deal_call_context(deal_name):
+	"""
+	Business Purpose: [BR-TEL-002] Resolves the phone number and Sarvam
+	call-context variables for a CRM Deal, from its primary Contact.
+
+	Args:
+		deal_name (str): Name of the CRM Deal being called about.
+
+	Returns:
+		dict: {phone_number, record_doctype_label, record_subject,
+		contact_name, record_status}. phone_number is None if unresolvable.
+	"""
+	deal = frappe.get_doc("CRM Deal", deal_name)
+	phone_number, contact_name = None, None
+	primary_contact = frappe.db.get_value(
+		"CRM Contacts", {"parenttype": "CRM Deal", "parent": deal_name, "is_primary": 1}, "contact"
+	)
+	if primary_contact:
+		contact = frappe.db.get_value(
+			"Contact", primary_contact, ["mobile_no", "phone", "full_name"], as_dict=True
+		)
+		if contact and (contact.mobile_no or contact.phone):
+			phone_number, contact_name = contact.mobile_no or contact.phone, contact.full_name
+
+	return {
+		"phone_number": phone_number,
+		"record_doctype_label": "Sales deal",
+		"record_subject": deal.organization or deal.lead_name or "",
+		"contact_name": contact_name or deal.lead_name or "",
+		"record_status": deal.status or "",
+	}
+
+
+# @businessRule [BR-TEL-002] Every doctype Sarvam calling supports - extend
+# this (and the matching Client Script fixture + has_permission check below)
+# to add another one, rather than hardcoding a new whitelisted method per
+# doctype.
+SARVAM_CALL_CONTEXT_RESOLVERS = {
+	"Issue": _get_issue_call_context,
+	"CRM Lead": _get_crm_lead_call_context,
+	"CRM Deal": _get_crm_deal_call_context,
+}
 
 
 @frappe.whitelist()
-def trigger_support_call(issue_name: str):
+def trigger_sarvam_call(reference_doctype: str, reference_name: str):
 	"""
 	Business Purpose: [BR-TEL-002] [BR-TEL-003] Places an outbound Sarvam call
-	for a Support ticket via Sarvam's instant-outbound REST API. Sarvam dials
-	the calling user's own registered mobile first, briefs them on the
-	ticket, then immediately blind-transfers to the customer - so by the
-	time the customer's phone rings, the staff member is already live and
-	speaks to them directly, with no AI greeting on the customer's side at
-	all. Logs the attempt as a CRM Call Log so it appears alongside
-	Twilio/Exotel calls (see [BR-TEL-001] for how it is then resolved back
-	to the Issue).
+	about an Issue, CRM Lead or CRM Deal via Sarvam's instant-outbound REST
+	API. Sarvam dials the calling user's own registered mobile first, briefs
+	them on the record, then immediately blind-transfers to the customer -
+	so by the time the customer's phone rings, the staff member is already
+	live and speaks to them directly, with no AI greeting on the customer's
+	side at all. Logs the attempt as a CRM Call Log so it appears alongside
+	Twilio/Exotel calls (see [BR-TEL-001] for how an Issue reference is then
+	resolved back from a call).
 
 	Args:
-		issue_name (str): Name of the Issue to call about.
+		reference_doctype (str): One of SARVAM_CALL_CONTEXT_RESOLVERS's keys.
+		reference_name (str): Name of that record to call about.
 
 	Returns:
 		str: Name of the created CRM Call Log.
 
 	Raises:
-		frappe.PermissionError: If the user cannot read the Issue, or is not
-			a registered CRM Telephony Agent ([BR-TEL-003]).
-		frappe.ValidationError: If the Issue has no resolvable phone number,
-			Sarvam outbound calling is not configured, or the call could not
-			be placed.
+		frappe.ValidationError: If reference_doctype isn't supported, the
+			record has no resolvable phone number, Sarvam outbound calling
+			is not configured, or the call could not be placed.
+		frappe.PermissionError: If the user cannot read the record, or is
+			not a registered CRM Telephony Agent ([BR-TEL-003]).
 	"""
-	if not frappe.has_permission("Issue", "read", issue_name):
+	resolve_context = SARVAM_CALL_CONTEXT_RESOLVERS.get(reference_doctype)
+	if not resolve_context:
+		frappe.throw(
+			_("Sarvam calling does not support {0}").format(reference_doctype), frappe.ValidationError
+		)
+
+	if not frappe.has_permission(reference_doctype, "read", reference_name):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
 	# @businessRule [BR-TEL-003] Outbound calling is restricted to users
@@ -275,10 +357,10 @@ def trigger_support_call(issue_name: str):
 			frappe.PermissionError,
 		)
 
-	issue = frappe.get_doc("Issue", issue_name)
-	phone_number, customer_name = _get_issue_phone_and_name(issue)
+	context = resolve_context(reference_name)
+	phone_number = context["phone_number"]
 	if not phone_number:
-		frappe.throw(_("Issue {0} has no contact phone number to call").format(issue_name))
+		frappe.throw(_("{0} {1} has no contact phone number to call").format(reference_doctype, reference_name))
 
 	config = _get_sarvam_outbound_config()
 
@@ -291,8 +373,8 @@ def trigger_support_call(issue_name: str):
 			"telephony_medium": "Sarvam",
 			"from": config["support_agent_phone_number"],
 			"to": phone_number,
-			"reference_doctype": "Issue",
-			"reference_docname": issue_name,
+			"reference_doctype": reference_doctype,
+			"reference_docname": reference_name,
 		}
 	).insert(ignore_permissions=True)
 
@@ -317,10 +399,11 @@ def trigger_support_call(issue_name: str):
 				"agent_phone_number": config["support_agent_phone_number"],
 			},
 			"agent_variables": {
-				"issue_name": issue.name,
-				"issue_subject": issue.subject or "",
-				"customer_name": customer_name or "",
-				"ticket_status": issue.status or "",
+				"record_doctype_label": context["record_doctype_label"],
+				"record_name": reference_name,
+				"record_subject": context["record_subject"],
+				"contact_name": context["contact_name"],
+				"record_status": context["record_status"],
 				# @businessRule [BR-TEL-003] Sarvam dials the STAFF member
 				# first (user_phone_number below) and briefs them, then
 				# blind-transfers to transfer_to (the customer) - so by the

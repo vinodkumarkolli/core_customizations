@@ -11,7 +11,7 @@ app_license = "bsd-3-clause"
 # Apps
 # ------------------
 
-required_apps = ["erpnext", "hrms", "india_compliance"]
+required_apps = ["erpnext", "hrms", "india_compliance","crm"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -150,6 +150,17 @@ after_migrate = "core_customizations.setup.after_migrate"
 # Hook on document methods and events
 
 doc_events = {
+    "CRM Lead": {
+        "before_validate": "core_customizations.core_customizations.phone_normalise.normalise_lead",
+        "on_update": "core_customizations.core_customizations.contact_lead_link.on_lead_update",
+	},
+    "Contact":  {
+        "before_validate": "core_customizations.core_customizations.phone_normalise.normalise_contact",
+        "on_update": "core_customizations.core_customizations.contact_lead_link.on_lead_update",
+	},
+	"Quotation": {
+		"before_validate": "core_customizations.core_customizations.quotation_gst.apply_gst",
+	},
 	"Material Request": {
 		"on_submit": "core_customizations.core_customizations.material_request.auto_create_po"
 	},

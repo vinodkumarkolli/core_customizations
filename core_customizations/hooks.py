@@ -210,6 +210,14 @@ doc_events = {
 # 	"frappe.desk.doctype.event.event.get_events": "core_customizations.event.get_events"
 # }
 #
+
+override_whitelisted_methods = {
+	"crm.integrations.api.is_call_integration_enabled": "core_customizations.core_customizations.sarvam_telephony.is_call_integration_enabled",
+	"crm.integrations.api.get_contact_by_phone_number": "core_customizations.core_customizations.sarvam_telephony.get_contact_by_phone_number",
+	"crm.integrations.api.get_contact_lead_or_deal_from_number": "core_customizations.core_customizations.sarvam_telephony.get_contact_lead_or_deal_from_number",
+	"crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log": "core_customizations.core_customizations.sarvam_telephony.get_call_log",
+}
+#
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
 # along with any modifications made in other Frappe apps

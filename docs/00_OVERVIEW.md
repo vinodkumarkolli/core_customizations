@@ -14,6 +14,7 @@ This directory contains step-by-step setup and operational manuals for every fea
 | 4 | [04_POINT_OF_SALE.md](./04_POINT_OF_SALE.md) | POS setup, counter flow, shift closing, and consolidated invoices |
 | 5 | [05_PRINT_FORMATS.md](./05_PRINT_FORMATS.md) | GST Invoice, Delivery Note, Packing Slip, and PO print format setup |
 | 6 | [06_PERMISSIONS_AND_ROLES.md](./06_PERMISSIONS_AND_ROLES.md) | Role-based access control and custom DocPerm setup |
+| 7 | [07_SARVAM_OUTBOUND_CALLS.md](./07_SARVAM_OUTBOUND_CALLS.md) | Sarvam AI outbound Support calls: setup, triggering, webhook, troubleshooting |
 
 ---
 

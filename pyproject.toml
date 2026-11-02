@@ -9,6 +9,7 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
+    "boto3", # Uploads Sarvam call recordings/transcripts to S3 (Call Logging Settings).
 ]
 
 [build-system]

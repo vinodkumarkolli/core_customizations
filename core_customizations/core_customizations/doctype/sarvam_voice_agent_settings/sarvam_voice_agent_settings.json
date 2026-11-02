@@ -1,0 +1,243 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_sarvam_outbound",
+  "enabled",
+  "column_break_auth",
+  "outbound_api_key",
+  "webhook_secret",
+  "section_break_workspace",
+  "org_id",
+  "workspace_id",
+  "section_break_support_agent",
+  "support_agent_id",
+  "support_agent_version",
+  "column_break_support_telephony",
+  "support_connection_id",
+  "support_agent_phone_number",
+  "section_break_call_logging",
+  "enable_call_logging",
+  "column_break_call_logging",
+  "s3_bucket",
+  "s3_region",
+  "section_break_s3_credentials",
+  "s3_access_key_id",
+  "s3_secret_access_key",
+  "column_break_s3_credentials",
+  "s3_endpoint_url",
+  "section_break_s3_paths",
+  "s3_inbound_path_prefix",
+  "column_break_s3_paths",
+  "s3_outbound_path_prefix"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_sarvam_outbound",
+   "fieldtype": "Section Break",
+   "label": "Sarvam Outbound Settings"
+  },
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_auth",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "outbound_api_key",
+   "fieldtype": "Password",
+   "label": "Outbound API Key (X-API-Key)",
+   "mandatory_depends_on": "enabled"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "webhook_secret",
+   "fieldtype": "Password",
+   "label": "Webhook Secret",
+   "mandatory_depends_on": "enabled"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "section_break_workspace",
+   "fieldtype": "Section Break",
+   "hide_border": 1,
+   "label": "Workspace"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "org_id",
+   "fieldtype": "Data",
+   "label": "Org ID",
+   "mandatory_depends_on": "enabled"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "workspace_id",
+   "fieldtype": "Data",
+   "label": "Workspace ID",
+   "mandatory_depends_on": "enabled"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "section_break_support_agent",
+   "fieldtype": "Section Break",
+   "hide_border": 1,
+   "label": "Support Outbound Agent"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "support_agent_id",
+   "fieldtype": "Data",
+   "label": "Support Agent ID",
+   "mandatory_depends_on": "enabled"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "support_agent_version",
+   "fieldtype": "Int",
+   "label": "Support Agent Committed Version",
+   "mandatory_depends_on": "enabled"
+  },
+  {
+   "fieldname": "column_break_support_telephony",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "support_connection_id",
+   "fieldtype": "Data",
+   "label": "Telephony Connection ID",
+   "mandatory_depends_on": "enabled"
+  },
+  {
+   "depends_on": "enabled",
+   "fieldname": "support_agent_phone_number",
+   "fieldtype": "Data",
+   "label": "Caller ID (E.164)",
+   "mandatory_depends_on": "enabled"
+  },
+  {
+   "fieldname": "section_break_call_logging",
+   "fieldtype": "Section Break",
+   "label": "Call Logging Settings"
+  },
+  {
+   "default": "0",
+   "description": "Archives call recordings and transcripts from Sarvam voice agent calls (inbound and outbound) to S3, keyed by interaction ID.",
+   "fieldname": "enable_call_logging",
+   "fieldtype": "Check",
+   "label": "Enable Call Logging"
+  },
+  {
+   "fieldname": "column_break_call_logging",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "enable_call_logging",
+   "fieldname": "s3_bucket",
+   "fieldtype": "Data",
+   "label": "S3 Bucket",
+   "mandatory_depends_on": "enable_call_logging"
+  },
+  {
+   "depends_on": "enable_call_logging",
+   "fieldname": "s3_region",
+   "fieldtype": "Data",
+   "label": "S3 Region",
+   "mandatory_depends_on": "enable_call_logging"
+  },
+  {
+   "depends_on": "enable_call_logging",
+   "fieldname": "section_break_s3_credentials",
+   "fieldtype": "Section Break",
+   "hide_border": 1,
+   "label": "S3 Credentials"
+  },
+  {
+   "depends_on": "enable_call_logging",
+   "fieldname": "s3_access_key_id",
+   "fieldtype": "Data",
+   "label": "S3 Access Key ID",
+   "mandatory_depends_on": "enable_call_logging"
+  },
+  {
+   "depends_on": "enable_call_logging",
+   "fieldname": "s3_secret_access_key",
+   "fieldtype": "Password",
+   "label": "S3 Secret Access Key",
+   "mandatory_depends_on": "enable_call_logging"
+  },
+  {
+   "fieldname": "column_break_s3_credentials",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "enable_call_logging",
+   "description": "Only needed for S3-compatible storage other than AWS (e.g. MinIO, R2). Leave blank for AWS S3.",
+   "fieldname": "s3_endpoint_url",
+   "fieldtype": "Data",
+   "label": "S3 Endpoint URL"
+  },
+  {
+   "depends_on": "enable_call_logging",
+   "fieldname": "section_break_s3_paths",
+   "fieldtype": "Section Break",
+   "hide_border": 1,
+   "label": "Call Recording Paths"
+  },
+  {
+   "default": "inbound",
+   "depends_on": "enable_call_logging",
+   "description": "Inbound calls are stored as &lt;prefix&gt;/&lt;interaction_id&gt;.",
+   "fieldname": "s3_inbound_path_prefix",
+   "fieldtype": "Data",
+   "label": "Inbound Calls Path Prefix",
+   "mandatory_depends_on": "enable_call_logging"
+  },
+  {
+   "fieldname": "column_break_s3_paths",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "outbound",
+   "depends_on": "enable_call_logging",
+   "description": "Outbound calls are stored as &lt;prefix&gt;/&lt;interaction_id&gt;. Calls placed as part of a Sarvam campaign are further nested as &lt;prefix&gt;/&lt;campaign_id&gt;/&lt;interaction_id&gt;.",
+   "fieldname": "s3_outbound_path_prefix",
+   "fieldtype": "Data",
+   "label": "Outbound Calls Path Prefix",
+   "mandatory_depends_on": "enable_call_logging"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-02 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Core Customizations",
+ "name": "Sarvam Voice Agent Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

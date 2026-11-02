@@ -1,5 +1,12 @@
 import frappe
-from frappe import _
+
+# @businessRule [BR-CRM-001] The Sarvam "Sravi Enterprises Customer Care"
+# inbound agent (app_id Conversatio-5959ebd0-3da4) parses this exact message
+# to decide what to tell a repeat caller - a fixed "DUPLICATE_LEAD:" token
+# followed by semicolon-separated key=value pairs, never translated or
+# reworded. Changing the token or the field set is a breaking change for
+# that agent's prompt, not just a copy edit.
+DUPLICATE_LEAD_MESSAGE = "DUPLICATE_LEAD: name={name}; lead_name={lead_name}; mobile_no={mobile_no}; status={status}"
 
 
 def guard_duplicate_mobile(doc, method=None):
@@ -15,6 +22,9 @@ def guard_duplicate_mobile(doc, method=None):
 	before being checked - two spellings of the same number can't slip past
 	as "different".
 
+	The refusal message is a fixed `DUPLICATE_LEAD: ...` token, not a
+	human-facing sentence - see `DUPLICATE_LEAD_MESSAGE`.
+
 	Args:
 		doc (CRM Lead): The Lead being saved.
 		method (str | None): Unused; required by Frappe's doc_event signature.
@@ -26,9 +36,16 @@ def guard_duplicate_mobile(doc, method=None):
 	if not doc.is_new() or not doc.mobile_no:
 		return
 
-	existing = frappe.db.get_value("CRM Lead", {"mobile_no": doc.mobile_no}, "name")
+	existing = frappe.db.get_value(
+		"CRM Lead", {"mobile_no": doc.mobile_no}, ["name", "lead_name", "mobile_no", "status"], as_dict=True
+	)
 	if existing:
 		frappe.throw(
-			_("A CRM Lead already exists for {0}: {1}").format(doc.mobile_no, existing),
+			DUPLICATE_LEAD_MESSAGE.format(
+				name=existing.name,
+				lead_name=existing.lead_name or "",
+				mobile_no=existing.mobile_no or "",
+				status=existing.status or "",
+			),
 			frappe.DuplicateEntryError,
 		)

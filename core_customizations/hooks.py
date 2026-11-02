@@ -152,6 +152,7 @@ after_migrate = "core_customizations.setup.after_migrate"
 doc_events = {
     "CRM Lead": {
         "before_validate": "core_customizations.core_customizations.phone_normalise.normalise_lead",
+        "validate": "core_customizations.core_customizations.lead_duplicate_guard.guard_duplicate_mobile",
         "on_update": "core_customizations.core_customizations.contact_lead_link.on_lead_update",
 	},
     "Contact":  {

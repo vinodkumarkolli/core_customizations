@@ -677,9 +677,17 @@ def trigger_sarvam_call(reference_doctype: str, reference_name: str, telephony_a
 			timeout=30,
 		)
 		response.raise_for_status()
-	except requests.RequestException:
+	except requests.RequestException as e:
 		call_log.db_set("status", "Failed", update_modified=False)
-		frappe.log_error(title="Sarvam outbound call failed")
+		# @businessRule [BR-TEL-002] Sarvam returns a body describing exactly
+		# which field failed validation (e.g. a 422) - `raise_for_status()`'s
+		# own exception message is just the status line, so without logging
+		# the body here a failure is unrecoverable without reproducing it.
+		response_body = e.response.text if e.response is not None else "<no response>"
+		frappe.log_error(
+			title="Sarvam outbound call failed",
+			message=f"{frappe.get_traceback()}\n\nSarvam response body:\n{response_body}",
+		)
 		frappe.throw(_("Could not place the Sarvam outbound call. See the error log for details."))
 
 	attempt_id = (response.json() or {}).get("attempt_id")

@@ -830,3 +830,122 @@ def handle_outbound_webhook(**kwargs):
 	finally:
 		request_log.save(ignore_permissions=True)
 		frappe.db.commit()
+
+
+@frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
+def handle_inbound_webhook(**kwargs):
+	"""
+	Business Purpose: [BR-TEL-005] Receives Sarvam's call-end webhook for an
+	inbound call to a deployed agent, creates the matching CRM Call Log (no
+	Call Log exists beforehand for an inbound call, unlike outbound where
+	`trigger_sarvam_call` creates one before dialing) and archives its
+	recording/transcript to S3 via `upload_conversation_to_s3`.
+
+	Payload shape per `sarvam://schemas/webhook-payload`'s
+	`InboundWebhookPayload` (its own shape, not the outbound one - no
+	campaign/cohort/retry fields, and it names a `deployment_id`): `app_id`,
+	`app_version`, `deployment_id`, `interaction_id`, `user_phone_number`
+	(the caller), `agent_phone_number` (the number they called), `duration`,
+	`recording_url`, `start_datetime`, `end_datetime`,
+	`final_agent_variables`, `output_agent_variables`,
+	`interaction_transcript`, `metadata`. Unlike the outbound endpoint (see
+	`handle_outbound_webhook`), this shape has not yet been confirmed against
+	a real delivery - fires on it loosely and logs every payload via
+	`create_request_log` regardless, so any drift is visible and correctable.
+
+	An inbound call connects by definition (Sarvam only fires this webhook
+	for a connected call, never retries) so there is no status to map -
+	every Call Log created here is `status = "Completed"`.
+
+	Caller resolution reuses [BR-TEL-001]'s `get_contact_lead_or_deal_from_number`
+	so an inbound call lands on the same CRM Lead/Deal/Issue/Contact priority
+	as everywhere else in this app, rather than a separate lookup.
+
+	Webhook authenticity is enforced the same way as `handle_outbound_webhook`
+	- the `key` query param matched against `webhook_secret` - since Sarvam
+	does not sign either webhook. This URL must be set as the `webhook_config`
+	on the Sarvam deployment that answers inbound calls (configured on
+	Sarvam's platform, not from this app):
+	`<site>/api/method/core_customizations.core_customizations.sarvam_telephony.handle_inbound_webhook?key=<webhook_secret>`
+
+	Args:
+		**kwargs: The webhook body, forwarded as request args by Frappe.
+	"""
+	key = frappe.request.args.get("key")
+	webhook_secret = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE).get_password(
+		"webhook_secret", raise_exception=False
+	)
+	if not key or not webhook_secret or key != webhook_secret:
+		frappe.throw(_("Unauthorized request"), exc=frappe.PermissionError)
+
+	payload = frappe.request.get_json(silent=True) or kwargs
+
+	request_log = create_request_log(
+		payload,
+		request_description="Sarvam Inbound Call",
+		service_name="Sarvam",
+		request_headers=frappe.request.headers,
+		is_remote_request=1,
+	)
+
+	try:
+		interaction_id = payload.get("interaction_id")
+		if not interaction_id:
+			raise frappe.ValidationError(f"Sarvam inbound webhook payload missing interaction_id: {payload}")
+
+		user_phone_number = payload.get("user_phone_number")
+
+		# @businessRule [BR-TEL-005] `CRM Call Log` is autonamed `field:id` -
+		# keying it by `interaction_id` makes a redelivered webhook (Sarvam
+		# retries a failed delivery) idempotent: it updates the same Call Log
+		# instead of creating a duplicate.
+		if frappe.db.exists("CRM Call Log", interaction_id):
+			call_log = frappe.get_doc("CRM Call Log", interaction_id)
+		else:
+			call_log = frappe.new_doc("CRM Call Log")
+			call_log.id = interaction_id
+			call_log.type = "Incoming"
+			call_log.telephony_medium = "Sarvam"
+
+			reference_docname, reference_doctype = (None, None)
+			if user_phone_number:
+				reference_docname, reference_doctype = get_contact_lead_or_deal_from_number(user_phone_number)
+			if reference_doctype and reference_docname:
+				call_log.reference_doctype = reference_doctype
+				call_log.reference_docname = reference_docname
+
+		setattr(call_log, "from", user_phone_number)
+		call_log.to = payload.get("agent_phone_number")
+		call_log.status = "Completed"
+		if payload.get("duration") is not None:
+			call_log.duration = payload.get("duration")
+		if payload.get("recording_url"):
+			call_log.recording_url = payload.get("recording_url")
+		call_log.save(ignore_permissions=True)
+
+		transcript = payload.get("interaction_transcript")
+		if transcript:
+			transcript_text = "\n".join(
+				f"{turn.get('role', '?')}: {turn.get('en_text', '')}" for turn in transcript
+			)
+			call_log.add_comment("Comment", _("Sarvam transcript:\n{0}").format(transcript_text))
+
+		# @businessRule [BR-TEL-004] Same S3 archive helper used by the
+		# outbound webhook - no-op unless Call Logging Settings is enabled.
+		upload_conversation_to_s3(
+			"inbound",
+			interaction_id,
+			recording_url=payload.get("recording_url"),
+			transcript=transcript,
+		)
+
+		request_log.status = "Completed"
+	except Exception:
+		request_log.status = "Failed"
+		request_log.error = frappe.get_traceback()
+		frappe.db.rollback()
+		frappe.log_error(title="Error while updating CRM Call Log from Sarvam inbound webhook")
+		frappe.db.commit()
+	finally:
+		request_log.save(ignore_permissions=True)
+		frappe.db.commit()

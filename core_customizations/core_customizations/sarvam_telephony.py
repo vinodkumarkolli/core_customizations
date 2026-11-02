@@ -1,6 +1,12 @@
 # Copyright (c) 2026, Vinod Kumar K and contributors
 # For license information, please see license.txt
 
+import json
+import posixpath
+import secrets
+from urllib.parse import urlparse
+
+import boto3
 import frappe
 import requests
 from crm.fcrm.doctype.crm_call_log.crm_call_log import get_call_log as _crm_get_call_log
@@ -16,12 +22,13 @@ OPEN_ISSUE_STATUSES = ("Open", "Replied", "On Hold")
 # api-subscription-key the Sarvam STT/TTS/LLM SDKs use.
 SARVAM_OUTBOUND_API_BASE = "https://apps.sarvam.ai/api/outbounds/v1"
 
-SARVAM_SETTINGS_DOCTYPE = "Sarvam Outbound Settings"
+SARVAM_SETTINGS_DOCTYPE = "Sarvam Voice Agent Settings"
 
-# @businessRule [BR-TEL-002] Required fields on Sarvam Outbound Settings to
-# place a Support outbound call - mirrors how CRM Twilio/Exotel Settings
-# store their own per-workspace config, instead of site_config.json, so it is
-# editable from the Desk UI with secrets held as Password fields.
+# @businessRule [BR-TEL-002] Required fields in the "Sarvam Outbound
+# Settings" section of Sarvam Voice Agent Settings to place an outbound call
+# - mirrors how CRM Twilio/Exotel Settings store their own per-workspace
+# config, instead of site_config.json, so it is editable from the Desk UI
+# with secrets held as Password fields.
 SARVAM_OUTBOUND_REQUIRED_FIELDS = (
 	"outbound_api_key",
 	"webhook_secret",
@@ -37,13 +44,26 @@ SARVAM_OUTBOUND_REQUIRED_FIELDS = (
 def _is_sarvam_enabled():
 	"""
 	Business Purpose: [BR-TEL-002] Reports Sarvam AI as configured once
-	Sarvam Outbound Settings is enabled, mirroring how CRM Twilio/Exotel
-	Settings report their own `enabled` flag.
+	Sarvam Voice Agent Settings' outbound section is enabled, mirroring how
+	CRM Twilio/Exotel Settings report their own `enabled` flag.
 
 	Returns:
-		bool: True when Sarvam Outbound Settings is enabled for this site.
+		bool: True when outbound calling is enabled for this site.
 	"""
 	return bool(frappe.db.get_single_value(SARVAM_SETTINGS_DOCTYPE, "enabled"))
+
+
+def _is_call_logging_enabled():
+	"""
+	Business Purpose: [BR-TEL-004] Reports whether S3 call-logging (archiving
+	recordings/transcripts from Sarvam voice agent calls) is configured,
+	independently of whether outbound calling itself is enabled.
+
+	Returns:
+		bool: True when Sarvam Voice Agent Settings' Call Logging Settings
+		section is enabled for this site.
+	"""
+	return bool(frappe.db.get_single_value(SARVAM_SETTINGS_DOCTYPE, "enable_call_logging"))
 
 
 @frappe.whitelist()
@@ -168,21 +188,22 @@ def get_call_log(name: str):
 
 def _get_sarvam_outbound_config():
 	"""
-	Business Purpose: [BR-TEL-002] Reads Sarvam Outbound Settings and fails
-	loudly, naming every missing field, rather than letting a partially
-	configured integration fail deep inside a requests call.
+	Business Purpose: [BR-TEL-002] Reads the "Sarvam Outbound Settings"
+	section of Sarvam Voice Agent Settings and fails loudly, naming every
+	missing field, rather than letting a partially configured integration
+	fail deep inside a requests call.
 
 	Returns:
 		dict: {fieldname: value} for every field in
 		SARVAM_OUTBOUND_REQUIRED_FIELDS, with `outbound_api_key` decrypted.
 
 	Raises:
-		frappe.ValidationError: If Sarvam Outbound Settings is disabled, or
-			any required field is missing.
+		frappe.ValidationError: If outbound calling is disabled, or any
+			required field is missing.
 	"""
 	settings = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE)
 	if not settings.enabled:
-		frappe.throw(_("Sarvam Outbound Settings is not enabled"))
+		frappe.throw(_("Sarvam outbound calling is not enabled"))
 
 	password_fields = ("outbound_api_key", "webhook_secret")
 	config = {
@@ -192,17 +213,193 @@ def _get_sarvam_outbound_config():
 	missing = [field for field, value in config.items() if not value]
 	if missing:
 		frappe.throw(
-			_("Sarvam Outbound Settings is missing: {0}").format(", ".join(missing))
+			_("Sarvam Voice Agent Settings is missing: {0}").format(", ".join(missing))
 		)
 	return config
+
+
+# @businessRule [BR-TEL-004] Required fields in the "Call Logging Settings"
+# section of Sarvam Voice Agent Settings to archive a call's recording and
+# transcript to S3. Separate from SARVAM_OUTBOUND_REQUIRED_FIELDS since call
+# logging is an independent toggle - it can be enabled without outbound
+# calling, and will eventually cover inbound calls too.
+CALL_LOGGING_REQUIRED_FIELDS = (
+	"s3_bucket",
+	"s3_region",
+	"s3_access_key_id",
+	"s3_secret_access_key",
+	"s3_inbound_path_prefix",
+	"s3_outbound_path_prefix",
+)
+
+
+def _get_call_logging_config():
+	"""
+	Business Purpose: [BR-TEL-004] Reads the "Call Logging Settings" section
+	of Sarvam Voice Agent Settings and fails loudly, naming every missing
+	field, rather than silently skipping an archive upload.
+
+	Returns:
+		dict: {fieldname: value} for every field in
+		CALL_LOGGING_REQUIRED_FIELDS, with `s3_secret_access_key` decrypted,
+		plus `s3_endpoint_url` (optional, may be empty).
+
+	Raises:
+		frappe.ValidationError: If call logging is disabled, or any required
+			field is missing.
+	"""
+	settings = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE)
+	if not settings.enable_call_logging:
+		frappe.throw(_("Sarvam call logging is not enabled"))
+
+	config = {
+		field: (
+			settings.get_password(field) if field == "s3_secret_access_key" else settings.get(field)
+		)
+		for field in CALL_LOGGING_REQUIRED_FIELDS
+	}
+	missing = [field for field, value in config.items() if not value]
+	if missing:
+		frappe.throw(
+			_("Sarvam Voice Agent Settings is missing: {0}").format(", ".join(missing))
+		)
+	config["s3_endpoint_url"] = settings.get("s3_endpoint_url") or None
+	return config
+
+
+def _get_s3_client(config):
+	"""
+	Business Purpose: [BR-TEL-004] Builds a boto3 S3 client from Call Logging
+	Settings, supporting AWS S3 and S3-compatible stores (MinIO, R2, ...) via
+	an optional endpoint override.
+
+	Args:
+		config (dict): Output of `_get_call_logging_config()`.
+
+	Returns:
+		boto3.client: An S3 client scoped to the configured credentials.
+	"""
+	return boto3.client(
+		"s3",
+		aws_access_key_id=config["s3_access_key_id"],
+		aws_secret_access_key=config["s3_secret_access_key"],
+		region_name=config["s3_region"],
+		endpoint_url=config["s3_endpoint_url"],
+	)
+
+
+def _guess_recording_extension(recording_url):
+	"""
+	Business Purpose: [BR-TEL-004] Keeps the archived recording's file
+	extension consistent with whatever Sarvam actually served, instead of
+	assuming a fixed audio format.
+
+	Args:
+		recording_url (str): The URL Sarvam's webhook gave for the recording.
+
+	Returns:
+		str: A dotted extension, e.g. ".mp3"; defaults to ".mp3" if the URL
+		has none.
+	"""
+	if not recording_url:
+		return ".mp3"
+	_, suffix = posixpath.splitext(urlparse(recording_url).path)
+	return suffix or ".mp3"
+
+
+def _build_s3_key(path_prefix, interaction_id, campaign_id, extension):
+	"""
+	Business Purpose: [BR-TEL-004] Lays out archived call files predictably -
+	flat under the direction's prefix, except that calls placed as part of a
+	Sarvam campaign are nested one level deeper under the campaign, so a
+	campaign's calls can be browsed/retrieved as a single group.
+
+	Args:
+		path_prefix (str): `s3_inbound_path_prefix` or `s3_outbound_path_prefix`.
+		interaction_id (str): Sarvam's `interaction_id` for this call.
+		campaign_id (str | None): Sarvam's `campaign_id`, if this call was
+			placed as part of a campaign (never set by our current
+			instant-outbound flow, which only does single calls - this is
+			forward-looking for when campaign-based outbound is added).
+		extension (str): Dotted file extension, e.g. ".mp3" or ".json".
+
+	Returns:
+		str: The S3 object key.
+	"""
+	prefix = f"{path_prefix}/{campaign_id}" if campaign_id else path_prefix
+	return f"{prefix}/{interaction_id}{extension}"
+
+
+def upload_conversation_to_s3(direction, interaction_id, campaign_id=None, recording_url=None, transcript=None):
+	"""
+	Business Purpose: [BR-TEL-004] Archives a Sarvam voice agent call's
+	recording and transcript to S3, keyed by `interaction_id`, so they
+	outlive Sarvam's own hosted URLs. Shared by both outbound and inbound
+	webhook handlers - inbound call handling does not exist in this app yet,
+	but this function takes `direction` so it is ready to be called from an
+	inbound handler without changes here.
+
+	Never raises: a call-logging failure must not break the caller's primary
+	job of updating the CRM Call Log, so every failure is logged and
+	swallowed.
+
+	Args:
+		direction (str): "inbound" or "outbound".
+		interaction_id (str | None): Sarvam's interaction id. No-op if falsy,
+			since there would be nothing to key the upload by.
+		campaign_id (str | None): Sarvam's campaign id, if any ([BR-TEL-004]
+			sub-foldering - see `_build_s3_key`).
+		recording_url (str | None): Sarvam's hosted recording URL, if any.
+		transcript (list | None): Sarvam's `interaction_transcript`, if any.
+	"""
+	if not interaction_id or not _is_call_logging_enabled():
+		return
+
+	try:
+		config = _get_call_logging_config()
+		client = _get_s3_client(config)
+		path_prefix = config["s3_inbound_path_prefix" if direction == "inbound" else "s3_outbound_path_prefix"]
+
+		if recording_url:
+			recording = requests.get(recording_url, timeout=30)
+			recording.raise_for_status()
+			client.put_object(
+				Bucket=config["s3_bucket"],
+				Key=_build_s3_key(path_prefix, interaction_id, campaign_id, _guess_recording_extension(recording_url)),
+				Body=recording.content,
+			)
+
+		if transcript:
+			client.put_object(
+				Bucket=config["s3_bucket"],
+				Key=_build_s3_key(path_prefix, interaction_id, campaign_id, ".json"),
+				Body=json.dumps(transcript, ensure_ascii=False).encode("utf-8"),
+				ContentType="application/json",
+			)
+	except Exception:
+		frappe.log_error(title="Sarvam call-logging S3 upload failed")
+
+
+def _generate_verification_code():
+	"""
+	Business Purpose: [BR-TEL-003] A short, human-speakable code shown to the
+	user who clicked "Call via Sarvam" and read back by the staff member who
+	answers, so both sides confirm they are talking about the same call -
+	not voicemail, not a stranger who happened to pick up the phone.
+
+	Returns:
+		str: A zero-padded 4-digit code, e.g. "0427".
+	"""
+	return f"{secrets.randbelow(10000):04d}"
 
 
 def _get_outbound_caller_mobile(user):
 	"""
 	Business Purpose: [BR-TEL-003] Only a user already registered as a
 	telephony agent (same gate CRM's own Twilio/Exotel make_a_call uses) may
-	place a Sarvam outbound call - this doubles as both the authorization
-	check and the lookup for which mobile number the call blind-transfers to.
+	trigger a Sarvam outbound call at all - this is the authorization check.
+	It no longer determines who gets dialed; see `_resolve_telephony_agent`
+	for that, since the triggering user can now pick a different agent.
 
 	Args:
 		user (str): The Frappe user triggering the call.
@@ -212,6 +409,39 @@ def _get_outbound_caller_mobile(user):
 		is not a registered CRM Telephony Agent.
 	"""
 	return frappe.db.get_value("CRM Telephony Agent", {"user": user}, "mobile_no")
+
+
+def _resolve_telephony_agent(telephony_agent=None):
+	"""
+	Business Purpose: [BR-TEL-003] Resolves which registered CRM Telephony
+	Agent actually gets dialed and briefed by Sarvam. Defaults to the
+	triggering user's own record, but a dispatcher who is themselves a
+	registered agent ([BR-TEL-003]'s authorization check, enforced
+	separately in `trigger_sarvam_call`) may route the call to a different
+	registered agent instead - e.g. whichever teammate is actually free to
+	take it. `CRM Telephony Agent` is autonamed `field:user`, so its `name`
+	is the agent's own user id.
+
+	Args:
+		telephony_agent (str | None): Name of a CRM Telephony Agent record.
+			Defaults to `frappe.session.user`'s own record.
+
+	Returns:
+		dict: {user, user_name, mobile_no} of the resolved agent.
+
+	Raises:
+		frappe.ValidationError: If the resolved agent doesn't exist or has
+			no mobile number on file.
+	"""
+	agent_name = telephony_agent or frappe.session.user
+	agent = frappe.db.get_value(
+		"CRM Telephony Agent", agent_name, ["user", "user_name", "mobile_no"], as_dict=True
+	)
+	if not agent or not agent.mobile_no:
+		frappe.throw(
+			_("{0} is not registered as a CRM Telephony Agent with a mobile number.").format(agent_name)
+		)
+	return agent
 
 
 def _get_issue_call_context(issue_name):
@@ -311,31 +541,42 @@ SARVAM_CALL_CONTEXT_RESOLVERS = {
 
 
 @frappe.whitelist()
-def trigger_sarvam_call(reference_doctype: str, reference_name: str):
+def trigger_sarvam_call(reference_doctype: str, reference_name: str, telephony_agent: str | None = None):
 	"""
 	Business Purpose: [BR-TEL-002] [BR-TEL-003] Places an outbound Sarvam call
 	about an Issue, CRM Lead or CRM Deal via Sarvam's instant-outbound REST
-	API. Sarvam dials the calling user's own registered mobile first, briefs
-	them on the record, then immediately blind-transfers to the customer -
-	so by the time the customer's phone rings, the staff member is already
-	live and speaks to them directly, with no AI greeting on the customer's
-	side at all. Logs the attempt as a CRM Call Log so it appears alongside
-	Twilio/Exotel calls (see [BR-TEL-001] for how an Issue reference is then
-	resolved back from a call).
+	API. Sarvam dials the resolved telephony agent's registered mobile first
+	(the triggering user's own by default, or another registered agent if
+	`telephony_agent` is given - e.g. a dispatcher routing to whoever is
+	free), briefs them on the record, then immediately blind-transfers to
+	the customer - so by the time the customer's phone rings, the agent is
+	already live and speaks to them directly, with no AI greeting on the
+	customer's side at all. Logs the attempt as a CRM Call Log so it appears
+	alongside Twilio/Exotel calls (see [BR-TEL-001] for how an Issue
+	reference is then resolved back from a call).
 
 	Args:
 		reference_doctype (str): One of SARVAM_CALL_CONTEXT_RESOLVERS's keys.
 		reference_name (str): Name of that record to call about.
+		telephony_agent (str | None): Name of a CRM Telephony Agent record to
+			dial instead of the triggering user's own ([BR-TEL-003]). The
+			triggering user must still themselves be a registered agent -
+			this only changes who is dialed, not who may trigger the call.
 
 	Returns:
-		str: Name of the created CRM Call Log.
+		dict: {call_log, verification_code} - verification_code is the
+		4-digit code the frontend must show the clicking user, and which
+		the resolved telephony agent must read back to Sarvam before it
+		transfers ([BR-TEL-003]).
 
 	Raises:
 		frappe.ValidationError: If reference_doctype isn't supported, the
-			record has no resolvable phone number, Sarvam outbound calling
-			is not configured, or the call could not be placed.
+			record has no resolvable phone number, `telephony_agent` doesn't
+			resolve to a registered agent with a mobile number, Sarvam
+			outbound calling is not configured, or the call could not be
+			placed.
 		frappe.PermissionError: If the user cannot read the record, or is
-			not a registered CRM Telephony Agent ([BR-TEL-003]).
+			not themselves a registered CRM Telephony Agent ([BR-TEL-003]).
 	"""
 	resolve_context = SARVAM_CALL_CONTEXT_RESOLVERS.get(reference_doctype)
 	if not resolve_context:
@@ -346,16 +587,17 @@ def trigger_sarvam_call(reference_doctype: str, reference_name: str):
 	if not frappe.has_permission(reference_doctype, "read", reference_name):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
-	# @businessRule [BR-TEL-003] Outbound calling is restricted to users
-	# already registered as a CRM Telephony Agent - the same gate CRM's own
-	# Twilio/Exotel make_a_call uses - and that record's mobile number is
-	# also where the call gets blind-transferred to.
-	caller_mobile = _get_outbound_caller_mobile(frappe.session.user)
-	if not caller_mobile:
+	# @businessRule [BR-TEL-003] Triggering a Sarvam outbound call at all is
+	# restricted to users already registered as a CRM Telephony Agent - the
+	# same gate CRM's own Twilio/Exotel make_a_call uses. This is who may
+	# trigger the call, separate from who gets dialed (resolved below).
+	if not _get_outbound_caller_mobile(frappe.session.user):
 		frappe.throw(
 			_("You are not registered as a CRM Telephony Agent, so you cannot place outbound calls."),
 			frappe.PermissionError,
 		)
+
+	agent = _resolve_telephony_agent(telephony_agent)
 
 	context = resolve_context(reference_name)
 	phone_number = context["phone_number"]
@@ -363,11 +605,12 @@ def trigger_sarvam_call(reference_doctype: str, reference_name: str):
 		frappe.throw(_("{0} {1} has no contact phone number to call").format(reference_doctype, reference_name))
 
 	config = _get_sarvam_outbound_config()
+	verification_code = _generate_verification_code()
 
 	call_log = frappe.get_doc(
 		{
 			"doctype": "CRM Call Log",
-			"caller": frappe.session.user,
+			"caller": agent.user,
 			"type": "Outgoing",
 			"status": "Initiated",
 			"telephony_medium": "Sarvam",
@@ -382,8 +625,8 @@ def trigger_sarvam_call(reference_doctype: str, reference_name: str):
 	# the public internet, which a local/dev site_name (e.g. development.localhost)
 	# never is. sarvam_webhook_base_url is a site_config.json-only escape hatch
 	# (e.g. a cloudflared/ngrok tunnel URL during local testing) - deliberately
-	# not on Sarvam Outbound Settings, since it's a site-identity concern, not a
-	# Sarvam workspace one, and get_url() remains correct for production.
+	# not on Sarvam Voice Agent Settings, since it's a site-identity concern,
+	# not a Sarvam workspace one, and get_url() remains correct for production.
 	webhook_base_url = frappe.conf.get("sarvam_webhook_base_url") or frappe.utils.get_url()
 	webhook_url = (
 		f"{webhook_base_url}/api/method/core_customizations.core_customizations."
@@ -404,6 +647,11 @@ def trigger_sarvam_call(reference_doctype: str, reference_name: str):
 				"record_subject": context["record_subject"],
 				"contact_name": context["contact_name"],
 				"record_status": context["record_status"],
+				# @businessRule [BR-TEL-003] Both the clicking user (shown this
+				# in the popup) and the staff member who answers (asked to
+				# read it back by the agent) see this code, so a mismatch
+				# means the wrong person picked up, not the intended call.
+				"verification_code": verification_code,
 				# @businessRule [BR-TEL-003] Sarvam dials the STAFF member
 				# first (user_phone_number below) and briefs them, then
 				# blind-transfers to transfer_to (the customer) - so by the
@@ -413,7 +661,7 @@ def trigger_sarvam_call(reference_doctype: str, reference_name: str):
 				"transfer_to": phone_number,
 			},
 		},
-		"user_config": {"user_phone_number": caller_mobile},
+		"user_config": {"user_phone_number": agent.mobile_no},
 		"webhook_config": {
 			"url": webhook_url,
 			"metadata": {"call_log": call_log.name},
@@ -438,7 +686,7 @@ def trigger_sarvam_call(reference_doctype: str, reference_name: str):
 	if attempt_id:
 		call_log.db_set("id", attempt_id, update_modified=False)
 
-	return call_log.name
+	return {"call_log": call_log.name, "verification_code": verification_code}
 
 
 def _find_call_log_by_attempt(attempt_id):
@@ -508,7 +756,7 @@ def handle_outbound_webhook(**kwargs):
 	correctable without losing the raw payload.
 
 	Webhook authenticity is enforced by the `key` query param (matched
-	against Sarvam Outbound Settings' `webhook_secret`), the same workaround
+	against Sarvam Voice Agent Settings' `webhook_secret`), the same workaround
 	CRM's own Exotel handler uses since Sarvam, like Exotel, does not sign
 	its webhook.
 
@@ -559,6 +807,18 @@ def handle_outbound_webhook(**kwargs):
 				f"{turn.get('role', '?')}: {turn.get('en_text', '')}" for turn in transcript
 			)
 			call_log.add_comment("Comment", _("Sarvam transcript (AI side only):\n{0}").format(transcript_text))
+
+		# @businessRule [BR-TEL-004] Archives the recording/transcript to S3
+		# if Call Logging Settings is enabled - a no-op otherwise. Never
+		# raises, so a logging failure never prevents the Call Log update
+		# above from being marked Completed.
+		upload_conversation_to_s3(
+			"outbound",
+			payload.get("interaction_id"),
+			campaign_id=payload.get("campaign_id"),
+			recording_url=payload.get("recording_url"),
+			transcript=transcript,
+		)
 
 		request_log.status = "Completed"
 	except Exception:

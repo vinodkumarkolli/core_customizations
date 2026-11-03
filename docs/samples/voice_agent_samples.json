@@ -1,0 +1,607 @@
+{
+ "caller_context": {
+  "blocked": {
+   "message": {
+    "allowed": false,
+    "reason": "BLOCKED_LIST",
+    "message": "This caller is on the blocked list."
+   }
+  },
+  "foreign": {
+   "message": {
+    "allowed": false,
+    "reason": "FOREIGN_NUMBER",
+    "message": "This is not an Indian number."
+   }
+  },
+  "unknown_number": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": null,
+    "contact": null,
+    "customer": null,
+    "preferences": {},
+    "preferences_source": null,
+    "call_log": null
+   }
+  },
+  "lead_only_with_call_id": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": {
+     "name": "CRM-LEAD-2026-04271",
+     "lead_name": "VA Lead Only",
+     "mobile_no": "+917000000103",
+     "status": "New",
+     "organization": null,
+     "caller_category": "individual",
+     "store_type": null
+    },
+    "contact": null,
+    "customer": null,
+    "preferences": {},
+    "preferences_source": "CRM Lead:CRM-LEAD-2026-04271",
+    "call_log": {
+     "id": "sample-call-1",
+     "created": true
+    }
+   }
+  },
+  "repeat_same_call_id": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": {
+     "name": "CRM-LEAD-2026-04271",
+     "lead_name": "VA Lead Only",
+     "mobile_no": "+917000000103",
+     "status": "New",
+     "organization": null,
+     "caller_category": "individual",
+     "store_type": null
+    },
+    "contact": null,
+    "customer": null,
+    "preferences": {},
+    "preferences_source": "CRM Lead:CRM-LEAD-2026-04271",
+    "call_log": {
+     "id": "sample-call-1",
+     "created": false
+    }
+   }
+  },
+  "customer_only": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": null,
+    "contact": {
+     "name": "VA Test Individual Customer-VA Test Individual Customer",
+     "full_name": "VA Test Individual Customer",
+     "mobile_no": "+917000000104"
+    },
+    "customer": {
+     "name": "VA Test Individual Customer",
+     "customer_name": "VA Test Individual Customer",
+     "customer_group": "Individual",
+     "default_price_list": "Standard Selling",
+     "category": "individual",
+     "group_supported": true
+    },
+    "preferences": {},
+    "preferences_source": "Contact:VA Test Individual Customer-VA Test Individual Customer",
+    "call_log": null
+   }
+  },
+  "lead_plus_customer": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": {
+     "name": "CRM-LEAD-2026-04272",
+     "lead_name": "VA Lead And Customer",
+     "mobile_no": "+917000000105",
+     "status": "New",
+     "organization": "VA Test Individual Customer",
+     "caller_category": null,
+     "store_type": null
+    },
+    "contact": null,
+    "customer": {
+     "name": "VA Test Individual Customer",
+     "customer_name": "VA Test Individual Customer",
+     "customer_group": "Individual",
+     "default_price_list": "Standard Selling",
+     "category": "individual",
+     "group_supported": true
+    },
+    "preferences": {},
+    "preferences_source": "CRM Lead:CRM-LEAD-2026-04272",
+    "call_log": null
+   }
+  },
+  "legacy_spaced_number": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": {
+     "name": "CRM-LEAD-2026-04273",
+     "lead_name": "VA Legacy Spaced",
+     "mobile_no": "70000 00106",
+     "status": "New",
+     "organization": null,
+     "caller_category": null,
+     "store_type": null
+    },
+    "contact": null,
+    "customer": null,
+    "preferences": {},
+    "preferences_source": "CRM Lead:CRM-LEAD-2026-04273",
+    "call_log": null
+   }
+  },
+  "customer_only_mahaveer_agencies_ramapuram": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": {
+     "name": "CRM-LEAD-2026-04241",
+     "lead_name": "Rakesh",
+     "mobile_no": "+919840456658",
+     "status": "Converted",
+     "organization": null,
+     "caller_category": null,
+     "store_type": null
+    },
+    "contact": {
+     "name": "Mahaveer Agency - Ramapuram-Mahaveer Agency - Ramapuram",
+     "full_name": "Mahaveer Agencies - Ramapuram",
+     "mobile_no": "+919840456658"
+    },
+    "customer": {
+     "name": "Mahaveer Agencies - Ramapuram",
+     "customer_name": "Mahaveer Agencies - Ramapuram",
+     "customer_group": "Commercial",
+     "default_price_list": "Distributor Pricelist 40.50",
+     "category": "wholesale",
+     "group_supported": true
+    },
+    "preferences": {},
+    "preferences_source": "CRM Lead:CRM-LEAD-2026-04241",
+    "call_log": null
+   }
+  }
+ },
+ "set_caller_preferences": {
+  "lead": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "saved": true,
+    "preferences": {
+     "preferred_language": "ta",
+     "preferred_flow": "order"
+    },
+    "source": "CRM Lead:CRM-LEAD-2026-04271"
+   }
+  },
+  "unknown_number": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "saved": false,
+    "error": "NOT_ON_RECORD",
+    "preferences": {
+     "preferred_language": "ta"
+    },
+    "source": null
+   }
+  }
+ },
+ "get_caller_preferences": {
+  "lead": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "preferences": {
+     "preferred_language": "ta",
+     "preferred_flow": "order"
+    },
+    "source": "CRM Lead:CRM-LEAD-2026-04271"
+   }
+  }
+ },
+ "upsert_quote": {
+  "blocked": {
+   "message": {
+    "allowed": false,
+    "reason": "BLOCKED_LIST",
+    "message": "This caller is on the blocked list."
+   }
+  },
+  "unknown_number": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "NOT_ON_RECORD",
+    "message": "Save the caller's name and number (save_request) before quoting."
+   }
+  },
+  "lead_only_out_of_state": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00335",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00038",
+    "price_list": "Standard Selling",
+    "place_of_supply": "36-Telangana",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 1.0,
+      "rate": 476.25,
+      "amount": 476.25
+     }
+    ],
+    "net_total": 476.25,
+    "taxes": [
+     {
+      "type": "IGST",
+      "rate": 5.0,
+      "amount": 23.81
+     }
+    ],
+    "shipping": 60.0,
+    "rounding_adjustment": -0.06,
+    "grand_total": 560.06,
+    "rounded_total": 560.0,
+    "total_to_say": 560.0
+   }
+  },
+  "repeat_updates_same_draft": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00335",
+    "created": false,
+    "deal": "CRM-DEAL-2026-00038",
+    "price_list": "Standard Selling",
+    "place_of_supply": "36-Telangana",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 2.0,
+      "rate": 476.25,
+      "amount": 952.5
+     }
+    ],
+    "net_total": 952.5,
+    "taxes": [
+     {
+      "type": "IGST",
+      "rate": 5.0,
+      "amount": 47.62
+     }
+    ],
+    "shipping": 80.0,
+    "rounding_adjustment": -0.12,
+    "grand_total": 1080.12,
+    "rounded_total": 1080.0,
+    "total_to_say": 1080.0
+   }
+  },
+  "customer_only_in_state": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00336",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00039",
+    "price_list": "Standard Selling",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 1.0,
+      "rate": 476.25,
+      "amount": 476.25
+     }
+    ],
+    "net_total": 476.25,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 11.91
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 11.91
+     }
+    ],
+    "shipping": 60.0,
+    "rounding_adjustment": -0.07,
+    "grand_total": 560.07,
+    "rounded_total": 560.0,
+    "total_to_say": 560.0
+   }
+  },
+  "pack_for_commercial_customer": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "PACK_NOT_AVAILABLE",
+    "message": "These packs are only sold to another customer group.",
+    "items": [
+     "SASB-50INR-PACK-10"
+    ],
+    "customer_group": "Commercial"
+   }
+  },
+  "no_pincode_on_record": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "PINCODE_REQUIRED",
+    "message": "Ask for the delivery pincode so GST can be worked out."
+   }
+  }
+ },
+ "save_request": {
+  "blocked": {
+   "message": {
+    "allowed": false,
+    "reason": "BLOCKED_LIST",
+    "message": "This caller is on the blocked list.",
+    "status": "blocked",
+    "lead": null,
+    "deal": null,
+    "quotation": null,
+    "task": null
+   }
+  },
+  "foreign": {
+   "message": {
+    "allowed": false,
+    "reason": "FOREIGN_NUMBER",
+    "message": "This is not an Indian number.",
+    "status": "blocked",
+    "lead": null,
+    "deal": null,
+    "quotation": null,
+    "task": null
+   }
+  },
+  "new_caller_retailer": {
+   "message": {
+    "allowed": true,
+    "status": "saved",
+    "lead": "CRM-LEAD-2026-04275",
+    "deal": null,
+    "quotation": null,
+    "task": 13,
+    "quote": null,
+    "warnings": [
+     "CUSTOMER_GROUP_NEEDS_REVIEW: retailer"
+    ],
+    "message": "Saved."
+   }
+  },
+  "repeat_same_caller": {
+   "message": {
+    "allowed": true,
+    "status": "duplicate",
+    "lead": "CRM-LEAD-2026-04275",
+    "deal": null,
+    "quotation": null,
+    "task": 13,
+    "quote": null,
+    "warnings": [
+     "CUSTOMER_GROUP_NEEDS_REVIEW: retailer"
+    ],
+    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04275; lead_name=Ravi; mobile_no=+917000000108; status=New",
+    "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
+   }
+  },
+  "duplicate_existing_lead": {
+   "message": {
+    "allowed": true,
+    "status": "duplicate",
+    "lead": "CRM-LEAD-2026-04271",
+    "deal": null,
+    "quotation": null,
+    "task": 14,
+    "quote": null,
+    "warnings": [],
+    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04271; lead_name=VA Lead Only; mobile_no=+917000000103; status=New",
+    "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
+   }
+  },
+  "legacy_spaced_number": {
+   "message": {
+    "allowed": true,
+    "status": "duplicate",
+    "lead": "CRM-LEAD-2026-04273",
+    "deal": null,
+    "quotation": null,
+    "task": 15,
+    "quote": null,
+    "warnings": [],
+    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04273; lead_name=VA Legacy Spaced; mobile_no=70000 00106; status=New",
+    "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
+   }
+  },
+  "customer_only_with_items": {
+   "message": {
+    "allowed": true,
+    "status": "saved",
+    "lead": null,
+    "deal": "CRM-DEAL-2026-00040",
+    "quotation": "SAL-QTN-2026-00336",
+    "task": null,
+    "quote": {
+     "allowed": true,
+     "status": "quoted",
+     "quotation": "SAL-QTN-2026-00336",
+     "created": false,
+     "deal": "CRM-DEAL-2026-00040",
+     "price_list": "Standard Selling",
+     "place_of_supply": "33-Tamil Nadu",
+     "items": [
+      {
+       "item_code": "SASB-50INR-PACK-10",
+       "item_name": "Sastry Balm 50 INR Pack of 10",
+       "qty": 1.0,
+       "rate": 476.25,
+       "amount": 476.25
+      }
+     ],
+     "net_total": 476.25,
+     "taxes": [
+      {
+       "type": "SGST",
+       "rate": 2.5,
+       "amount": 11.91
+      },
+      {
+       "type": "CGST",
+       "rate": 2.5,
+       "amount": 11.91
+      }
+     ],
+     "shipping": 60.0,
+     "rounding_adjustment": -0.07,
+     "grand_total": 560.07,
+     "rounded_total": 560.0,
+     "total_to_say": 560.0
+    },
+    "warnings": [],
+    "message": ""
+   }
+  },
+  "lead_plus_customer_no_items": {
+   "message": {
+    "allowed": true,
+    "status": "duplicate",
+    "lead": "CRM-LEAD-2026-04272",
+    "deal": "CRM-DEAL-2026-00041",
+    "quotation": null,
+    "task": 16,
+    "quote": null,
+    "warnings": [],
+    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04272; lead_name=VA Lead And Customer; mobile_no=+917000000105; status=New",
+    "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
+   }
+  },
+  "new_individual_with_items": {
+   "message": {
+    "allowed": true,
+    "status": "saved",
+    "lead": "CRM-LEAD-2026-04276",
+    "deal": "CRM-DEAL-2026-00042",
+    "quotation": "SAL-QTN-2026-00337",
+    "task": 17,
+    "quote": {
+     "allowed": true,
+     "status": "quoted",
+     "quotation": "SAL-QTN-2026-00337",
+     "created": true,
+     "deal": "CRM-DEAL-2026-00042",
+     "price_list": "Standard Selling",
+     "place_of_supply": "36-Telangana",
+     "items": [
+      {
+       "item_code": "SASB-50INR-PACK-10",
+       "item_name": "Sastry Balm 50 INR Pack of 10",
+       "qty": 1.0,
+       "rate": 476.25,
+       "amount": 476.25
+      }
+     ],
+     "net_total": 476.25,
+     "taxes": [
+      {
+       "type": "IGST",
+       "rate": 5.0,
+       "amount": 23.81
+      }
+     ],
+     "shipping": 60.0,
+     "rounding_adjustment": -0.06,
+     "grand_total": 560.06,
+     "rounded_total": 560.0,
+     "total_to_say": 560.0
+    },
+    "warnings": [],
+    "message": "Saved."
+   }
+  }
+ },
+ "transfer_target": {
+  "known_caller_in_hours": {
+   "message": {
+    "allowed": true,
+    "open": true,
+    "target": "+918248207671",
+    "target_name": "Kalpana",
+    "then": [
+     "+918106557040",
+     "+918122586261"
+    ],
+    "then_names": [
+     "Sravya",
+     "Vinod"
+    ],
+    "reason": null,
+    "decision": "TRANSFER"
+   }
+  },
+  "unknown_caller_in_hours": {
+   "message": {
+    "allowed": true,
+    "open": false,
+    "target": null,
+    "target_name": null,
+    "then": [],
+    "decision": "CALLBACK",
+    "reason": "NOT_ON_RECORD"
+   }
+  },
+  "blocked": {
+   "message": {
+    "allowed": false,
+    "reason": "BLOCKED_LIST",
+    "message": "This caller is on the blocked list."
+   }
+  },
+  "sunday": {
+   "message": {
+    "allowed": true,
+    "open": false,
+    "target": null,
+    "target_name": null,
+    "then": [],
+    "decision": "CALLBACK",
+    "reason": "OUTSIDE_HOURS",
+    "checked_at": "2026-11-08T12:00+05:30"
+   }
+  }
+ }
+}

@@ -931,6 +931,13 @@ def handle_inbound_webhook(**kwargs):
 			call_log.recording_url = payload.get("recording_url")
 		call_log.save(ignore_permissions=True)
 
+		# @businessRule [BR-TEL-007] The agent's output variables (summary,
+		# conversation ref, preferences) are written here, from the
+		# webhook, instead of by the agent's own end-of-call tool calls.
+		from core_customizations.core_customizations.voice_agent import apply_call_outcome
+
+		apply_call_outcome(call_log, payload)
+
 		transcript = payload.get("interaction_transcript")
 		if transcript:
 			transcript_text = "\n".join(

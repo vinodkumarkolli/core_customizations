@@ -34,7 +34,25 @@
   "column_break_s3_paths",
   "s3_outbound_path_prefix",
   "section_break_caller_gate",
-  "caller_gate_automation_user"
+  "caller_gate_automation_user",
+  "section_break_voice_agent_records",
+  "default_lead_owner",
+  "callback_task_assignee",
+  "callback_task_priority",
+  "column_break_voice_agent_records",
+  "quotation_company",
+  "deal_status",
+  "section_break_caller_categories",
+  "caller_categories",
+  "pack_items",
+  "section_break_transfer",
+  "transfer_start_time",
+  "transfer_end_time",
+  "column_break_transfer",
+  "transfer_days",
+  "transfer_timezone",
+  "transfer_known_callers_only",
+  "transfer_executives"
  ],
  "fields": [
   {
@@ -228,12 +246,119 @@
    "fieldtype": "Link",
    "label": "Caller Gate Automation User",
    "options": "User"
+  },
+  {
+   "fieldname": "section_break_voice_agent_records",
+   "fieldtype": "Section Break",
+   "label": "Voice Agent Records"
+  },
+  {
+   "fieldname": "default_lead_owner",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Default Lead Owner",
+   "description": "[BR-CRM-004] lead_owner on a CRM Lead the voice agent creates. Blank = the Caller Gate Automation User."
+  },
+  {
+   "fieldname": "callback_task_assignee",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Callback Task Assignee",
+   "description": "[BR-CRM-004] Who a callback CRM Task the voice agent raises is assigned to. Blank = unassigned."
+  },
+  {
+   "default": "High",
+   "fieldname": "callback_task_priority",
+   "fieldtype": "Select",
+   "options": "Low\nMedium\nHigh",
+   "label": "Callback Task Priority"
+  },
+  {
+   "fieldname": "column_break_voice_agent_records",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quotation_company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "label": "Quotation Company",
+   "description": "[BR-CRM-006] Company on every Quotation the voice agent raises. Blank = the global default company."
+  },
+  {
+   "default": "Qualification",
+   "fieldname": "deal_status",
+   "fieldtype": "Link",
+   "options": "CRM Deal Status",
+   "label": "New Deal Status"
+  },
+  {
+   "fieldname": "section_break_caller_categories",
+   "fieldtype": "Section Break",
+   "label": "Caller Categories & Pack Items"
+  },
+  {
+   "fieldname": "caller_categories",
+   "fieldtype": "Table",
+   "options": "Sarvam Caller Category",
+   "label": "Caller Categories"
+  },
+  {
+   "fieldname": "pack_items",
+   "fieldtype": "Table",
+   "options": "Sarvam Pack Item",
+   "label": "Pack Items"
+  },
+  {
+   "fieldname": "section_break_transfer",
+   "fieldtype": "Section Break",
+   "label": "Live Transfer"
+  },
+  {
+   "default": "10:00:00",
+   "fieldname": "transfer_start_time",
+   "fieldtype": "Time",
+   "label": "Transfer Open From"
+  },
+  {
+   "default": "20:00:00",
+   "fieldname": "transfer_end_time",
+   "fieldtype": "Time",
+   "label": "Transfer Open Until"
+  },
+  {
+   "fieldname": "column_break_transfer",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Mon,Tue,Wed,Thu,Fri,Sat",
+   "fieldname": "transfer_days",
+   "fieldtype": "Data",
+   "label": "Transfer Days",
+   "description": "Comma-separated three-letter day names."
+  },
+  {
+   "default": "Asia/Kolkata",
+   "fieldname": "transfer_timezone",
+   "fieldtype": "Data",
+   "label": "Transfer Time Zone"
+  },
+  {
+   "default": "1",
+   "fieldname": "transfer_known_callers_only",
+   "fieldtype": "Check",
+   "label": "Only Transfer Callers On Record"
+  },
+  {
+   "fieldname": "transfer_executives",
+   "fieldtype": "Table",
+   "options": "Sarvam Transfer Executive",
+   "label": "Transfer Executives"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-02 00:00:00.000000",
+ "modified": "2026-11-03 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Core Customizations",
  "name": "Sarvam Voice Agent Settings",

@@ -36,7 +36,7 @@
     "lead": {
      "name": "CRM-LEAD-2026-04271",
      "lead_name": "VA Lead Only",
-     "mobile_no": "+917000000103",
+     "mobile_no": "+917000001103",
      "status": "New",
      "organization": null,
      "caller_category": "individual",
@@ -61,7 +61,7 @@
     "lead": {
      "name": "CRM-LEAD-2026-04271",
      "lead_name": "VA Lead Only",
-     "mobile_no": "+917000000103",
+     "mobile_no": "+917000001103",
      "status": "New",
      "organization": null,
      "caller_category": "individual",
@@ -85,25 +85,25 @@
     "message": "",
     "lead": null,
     "contact": {
-     "name": "VA Test Individual Customer-VA Test Individual Customer",
-     "full_name": "VA Test Individual Customer",
-     "mobile_no": "+917000000104"
+     "name": "VA Unit Individual Customer-VA Unit Individual Customer",
+     "full_name": "VA Unit Individual Customer",
+     "mobile_no": "+917000001104"
     },
     "customer": {
-     "name": "VA Test Individual Customer",
-     "customer_name": "VA Test Individual Customer",
+     "name": "VA Unit Individual Customer",
+     "customer_name": "VA Unit Individual Customer",
      "customer_group": "Individual",
      "default_price_list": "Standard Selling",
      "category": "individual",
      "group_supported": true
     },
     "preferences": {},
-    "preferences_source": "Contact:VA Test Individual Customer-VA Test Individual Customer",
+    "preferences_source": "Contact:VA Unit Individual Customer-VA Unit Individual Customer",
     "call_log": null,
     "addresses": [
      {
-      "name": "VA Test Individual Customer-Billing",
-      "address_title": "VA Test Individual Customer",
+      "name": "VA Unit Individual Customer-Billing",
+      "address_title": "VA Unit Individual Customer",
       "address_type": "Billing",
       "address_line1": "1 Test Street",
       "address_line2": null,
@@ -124,16 +124,16 @@
     "lead": {
      "name": "CRM-LEAD-2026-04272",
      "lead_name": "VA Lead And Customer",
-     "mobile_no": "+917000000105",
+     "mobile_no": "+917000001105",
      "status": "New",
-     "organization": "VA Test Individual Customer",
+     "organization": "VA Unit Individual Customer",
      "caller_category": null,
      "store_type": null
     },
     "contact": null,
     "customer": {
-     "name": "VA Test Individual Customer",
-     "customer_name": "VA Test Individual Customer",
+     "name": "VA Unit Individual Customer",
+     "customer_name": "VA Unit Individual Customer",
      "customer_group": "Individual",
      "default_price_list": "Standard Selling",
      "category": "individual",
@@ -144,8 +144,8 @@
     "call_log": null,
     "addresses": [
      {
-      "name": "VA Test Individual Customer-Billing",
-      "address_title": "VA Test Individual Customer",
+      "name": "VA Unit Individual Customer-Billing",
+      "address_title": "VA Unit Individual Customer",
       "address_type": "Billing",
       "address_line1": "1 Test Street",
       "address_line2": null,
@@ -166,7 +166,7 @@
     "lead": {
      "name": "CRM-LEAD-2026-04273",
      "lead_name": "VA Legacy Spaced",
-     "mobile_no": "70000 00106",
+     "mobile_no": "70000 01106",
      "status": "New",
      "organization": null,
      "caller_category": null,
@@ -187,20 +187,20 @@
     "message": "",
     "lead": null,
     "contact": {
-     "name": "VA Test No Address Customer-VA Test No Address Customer",
-     "full_name": "VA Test No Address Customer",
-     "mobile_no": "+917000000110"
+     "name": "VA Unit No Address Customer-VA Unit No Address Customer",
+     "full_name": "VA Unit No Address Customer",
+     "mobile_no": "+917000001110"
     },
     "customer": {
-     "name": "VA Test No Address Customer",
-     "customer_name": "VA Test No Address Customer",
+     "name": "VA Unit No Address Customer",
+     "customer_name": "VA Unit No Address Customer",
      "customer_group": "Individual",
      "default_price_list": "Standard Selling",
      "category": "individual",
      "group_supported": true
     },
     "preferences": {},
-    "preferences_source": "Contact:VA Test No Address Customer-VA Test No Address Customer",
+    "preferences_source": "Contact:VA Unit No Address Customer-VA Unit No Address Customer",
     "call_log": null,
     "addresses": []
    }
@@ -212,25 +212,25 @@
     "message": "",
     "lead": null,
     "contact": {
-     "name": "VA Test Three Address Customer-VA Test Three Address Customer",
-     "full_name": "VA Test Three Address Customer",
-     "mobile_no": "+917000000111"
+     "name": "VA Unit Three Address Customer-VA Unit Three Address Customer",
+     "full_name": "VA Unit Three Address Customer",
+     "mobile_no": "+917000001111"
     },
     "customer": {
-     "name": "VA Test Three Address Customer",
-     "customer_name": "VA Test Three Address Customer",
+     "name": "VA Unit Three Address Customer",
+     "customer_name": "VA Unit Three Address Customer",
      "customer_group": "Individual",
      "default_price_list": "Standard Selling",
      "category": "individual",
      "group_supported": true
     },
     "preferences": {},
-    "preferences_source": "Contact:VA Test Three Address Customer-VA Test Three Address Customer",
+    "preferences_source": "Contact:VA Unit Three Address Customer-VA Unit Three Address Customer",
     "call_log": null,
     "addresses": [
      {
-      "name": "VA Test Three Address Customer Hyderabad-Shipping",
-      "address_title": "VA Test Three Address Customer Hyderabad",
+      "name": "VA Unit Three Address Customer Hyderabad-Shipping",
+      "address_title": "VA Unit Three Address Customer Hyderabad",
       "address_type": "Shipping",
       "address_line1": "Godown Rd",
       "address_line2": null,
@@ -241,8 +241,8 @@
       "is_shipping_address": 1
      },
      {
-      "name": "VA Test Three Address Customer-Billing",
-      "address_title": "VA Test Three Address Customer",
+      "name": "VA Unit Three Address Customer-Billing",
+      "address_title": "VA Unit Three Address Customer",
       "address_type": "Billing",
       "address_line1": "1 Test Street",
       "address_line2": null,
@@ -253,8 +253,8 @@
       "is_shipping_address": 0
      },
      {
-      "name": "VA Test Three Address Customer Coimbatore-Billing",
-      "address_title": "VA Test Three Address Customer Coimbatore",
+      "name": "VA Unit Three Address Customer Coimbatore-Billing",
+      "address_title": "VA Unit Three Address Customer Coimbatore",
       "address_type": "Billing",
       "address_line1": "Branch Rd",
       "address_line2": null,
@@ -363,7 +363,7 @@
     "lead": {
      "name": "CRM-LEAD-2026-04276",
      "lead_name": "Lakshmi",
-     "mobile_no": "+917000000112",
+     "mobile_no": "+917000001112",
      "status": "New",
      "organization": null,
      "caller_category": "individual",
@@ -388,6 +388,322 @@
       "is_shipping_address": 1
      }
     ]
+   }
+  }
+ },
+ "upsert_quote": {
+  "mahaveer_hyderabad_delivery_on_billing_basis": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00335",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00039",
+    "price_list": "Distributor Pricelist 40.50",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-12.6 ML",
+      "item_name": "Sastry Balm-12.6 ML",
+      "qty": 10.0,
+      "rate": 38.57,
+      "amount": 385.7
+     }
+    ],
+    "net_total": 385.7,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 9.64
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 9.64
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 19.28,
+    "shipping": 0.0,
+    "rounding_adjustment": 0.02,
+    "grand_total": 404.98,
+    "rounded_total": 405.0,
+    "total_to_say": 405.0
+   }
+  },
+  "mahaveer_chennai_billing_address_same_state": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00335",
+    "created": false,
+    "deal": "CRM-DEAL-2026-00040",
+    "price_list": "Distributor Pricelist 40.50",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-12.6 ML",
+      "item_name": "Sastry Balm-12.6 ML",
+      "qty": 10.0,
+      "rate": 38.57,
+      "amount": 385.7
+     }
+    ],
+    "net_total": 385.7,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 9.64
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 9.64
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 19.28,
+    "shipping": 0.0,
+    "rounding_adjustment": 0.02,
+    "grand_total": 404.98,
+    "rounded_total": 405.0,
+    "total_to_say": 405.0
+   }
+  },
+  "blocked": {
+   "message": {
+    "allowed": false,
+    "reason": "BLOCKED_LIST",
+    "message": "This caller is on the blocked list."
+   }
+  },
+  "unknown_number": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "NOT_ON_RECORD",
+    "message": "Save the caller's name and number (save_request) before quoting."
+   }
+  },
+  "lead_only_out_of_state": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00336",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00041",
+    "price_list": "Standard Selling",
+    "place_of_supply": "36-Telangana",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 1.0,
+      "rate": 476.25,
+      "amount": 476.25
+     }
+    ],
+    "net_total": 476.25,
+    "taxes": [
+     {
+      "type": "IGST",
+      "rate": 5.0,
+      "amount": 23.81
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 23.81,
+    "shipping": 60.0,
+    "rounding_adjustment": -0.06,
+    "grand_total": 560.06,
+    "rounded_total": 560.0,
+    "total_to_say": 560.0
+   }
+  },
+  "repeat_updates_same_draft": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00336",
+    "created": false,
+    "deal": "CRM-DEAL-2026-00041",
+    "price_list": "Standard Selling",
+    "place_of_supply": "36-Telangana",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 2.0,
+      "rate": 476.25,
+      "amount": 952.5
+     }
+    ],
+    "net_total": 952.5,
+    "taxes": [
+     {
+      "type": "IGST",
+      "rate": 5.0,
+      "amount": 47.62
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 47.62,
+    "shipping": 80.0,
+    "rounding_adjustment": -0.12,
+    "grand_total": 1080.12,
+    "rounded_total": 1080.0,
+    "total_to_say": 1080.0
+   }
+  },
+  "customer_only_in_state": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00337",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00042",
+    "price_list": "Standard Selling",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 1.0,
+      "rate": 476.25,
+      "amount": 476.25
+     }
+    ],
+    "net_total": 476.25,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 11.91
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 11.91
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 23.82,
+    "shipping": 60.0,
+    "rounding_adjustment": -0.07,
+    "grand_total": 560.07,
+    "rounded_total": 560.0,
+    "total_to_say": 560.0
+   }
+  },
+  "pack_for_commercial_customer": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "PACK_NOT_AVAILABLE",
+    "message": "These packs are only sold to another customer group.",
+    "items": [
+     "SASB-50INR-PACK-10"
+    ],
+    "customer_group": "Commercial"
+   }
+  },
+  "same_state_other_address_coimbatore": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00338",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00043",
+    "price_list": "Standard Selling",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 1.0,
+      "rate": 476.25,
+      "amount": 476.25
+     }
+    ],
+    "net_total": 476.25,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 11.91
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 11.91
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 23.82,
+    "shipping": 60.0,
+    "rounding_adjustment": -0.07,
+    "grand_total": 560.07,
+    "rounded_total": 560.0,
+    "total_to_say": 560.0
+   }
+  },
+  "hyderabad_shipping_address_on_billing_basis_site": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00338",
+    "created": false,
+    "deal": "CRM-DEAL-2026-00044",
+    "price_list": "Standard Selling",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 1.0,
+      "rate": 476.25,
+      "amount": 476.25
+     }
+    ],
+    "net_total": 476.25,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 11.91
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 11.91
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 23.82,
+    "shipping": 60.0,
+    "rounding_adjustment": -0.07,
+    "grand_total": 560.07,
+    "rounded_total": 560.0,
+    "total_to_say": 560.0
+   }
+  },
+  "address_of_another_customer": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "ADDRESS_NOT_ON_RECORD",
+    "message": "That saved address isn't on this caller's record - ask for the delivery address again.",
+    "address_name": "VA Unit Three Address Customer Hyderabad-Shipping"
+   }
+  },
+  "no_pincode_on_record": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "PINCODE_REQUIRED",
+    "message": "Ask for the delivery pincode so GST can be worked out."
    }
   }
  },
@@ -433,194 +749,6 @@
    }
   }
  },
- "upsert_quote": {
-  "blocked": {
-   "message": {
-    "allowed": false,
-    "reason": "BLOCKED_LIST",
-    "message": "This caller is on the blocked list."
-   }
-  },
-  "unknown_number": {
-   "message": {
-    "allowed": true,
-    "status": "error",
-    "error": "NOT_ON_RECORD",
-    "message": "Save the caller's name and number (save_request) before quoting."
-   }
-  },
-  "lead_only_out_of_state": {
-   "message": {
-    "allowed": true,
-    "status": "quoted",
-    "quotation": "SAL-QTN-2026-00335",
-    "created": true,
-    "deal": "CRM-DEAL-2026-00038",
-    "price_list": "Standard Selling",
-    "place_of_supply": "36-Telangana",
-    "items": [
-     {
-      "item_code": "SASB-50INR-PACK-10",
-      "item_name": "Sastry Balm 50 INR Pack of 10",
-      "qty": 1.0,
-      "rate": 476.25,
-      "amount": 476.25
-     }
-    ],
-    "net_total": 476.25,
-    "taxes": [
-     {
-      "type": "IGST",
-      "rate": 5.0,
-      "amount": 23.81
-     }
-    ],
-    "shipping": 60.0,
-    "rounding_adjustment": -0.06,
-    "grand_total": 560.06,
-    "rounded_total": 560.0,
-    "total_to_say": 560.0
-   }
-  },
-  "repeat_updates_same_draft": {
-   "message": {
-    "allowed": true,
-    "status": "quoted",
-    "quotation": "SAL-QTN-2026-00335",
-    "created": false,
-    "deal": "CRM-DEAL-2026-00038",
-    "price_list": "Standard Selling",
-    "place_of_supply": "36-Telangana",
-    "items": [
-     {
-      "item_code": "SASB-50INR-PACK-10",
-      "item_name": "Sastry Balm 50 INR Pack of 10",
-      "qty": 2.0,
-      "rate": 476.25,
-      "amount": 952.5
-     }
-    ],
-    "net_total": 952.5,
-    "taxes": [
-     {
-      "type": "IGST",
-      "rate": 5.0,
-      "amount": 47.62
-     }
-    ],
-    "shipping": 80.0,
-    "rounding_adjustment": -0.12,
-    "grand_total": 1080.12,
-    "rounded_total": 1080.0,
-    "total_to_say": 1080.0
-   }
-  },
-  "customer_only_in_state": {
-   "message": {
-    "allowed": true,
-    "status": "quoted",
-    "quotation": "SAL-QTN-2026-00336",
-    "created": true,
-    "deal": "CRM-DEAL-2026-00039",
-    "price_list": "Standard Selling",
-    "place_of_supply": "33-Tamil Nadu",
-    "items": [
-     {
-      "item_code": "SASB-50INR-PACK-10",
-      "item_name": "Sastry Balm 50 INR Pack of 10",
-      "qty": 1.0,
-      "rate": 476.25,
-      "amount": 476.25
-     }
-    ],
-    "net_total": 476.25,
-    "taxes": [
-     {
-      "type": "SGST",
-      "rate": 2.5,
-      "amount": 11.91
-     },
-     {
-      "type": "CGST",
-      "rate": 2.5,
-      "amount": 11.91
-     }
-    ],
-    "shipping": 60.0,
-    "rounding_adjustment": -0.07,
-    "grand_total": 560.07,
-    "rounded_total": 560.0,
-    "total_to_say": 560.0
-   }
-  },
-  "pack_for_commercial_customer": {
-   "message": {
-    "allowed": true,
-    "status": "error",
-    "error": "PACK_NOT_AVAILABLE",
-    "message": "These packs are only sold to another customer group.",
-    "items": [
-     "SASB-50INR-PACK-10"
-    ],
-    "customer_group": "Commercial"
-   }
-  },
-  "hyderabad_shipping_address_on_billing_basis_site": {
-   "message": {
-    "allowed": true,
-    "status": "quoted",
-    "quotation": "SAL-QTN-2026-00337",
-    "created": true,
-    "deal": "CRM-DEAL-2026-00040",
-    "price_list": "Standard Selling",
-    "place_of_supply": "33-Tamil Nadu",
-    "items": [
-     {
-      "item_code": "SASB-50INR-PACK-10",
-      "item_name": "Sastry Balm 50 INR Pack of 10",
-      "qty": 1.0,
-      "rate": 476.25,
-      "amount": 476.25
-     }
-    ],
-    "net_total": 476.25,
-    "taxes": [
-     {
-      "type": "SGST",
-      "rate": 2.5,
-      "amount": 11.91
-     },
-     {
-      "type": "CGST",
-      "rate": 2.5,
-      "amount": 11.91
-     }
-    ],
-    "shipping": 60.0,
-    "rounding_adjustment": -0.07,
-    "grand_total": 560.07,
-    "rounded_total": 560.0,
-    "total_to_say": 560.0
-   }
-  },
-  "address_of_another_customer": {
-   "message": {
-    "allowed": true,
-    "status": "error",
-    "error": "ADDRESS_NOT_ON_RECORD",
-    "message": "That saved address isn't on this caller's record - ask for the delivery address again.",
-    "address_name": "VA Test Three Address Customer Hyderabad-Shipping"
-   }
-  },
-  "no_pincode_on_record": {
-   "message": {
-    "allowed": true,
-    "status": "error",
-    "error": "PINCODE_REQUIRED",
-    "message": "Ask for the delivery pincode so GST can be worked out."
-   }
-  }
- },
  "save_request": {
   "blocked": {
    "message": {
@@ -653,10 +781,9 @@
     "lead": "CRM-LEAD-2026-04275",
     "deal": null,
     "quotation": null,
-    "task": 85,
+    "task": 343,
     "quote": null,
     "warnings": [
-     "CUSTOMER_GROUP_NEEDS_REVIEW: retailer",
      "ADDRESS_NOT_SAVED: missing city"
     ],
     "message": "Saved.",
@@ -670,12 +797,10 @@
     "lead": "CRM-LEAD-2026-04275",
     "deal": null,
     "quotation": null,
-    "task": 85,
+    "task": 343,
     "quote": null,
-    "warnings": [
-     "CUSTOMER_GROUP_NEEDS_REVIEW: retailer"
-    ],
-    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04275; lead_name=Ravi; mobile_no=+917000000108; status=New",
+    "warnings": [],
+    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04275; lead_name=Ravi; mobile_no=+917000001108; status=New",
     "address": null,
     "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
    }
@@ -687,10 +812,10 @@
     "lead": "CRM-LEAD-2026-04271",
     "deal": null,
     "quotation": null,
-    "task": 86,
+    "task": 344,
     "quote": null,
     "warnings": [],
-    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04271; lead_name=VA Lead Only; mobile_no=+917000000103; status=New",
+    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04271; lead_name=VA Lead Only; mobile_no=+917000001103; status=New",
     "address": null,
     "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
    }
@@ -702,10 +827,10 @@
     "lead": "CRM-LEAD-2026-04273",
     "deal": null,
     "quotation": null,
-    "task": 87,
+    "task": 345,
     "quote": null,
     "warnings": [],
-    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04273; lead_name=VA Legacy Spaced; mobile_no=70000 00106; status=New",
+    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04273; lead_name=VA Legacy Spaced; mobile_no=70000 01106; status=New",
     "address": null,
     "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
    }
@@ -715,15 +840,15 @@
     "allowed": true,
     "status": "saved",
     "lead": null,
-    "deal": "CRM-DEAL-2026-00041",
-    "quotation": "SAL-QTN-2026-00336",
+    "deal": "CRM-DEAL-2026-00048",
+    "quotation": "SAL-QTN-2026-00337",
     "task": null,
     "quote": {
      "allowed": true,
      "status": "quoted",
-     "quotation": "SAL-QTN-2026-00336",
+     "quotation": "SAL-QTN-2026-00337",
      "created": false,
-     "deal": "CRM-DEAL-2026-00041",
+     "deal": "CRM-DEAL-2026-00048",
      "price_list": "Standard Selling",
      "place_of_supply": "33-Tamil Nadu",
      "items": [
@@ -748,6 +873,8 @@
        "amount": 11.91
       }
      ],
+     "gst_percent": 5.0,
+     "gst_amount": 23.82,
      "shipping": 60.0,
      "rounding_adjustment": -0.07,
      "grand_total": 560.07,
@@ -764,39 +891,30 @@
     "allowed": true,
     "status": "duplicate",
     "lead": "CRM-LEAD-2026-04272",
-    "deal": "CRM-DEAL-2026-00042",
+    "deal": "CRM-DEAL-2026-00049",
     "quotation": null,
-    "task": 88,
+    "task": 346,
     "quote": null,
     "warnings": [],
-    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04272; lead_name=VA Lead And Customer; mobile_no=+917000000105; status=New",
+    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04272; lead_name=VA Lead And Customer; mobile_no=+917000001105; status=New",
     "address": null,
     "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
    }
   },
-  "address_of_another_customer": {
-   "message": {
-    "allowed": true,
-    "status": "error",
-    "error": "ADDRESS_NOT_ON_RECORD",
-    "message": "That saved address isn't on this caller's record - ask for the delivery address again.",
-    "address_name": "VA Test Three Address Customer Hyderabad-Shipping"
-   }
-  },
-  "new_caller_with_address": {
+  "customer_other_state_delivery_on_billing_basis": {
    "message": {
     "allowed": true,
     "status": "saved",
-    "lead": "CRM-LEAD-2026-04276",
-    "deal": "CRM-DEAL-2026-00043",
+    "lead": null,
+    "deal": "CRM-DEAL-2026-00050",
     "quotation": "SAL-QTN-2026-00338",
-    "task": 89,
+    "task": null,
     "quote": {
      "allowed": true,
      "status": "quoted",
      "quotation": "SAL-QTN-2026-00338",
-     "created": true,
-     "deal": "CRM-DEAL-2026-00043",
+     "created": false,
+     "deal": "CRM-DEAL-2026-00050",
      "price_list": "Standard Selling",
      "place_of_supply": "33-Tamil Nadu",
      "items": [
@@ -821,6 +939,68 @@
        "amount": 11.91
       }
      ],
+     "gst_percent": 5.0,
+     "gst_amount": 23.82,
+     "shipping": 60.0,
+     "rounding_adjustment": -0.07,
+     "grand_total": 560.07,
+     "rounded_total": 560.0,
+     "total_to_say": 560.0
+    },
+    "warnings": [],
+    "message": "",
+    "address": "VA Unit Three Address Customer Hyderabad-Shipping"
+   }
+  },
+  "address_of_another_customer": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "ADDRESS_NOT_ON_RECORD",
+    "message": "That saved address isn't on this caller's record - ask for the delivery address again.",
+    "address_name": "VA Unit Three Address Customer Hyderabad-Shipping"
+   }
+  },
+  "new_caller_with_address": {
+   "message": {
+    "allowed": true,
+    "status": "saved",
+    "lead": "CRM-LEAD-2026-04276",
+    "deal": "CRM-DEAL-2026-00051",
+    "quotation": "SAL-QTN-2026-00342",
+    "task": 347,
+    "quote": {
+     "allowed": true,
+     "status": "quoted",
+     "quotation": "SAL-QTN-2026-00342",
+     "created": true,
+     "deal": "CRM-DEAL-2026-00051",
+     "price_list": "Standard Selling",
+     "place_of_supply": "33-Tamil Nadu",
+     "items": [
+      {
+       "item_code": "SASB-50INR-PACK-10",
+       "item_name": "Sastry Balm 50 INR Pack of 10",
+       "qty": 1.0,
+       "rate": 476.25,
+       "amount": 476.25
+      }
+     ],
+     "net_total": 476.25,
+     "taxes": [
+      {
+       "type": "SGST",
+       "rate": 2.5,
+       "amount": 11.91
+      },
+      {
+       "type": "CGST",
+       "rate": 2.5,
+       "amount": 11.91
+      }
+     ],
+     "gst_percent": 5.0,
+     "gst_amount": 23.82,
      "shipping": 60.0,
      "rounding_adjustment": -0.07,
      "grand_total": 560.07,
@@ -837,15 +1017,15 @@
     "allowed": true,
     "status": "saved",
     "lead": "CRM-LEAD-2026-04277",
-    "deal": "CRM-DEAL-2026-00044",
-    "quotation": "SAL-QTN-2026-00339",
-    "task": 90,
+    "deal": "CRM-DEAL-2026-00052",
+    "quotation": "SAL-QTN-2026-00343",
+    "task": 348,
     "quote": {
      "allowed": true,
      "status": "quoted",
-     "quotation": "SAL-QTN-2026-00339",
+     "quotation": "SAL-QTN-2026-00343",
      "created": true,
-     "deal": "CRM-DEAL-2026-00044",
+     "deal": "CRM-DEAL-2026-00052",
      "price_list": "Standard Selling",
      "place_of_supply": "36-Telangana",
      "items": [
@@ -865,6 +1045,8 @@
        "amount": 23.81
       }
      ],
+     "gst_percent": 5.0,
+     "gst_amount": 23.81,
      "shipping": 60.0,
      "rounding_adjustment": -0.06,
      "grand_total": 560.06,

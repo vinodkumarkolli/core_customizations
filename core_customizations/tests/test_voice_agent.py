@@ -29,6 +29,7 @@ from werkzeug.wrappers import Request
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import flt
 from frappe.utils.password import set_encrypted_password
 
 from core_customizations.core_customizations import voice_agent as va
@@ -41,21 +42,21 @@ COMPANY = "Sravi Enterprises - Kolapakkam"
 PACK = "SASB-50INR-PACK-10"
 
 # Test-only numbers (none exist on the site - asserted in setUpClass).
-BLOCKED = "+917000000101"
+BLOCKED = "+917000001101"
 FOREIGN = "+14155552671"
-UNKNOWN = "+917000000102"
-LEAD_ONLY = "+917000000103"
-CUSTOMER_ONLY = "+917000000104"
-LEAD_AND_CUSTOMER = "+917000000105"
-LEGACY_SPACED_STORED = "70000 00106"  # how the legacy row is stored
-LEGACY_SPACED_CALLER = "+917000000106"  # how Sarvam reports the caller
-COMMERCIAL_CUSTOMER = "+917000000107"
-NEW_CALLER = "+917000000108"
-NO_ADDRESS_CUSTOMER = "+917000000110"
-THREE_ADDRESS_CUSTOMER = "+917000000111"
-CONVERTING_CALLER = "+917000000112"
-TWIN_SEED = "+917000000113"
-OTHER_LEAD = "+917000000114"
+UNKNOWN = "+917000001102"
+LEAD_ONLY = "+917000001103"
+CUSTOMER_ONLY = "+917000001104"
+LEAD_AND_CUSTOMER = "+917000001105"
+LEGACY_SPACED_STORED = "70000 01106"  # how the legacy row is stored
+LEGACY_SPACED_CALLER = "+917000001106"  # how Sarvam reports the caller
+COMMERCIAL_CUSTOMER = "+917000001107"
+NEW_CALLER = "+917000001108"
+NO_ADDRESS_CUSTOMER = "+917000001110"
+THREE_ADDRESS_CUSTOMER = "+917000001111"
+CONVERTING_CALLER = "+917000001112"
+TWIN_SEED = "+917000001113"
+OTHER_LEAD = "+917000001114"
 
 TEST_NUMBERS = [
 	BLOCKED, UNKNOWN, LEAD_ONLY, CUSTOMER_ONLY, LEAD_AND_CUSTOMER, LEGACY_SPACED_CALLER, COMMERCIAL_CUSTOMER,
@@ -79,12 +80,16 @@ class TestVoiceAgent(FrappeTestCase):
 			frappe.db, "commit", side_effect=AssertionError("test_voice_agent must never commit")
 		)
 		cls._commit_guard.start()
+		# These numbers must be free on the site - a real record on one of them
+		# (e.g. a persistent "VA Test" fixture) would be resolved instead of the
+		# test's own, so check every place a caller's number is matched.
 		for number in TEST_NUMBERS:
 			last10 = number[-10:]
-			assert not frappe.db.sql(
-				"select name from `tabCRM Lead` where right(regexp_replace(ifnull(mobile_no,''),'[^0-9]',''),10)=%s",
-				last10,
-			), f"{number} already used on this site"
+			for doctype, column in (("CRM Lead", "mobile_no"), ("CRM Lead", "phone"), ("Contact", "mobile_no"), ("Contact Phone", "phone"), ("Customer", "mobile_no")):
+				assert not frappe.db.sql(
+					f"select name from `tab{doctype}` where right(regexp_replace(ifnull({column},''),'[^0-9]',''),10)=%s",
+					last10,
+				), f"{number} already used on this site ({doctype}.{column})"
 
 		if not frappe.db.exists("User", AUTOMATION_USER):
 			user = frappe.get_doc(
@@ -96,6 +101,7 @@ class TestVoiceAgent(FrappeTestCase):
 		# site's own secret, so it is never read, copied or rewritten here.
 		set_encrypted_password(SARVAM_SETTINGS_DOCTYPE, SARVAM_SETTINGS_DOCTYPE, KEY, "webhook_secret")
 		frappe.db.set_single_value(SARVAM_SETTINGS_DOCTYPE, "caller_gate_automation_user", AUTOMATION_USER)
+		cls._pin_settings()
 		frappe.clear_document_cache(SARVAM_SETTINGS_DOCTYPE, SARVAM_SETTINGS_DOCTYPE)
 
 		frappe.get_doc({"doctype": "Blocked Contact", "mobile_no": BLOCKED[-10:], "enabled": 1, "reason": "test"}).insert(
@@ -103,19 +109,19 @@ class TestVoiceAgent(FrappeTestCase):
 		)
 
 		cls.lead_only = cls._lead("VA Lead Only", LEAD_ONLY, category="individual", address="Address: 12 Kukatpally, Hyderabad 500072")
-		cls.lead_with_customer = cls._lead("VA Lead And Customer", LEAD_AND_CUSTOMER, organization="VA Test Individual Customer")
+		cls.lead_with_customer = cls._lead("VA Lead And Customer", LEAD_AND_CUSTOMER, organization="VA Unit Individual Customer")
 		legacy = cls._lead("VA Legacy Spaced", LEGACY_SPACED_CALLER)
 		# Bypass before_validate normalisation - this is what a pre-hook row looks like.
 		frappe.db.set_value("CRM Lead", legacy, "mobile_no", LEGACY_SPACED_STORED)
 		cls.legacy_lead = legacy
 
-		cls.customer_only = cls._customer("VA Test Individual Customer", "Individual", CUSTOMER_ONLY)
-		cls.commercial = cls._customer("VA Test Commercial Customer", "Commercial", COMMERCIAL_CUSTOMER)
-		cls.no_address = cls._customer("VA Test No Address Customer", "Individual", NO_ADDRESS_CUSTOMER, address=False)
+		cls.customer_only = cls._customer("VA Unit Individual Customer", "Individual", CUSTOMER_ONLY)
+		cls.commercial = cls._customer("VA Unit Commercial Customer", "Commercial", COMMERCIAL_CUSTOMER)
+		cls.no_address = cls._customer("VA Unit No Address Customer", "Individual", NO_ADDRESS_CUSTOMER, address=False)
 
 		# Three enabled addresses + one disabled, created so the expected order is
 		# shipping (Hyderabad) -> primary (Chennai billing) -> newest (Coimbatore).
-		cls.three = cls._customer("VA Test Three Address Customer", "Individual", THREE_ADDRESS_CUSTOMER)
+		cls.three = cls._customer("VA Unit Three Address Customer", "Individual", THREE_ADDRESS_CUSTOMER)
 		cls.three_primary = frappe.db.get_value(
 			"Dynamic Link", {"parenttype": "Address", "link_doctype": "Customer", "link_name": cls.three}, "parent"
 		)
@@ -148,6 +154,25 @@ class TestVoiceAgent(FrappeTestCase):
 			.insert(ignore_permissions=True)
 			.name
 		)
+
+	@classmethod
+	def _pin_settings(cls):
+		"""
+		Caller Categories and Pack Items as the seed patch sets them, whatever
+		the site's own settings currently hold (staff edit them) - written in
+		this class's transaction, so the class rollback restores the site's.
+		"""
+		from core_customizations.patches.v1_0.seed_sarvam_voice_agent_rules import CALLER_CATEGORIES, PACK_ITEMS
+
+		settings = frappe.get_single(SARVAM_SETTINGS_DOCTYPE)
+		settings.caller_categories = []
+		for category, group, price_list, is_default in CALLER_CATEGORIES:
+			settings.append("caller_categories", {"category": category, "customer_group": group, "price_list": price_list, "is_default": is_default})
+		settings.pack_items = []
+		for item_code, group, rule in PACK_ITEMS:
+			settings.append("pack_items", {"item_code": item_code, "customer_group": group, "shipping_rule": rule})
+		settings.flags.ignore_mandatory = True
+		settings.save(ignore_permissions=True)
 
 	@classmethod
 	def _address(cls, customer, line, city, state, pincode, address_type="Shipping", shipping=0, disabled=0):
@@ -289,7 +314,7 @@ class TestVoiceAgent(FrappeTestCase):
 		self.assertEqual(result["customer"]["default_price_list"], "Distributor Pricelist 40.50")
 
 	def test_legacy_spaced_number_matches_every_caller_spelling(self):
-		for spelling in (LEGACY_SPACED_CALLER, "917000000106", "07000000106", "7000000106", "+91 70000-00106"):
+		for spelling in (LEGACY_SPACED_CALLER, "917000001106", "07000001106", "7000001106", "+91 70000-01106"):
 			with self.subTest(spelling=spelling):
 				self.assertEqual(va.caller_context(phone=spelling, key=KEY)["lead"]["name"], self.legacy_lead)
 
@@ -798,3 +823,73 @@ class TestVoiceAgent(FrappeTestCase):
 		self.assertEqual(payload, {"phone": BLOCKED})
 		self.assertEqual(headers, {"Content-Type": "application/json"})
 		self.assertNotIn(KEY, json.dumps([payload, headers]))
+
+	# --- category review warning only without a usable Customer group --------
+
+	def _no_default_for(self, category):
+		"""Mirror dev's edited settings: the category's rows exist but none is the default."""
+		for row in frappe.get_single(SARVAM_SETTINGS_DOCTYPE).caller_categories:
+			if row.category == category:
+				frappe.db.set_value("Sarvam Caller Category", row.name, "is_default", 0)
+		frappe.clear_document_cache(SARVAM_SETTINGS_DOCTYPE, SARVAM_SETTINGS_DOCTYPE)
+
+	def test_existing_customer_with_a_group_gets_no_category_warning(self):
+		self._no_default_for("wholesale")
+		for phone, caller_type in ((COMMERCIAL_CUSTOMER, "wholesale"), (CUSTOMER_ONLY, "retailer"), (CUSTOMER_ONLY, "no-such-category")):
+			with self.subTest(phone=phone, caller_type=caller_type):
+				result = va.save_request(phone=phone, key=KEY, caller_type=caller_type, notes="Repeat order")
+				self.assertEqual(result["status"], "saved", result)
+				self.assertFalse([w for w in result["warnings"] if w.startswith(("CUSTOMER_GROUP_NEEDS_REVIEW", "UNKNOWN_CATEGORY"))], result["warnings"])
+
+	def test_customer_with_an_unmapped_group_still_gets_the_warning(self):
+		frappe.db.set_value("Customer", self.commercial, "customer_group", "Government")  # no Caller Category row
+		result = va.save_request(phone=COMMERCIAL_CUSTOMER, key=KEY, caller_type="retailer", notes="Order")
+		self.assertIn("CUSTOMER_GROUP_NEEDS_REVIEW: retailer", result["warnings"])
+
+	def test_new_caller_still_gets_the_category_warning(self):
+		self._no_default_for("wholesale")
+		result = va.save_request(phone=NEW_CALLER, key=KEY, name="VA Unit Wholesaler", caller_type="wholesale")
+		self.assertIn("CUSTOMER_GROUP_NEEDS_REVIEW: wholesale", result["warnings"])
+
+	# --- combined GST fields ------------------------------------------------
+
+	def _assert_gst_fields(self, result, types):
+		self.assertEqual(result["status"], "quoted", result)
+		doc = frappe.get_doc("Quotation", result["quotation"])
+		self.assertEqual(sorted(t["type"] for t in result["taxes"]), types)
+		self.assertEqual(result["gst_percent"], 5.0)
+		gst_rows = sum(t.tax_amount for t in doc.taxes if t.charge_type != "Actual")
+		self.assertEqual(result["gst_amount"], flt(gst_rows, doc.precision("total_taxes_and_charges")))
+		self.assertAlmostEqual(result["gst_amount"], doc.total_taxes_and_charges - result["shipping"], places=2)
+		self.assertAlmostEqual(result["net_total"] + result["gst_amount"] + result["shipping"], doc.grand_total, places=2)
+		return result
+
+	def test_in_state_quote_has_combined_gst(self):
+		result = self._assert_gst_fields(va.upsert_quote(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}]), ["CGST", "SGST"])
+		self.assertEqual(result["gst_amount"], sum(t["amount"] for t in result["taxes"]))
+
+	def test_out_of_state_quote_has_combined_gst(self):
+		result = self._assert_gst_fields(va.upsert_quote(phone=LEAD_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}]), ["IGST"])
+		self.assertEqual(result["gst_amount"], result["taxes"][0]["amount"])
+
+	def test_save_request_quote_carries_the_combined_gst(self):
+		result = va.save_request(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}])
+		self.assertEqual((result["quote"]["gst_percent"], result["quote"]["gst_amount"]), (5.0, sum(t["amount"] for t in result["quote"]["taxes"])))
+
+	# --- call-ended transcript ------------------------------------------------
+
+	def test_transcript_is_one_note_on_the_call_log(self):
+		va.caller_context(phone=LEAD_ONLY, key=KEY, call_id="va-test-call-transcript")
+		log = frappe.get_doc("CRM Call Log", "va-test-call-transcript")
+		transcript = [{"role": "agent", "en_text": "Welcome to Sravi Enterprises."}, {"role": "user", "en_text": "I want <b>10</b> packs"}]
+		first = va.save_transcript_note(log, transcript)
+		again = va.save_transcript_note(log, json.dumps(transcript + [{"role": "agent", "en_text": "Saved."}]))
+		self.assertEqual(first, again, "a redelivered webhook updates the same note")
+		notes = frappe.get_all("FCRM Note", {"reference_doctype": "CRM Call Log", "reference_docname": log.name}, ["name", "title", "content"])
+		self.assertEqual(len(notes), 1)
+		self.assertTrue(notes[0].title.startswith("Call transcript: "))
+		self.assertIn("<p>agent: Saved.</p>", notes[0].content)
+		self.assertIn("&lt;b&gt;10&lt;/b&gt;", notes[0].content, "transcript text is escaped, not rendered as HTML")
+		self.assertFalse(frappe.db.exists("Comment", {"reference_doctype": "CRM Call Log", "reference_name": log.name, "comment_type": "Comment"}))
+		self.assertIsNone(va.save_transcript_note(log, None))
+

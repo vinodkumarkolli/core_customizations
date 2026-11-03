@@ -59,6 +59,18 @@ Every method first runs `caller_gate.evaluate(phone)`. A blocked or foreign call
 
 Both payload shapes are still unconfirmed against a real delivery — every delivery is logged as an Integration Request ("Sarvam Call Started" / "Sarvam Inbound Call"), so check the first real ones and adjust the key names at the top of `voice_agent.py` (`CALLER_PHONE_KEYS`, `CALL_ID_KEYS`, `SUMMARY_KEYS`, `CONVERSATION_REF_KEYS`) if Sarvam names them differently.
 
+**Payload key names — what's confirmed.** No real call-started or call-ended delivery has reached the dev site yet (0 "Sarvam Call Started" / "Sarvam Inbound Call" Integration Requests, no Incoming Call Logs), so none of these is confirmed by a real delivery:
+
+| Constant in `voice_agent.py` | Keys tried | Source |
+|---|---|---|
+| `CALLER_PHONE_KEYS` | `user_phone_number`, `phone`, `caller_number`, `from` | `user_phone_number` is from Sarvam's published inbound payload schema (the one `handle_inbound_webhook` was written against); the rest are guesses for the call-started payload |
+| `CALL_ID_KEYS` | `interaction_id`, `call_id` | `interaction_id` from that schema; `call_id` a guess |
+| `SUMMARY_KEYS` | `summary`, `call_summary` | Guesses — these are keys of `output_agent_variables`, i.e. **whatever the agent's own output variables are named**: name them `summary`, `conversation_ref` and `preferences` in the agent and they match |
+| `CONVERSATION_REF_KEYS` | `conversation_ref`, `conversation_id` | Same — agent-defined output variables |
+| `PREFERENCES_KEY` | `preferences` | Same |
+
+The call-ended payload's transcript (`interaction_transcript`, a list of `{role, en_text}` turns, per the schema) is saved as **one FCRM Note referencing the Call Log**, titled *"Call transcript: <date>"*; a redelivery updates that Note rather than adding another (it used to be a Comment). The summary stays a separate Note, linked from the Call Log's `note` field.
+
 ## Saved addresses (`[BR-CRM-008]`)
 
 `caller_context` / `call_started` return `addresses` — the caller's saved Address records, from their **Customer** if they have one, otherwise from their **CRM Lead**:
@@ -79,7 +91,11 @@ Both payload shapes are still unconfirmed against a real delivery — every deli
 
 ## Outcomes the agent must handle
 
-**`upsert_quote`** → `status: "quoted"` with `net_total`, `taxes: [{type: CGST|SGST|IGST, rate, amount}]`, `shipping`, `rounding_adjustment`, `grand_total`, `rounded_total`, **`total_to_say`** (read this one aloud), or `status: "error"` with `error`:
+**`upsert_quote`** → `status: "quoted"` with `net_total`, `taxes: [{type: CGST|SGST|IGST, rate, amount}]`, **`gst_percent`**, **`gst_amount`**, `shipping`, `rounding_adjustment`, `grand_total`, `rounded_total`, **`total_to_say`**, or `status: "error"` with `error`.
+
+**What the agent reads aloud:** only "GST", `gst_percent`, `gst_amount` and `total_to_say` — e.g. *"GST at 5 percent is ₹23.81; the total is ₹560."* Never IGST/CGST/SGST, and never a sum it works out itself. `gst_percent` is the GST rows' rates summed (2.5 + 2.5, or 5); `gst_amount` is their amounts summed, each already rounded by the Quotation (so an in-state quote can be a paisa above the same out-of-state one — 11.91 + 11.91 = 23.82 vs 23.81 — while `total_to_say` rounds to the same rupee). `taxes` stays for staff and documents. The same fields are in `save_request`'s `quote`.
+
+Errors:
 
 | `error` | Meaning / what the agent says |
 |---|---|
@@ -99,7 +115,7 @@ Both payload shapes are still unconfirmed against a real delivery — every deli
 | `blocked` | Caller is blocked/foreign (or became so mid-call — the `CALLER_BLOCKED:` guard fired); nothing saved |
 | `error` | `NAME_REQUIRED`, `PHONE_REQUIRED`, `INVALID_ITEMS`, `ADDRESS_NOT_ON_RECORD` or `ADDRESS_INVALID` — nothing was saved; ask and retry |
 
-`warnings` may carry `CUSTOMER_GROUP_NEEDS_REVIEW: retailer`, `UNKNOWN_CATEGORY: <value>` or `ADDRESS_NOT_SAVED: missing city` — informational, also written on the Task for the team.
+`warnings` may carry `CUSTOMER_GROUP_NEEDS_REVIEW: <category>` / `UNKNOWN_CATEGORY: <value>` (only for a caller with **no Customer**, or a Customer whose group isn't mapped in Caller Categories — an existing Customer with a mapped group, e.g. Mahaveer → Commercial → wholesale, is already classified and never warned) or `ADDRESS_NOT_SAVED: missing city` — informational, also written on the Task for the team.
 
 **`transfer_target`** → `open: true` with `target` (then `then[]` in order), or `open: false`, `decision: "CALLBACK"`, `reason` `OUTSIDE_HOURS` / `NOT_ON_RECORD` / `NO_EXECUTIVES`.
 
@@ -123,6 +139,18 @@ Seeded by `seed_sarvam_voice_agent_rules` (only into empty tables):
 - **Caller Categories** — individual → Individual @ Standard Selling (default); wholesale, distributor → Commercial (default, no price list); retailer → the five retail groups (no default — flagged for review).
 - **Pack Items** — SASB-50INR-PACK-4/10/20 → Individual only, Next Day Shipping.
 - **Live Transfer** — 10:00–20:00, Mon–Sat, Asia/Kolkata, callers on record only; Kalpana +918248207671, Sravya +918106557040, Vinod +918122586261.
+
+## Persistent test records (dev only)
+
+Kept on the dev site for automated Sarvam test calls — do not delete; never created on production. The unit tests use their own numbers (`+9170000011xx`) and `VA Unit …` names, rolled back after each test, and check that they never match these.
+
+| Record | Name | Details |
+|---|---|---|
+| Customer | `VA Test Individual Customer` | Group Individual, price list Standard Selling, Unregistered |
+| Contact | `VA Test Individual Customer-VA Test Individual Customer` | Mobile **+917000000104**, linked to the Customer |
+| Address (Billing, primary) | `VA Test Individual Customer Chennai-Billing` | 1 Test Street, Chennai, Tamil Nadu 600128 |
+| Address (Shipping) | `VA Test Individual Customer Hyderabad-Shipping` | 12 Test Godown Road, Hyderabad, Telangana 500062 |
+| Blocked Contact | `7000000199` | **+917000000199**, enabled — returns `BLOCKED_LIST` from the real list |
 
 ## Data notes
 

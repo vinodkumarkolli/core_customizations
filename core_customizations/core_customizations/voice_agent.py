@@ -703,6 +703,12 @@ def _quote_response(doc, created, deal):
 		],
 		"net_total": doc.net_total,
 		"taxes": taxes,
+		# [BR-CRM-006] One GST figure for the agent to say ("GST at 5%: ₹23.81"),
+		# so it never adds CGST and SGST itself: the GST rows' rates and
+		# amounts summed - each row is already rounded by the Quotation, and the
+		# sum is rounded to the precision of its own tax total.
+		"gst_percent": flt(sum(t["rate"] for t in taxes), 2),
+		"gst_amount": flt(sum(t["amount"] for t in taxes), doc.precision("total_taxes_and_charges")),
 		"shipping": shipping,
 		"rounding_adjustment": doc.rounding_adjustment,
 		"grand_total": doc.grand_total,
@@ -1019,10 +1025,15 @@ def _save_request(
 	pincode = pincode or ship_to_pincode or (pin_in_text.group() if pin_in_text else None)
 
 	category = (caller_type or "").strip().lower() or None
-	if category and not _category_rows(category):
-		result["warnings"].append(f"UNKNOWN_CATEGORY: {caller_type}")
-	elif category and not _category_default(category):
-		result["warnings"].append(f"CUSTOMER_GROUP_NEEDS_REVIEW: {category}")
+	# [BR-CRM-005] The spoken category only matters when there is no Customer
+	# group to go by: a Customer whose group maps to a configured category is
+	# already classified, whatever the caller said.
+	has_usable_group = bool(ctx.customer and ctx.customer.customer_group and ctx.customer.category)
+	if category and not has_usable_group:
+		if not _category_rows(category):
+			result["warnings"].append(f"UNKNOWN_CATEGORY: {caller_type}")
+		elif not _category_default(category):
+			result["warnings"].append(f"CUSTOMER_GROUP_NEEDS_REVIEW: {category}")
 
 	description = _description_lines(caller_type, store_type, area, notes, address, whatsapp_number, pincode)
 	display_name = name or (ctx.customer.customer_name if ctx.customer else None) or (ctx.lead or {}).get("lead_name")
@@ -1274,6 +1285,58 @@ def transfer_target(phone: str | None = None, key: str | None = None):
 # --------------------------------------------------------------------------
 # 6. Call ended  [BR-TEL-007] - called from sarvam_telephony.handle_inbound_webhook
 # --------------------------------------------------------------------------
+
+
+TRANSCRIPT_NOTE_TITLE = "Call transcript"
+
+
+def save_transcript_note(call_log, transcript):
+	"""
+	Business Purpose: [BR-TEL-007] Saves the call-ended webhook's
+	`interaction_transcript` (Sarvam's turn list, `[{role, en_text}, ...]`) as
+	an FCRM Note referencing the Call Log - the same form the agent's own
+	"Call transcript: <date>" notes take - instead of a comment. A redelivered
+	webhook updates the same Note rather than adding another.
+
+	Args:
+		call_log (Document): The CRM Call Log the webhook just saved.
+		transcript (list | str | None): The payload's `interaction_transcript`.
+
+	Returns:
+		str | None: The FCRM Note's name, or None when there was no transcript.
+	"""
+	transcript = _parse_json_arg(transcript, None)
+	if not transcript:
+		return None
+	if isinstance(transcript, list):
+		lines = [f"{turn.get('role', '?')}: {turn.get('en_text') or turn.get('text') or ''}" for turn in transcript if isinstance(turn, dict)]
+	else:
+		lines = str(transcript).splitlines()
+	content = "".join(f"<p>{frappe.utils.escape_html(line)}</p>" for line in lines if line.strip())
+	if not content:
+		return None
+
+	existing = frappe.db.get_value(
+		"FCRM Note",
+		{"reference_doctype": "CRM Call Log", "reference_docname": call_log.name, "title": ("like", f"{TRANSCRIPT_NOTE_TITLE}:%")},
+		"name",
+	)
+	if existing:
+		frappe.db.set_value("FCRM Note", existing, "content", content)
+		return existing
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "FCRM Note",
+				"title": f"{TRANSCRIPT_NOTE_TITLE}: {nowdate()}",
+				"content": content,
+				"reference_doctype": "CRM Call Log",
+				"reference_docname": call_log.name,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def apply_call_outcome(call_log, payload):

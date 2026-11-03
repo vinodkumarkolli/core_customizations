@@ -944,12 +944,13 @@ def handle_inbound_webhook(**kwargs):
 
 		apply_call_outcome(call_log, payload)
 
+		# @businessRule [BR-TEL-007] The transcript is kept as an FCRM Note
+		# referencing this Call Log (one per call - a redelivery updates it),
+		# not a comment.
+		from core_customizations.core_customizations.voice_agent import save_transcript_note
+
 		transcript = payload.get("interaction_transcript")
-		if transcript:
-			transcript_text = "\n".join(
-				f"{turn.get('role', '?')}: {turn.get('en_text', '')}" for turn in transcript
-			)
-			call_log.add_comment("Comment", _("Sarvam transcript:\n{0}").format(transcript_text))
+		save_transcript_note(call_log, transcript)
 
 		# @businessRule [BR-TEL-004] Same S3 archive helper used by the
 		# outbound webhook - no-op unless Call Logging Settings is enabled.

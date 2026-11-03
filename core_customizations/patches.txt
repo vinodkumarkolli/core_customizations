@@ -8,3 +8,4 @@ core_customizations.patches.v1_0.cleanup_mobile_app_module
 core_customizations.patches.v1_0.cleanup_sales_invoice_transporter_fields
 core_customizations.patches.v1_0.cleanup_delivery_note_transporter_fields
 core_customizations.patches.v1_0.seed_sarvam_voice_agent_rules
+core_customizations.patches.v1_0.seed_sarvam_address_list_limit

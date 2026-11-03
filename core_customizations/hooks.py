@@ -174,10 +174,15 @@ doc_events = {
     "Contact":  {
         "before_validate": "core_customizations.core_customizations.phone_normalise.normalise_contact",
         "validate": "core_customizations.core_customizations.caller_gate.guard_caller_gate",
-        "on_update": "core_customizations.core_customizations.contact_lead_link.on_lead_update",
+        "on_update": [
+            "core_customizations.core_customizations.contact_lead_link.on_lead_update",
+            # [BR-CRM-008] Lead Addresses follow the Lead to its Customer.
+            "core_customizations.core_customizations.lead_address_link.on_contact_update",
+        ],
 	},
 	"Customer": {
 		"validate": "core_customizations.core_customizations.caller_gate.guard_caller_gate",
+		"on_update": "core_customizations.core_customizations.lead_address_link.on_customer_update",
 	},
 	"CRM Deal": {
 		"validate": "core_customizations.core_customizations.caller_gate.guard_caller_gate",

@@ -47,8 +47,20 @@ LEGACY_SPACED_STORED = "70000 00106"  # how the legacy row is stored
 LEGACY_SPACED_CALLER = "+917000000106"  # how Sarvam reports the caller
 COMMERCIAL_CUSTOMER = "+917000000107"
 NEW_CALLER = "+917000000108"
+NO_ADDRESS_CUSTOMER = "+917000000110"
+THREE_ADDRESS_CUSTOMER = "+917000000111"
+CONVERTING_CALLER = "+917000000112"
+TWIN_SEED = "+917000000113"
+OTHER_LEAD = "+917000000114"
 
-TEST_NUMBERS = [BLOCKED, UNKNOWN, LEAD_ONLY, CUSTOMER_ONLY, LEAD_AND_CUSTOMER, LEGACY_SPACED_CALLER, COMMERCIAL_CUSTOMER, NEW_CALLER]
+TEST_NUMBERS = [
+	BLOCKED, UNKNOWN, LEAD_ONLY, CUSTOMER_ONLY, LEAD_AND_CUSTOMER, LEGACY_SPACED_CALLER, COMMERCIAL_CUSTOMER,
+	NEW_CALLER, NO_ADDRESS_CUSTOMER, THREE_ADDRESS_CUSTOMER, CONVERTING_CALLER, TWIN_SEED, OTHER_LEAD,
+]
+ADDRESS_KEYS = {
+	"name", "address_title", "address_type", "address_line1", "address_line2", "city", "state", "pincode",
+	"is_primary_address", "is_shipping_address",
+}
 
 
 def _ist(*args):
@@ -95,6 +107,17 @@ class TestVoiceAgent(FrappeTestCase):
 
 		cls.customer_only = cls._customer("VA Test Individual Customer", "Individual", CUSTOMER_ONLY)
 		cls.commercial = cls._customer("VA Test Commercial Customer", "Commercial", COMMERCIAL_CUSTOMER)
+		cls.no_address = cls._customer("VA Test No Address Customer", "Individual", NO_ADDRESS_CUSTOMER, address=False)
+
+		# Three enabled addresses + one disabled, created so the expected order is
+		# shipping (Hyderabad) -> primary (Chennai billing) -> newest (Coimbatore).
+		cls.three = cls._customer("VA Test Three Address Customer", "Individual", THREE_ADDRESS_CUSTOMER)
+		cls.three_primary = frappe.db.get_value(
+			"Dynamic Link", {"parenttype": "Address", "link_doctype": "Customer", "link_name": cls.three}, "parent"
+		)
+		cls.three_disabled = cls._address(cls.three, "Disabled Rd", "Madurai", "Tamil Nadu", "625001", shipping=1, disabled=1)
+		cls.three_shipping = cls._address(cls.three, "Godown Rd", "Hyderabad", "Telangana", "500062", shipping=1)
+		cls.three_newest = cls._address(cls.three, "Branch Rd", "Coimbatore", "Tamil Nadu", "641001", address_type="Billing")
 
 	@classmethod
 	def tearDownClass(cls):
@@ -123,7 +146,30 @@ class TestVoiceAgent(FrappeTestCase):
 		)
 
 	@classmethod
-	def _customer(cls, name, group, mobile):
+	def _address(cls, customer, line, city, state, pincode, address_type="Shipping", shipping=0, disabled=0):
+		return (
+			frappe.get_doc(
+				{
+					"doctype": "Address",
+					"address_title": f"{customer} {city}",
+					"address_type": address_type,
+					"address_line1": line,
+					"city": city,
+					"state": state,
+					"pincode": pincode,
+					"country": "India",
+					"gst_category": "Unregistered",
+					"is_shipping_address": shipping,
+					"disabled": disabled,
+					"links": [{"link_doctype": "Customer", "link_name": customer}],
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
+
+	@classmethod
+	def _customer(cls, name, group, mobile, address=True):
 		customer = frappe.get_doc(
 			{
 				"doctype": "Customer",
@@ -134,21 +180,22 @@ class TestVoiceAgent(FrappeTestCase):
 				"gst_category": "Unregistered",
 			}
 		).insert(ignore_permissions=True)
-		frappe.get_doc(
-			{
-				"doctype": "Address",
-				"address_title": name,
-				"address_type": "Billing",
-				"address_line1": "1 Test Street",
-				"city": "Chennai",
-				"state": "Tamil Nadu",
-				"pincode": "600128",
-				"country": "India",
-				"gst_category": "Unregistered",
-				"is_primary_address": 1,
-				"links": [{"link_doctype": "Customer", "link_name": customer.name}],
-			}
-		).insert(ignore_permissions=True)
+		if address:
+			frappe.get_doc(
+				{
+					"doctype": "Address",
+					"address_title": name,
+					"address_type": "Billing",
+					"address_line1": "1 Test Street",
+					"city": "Chennai",
+					"state": "Tamil Nadu",
+					"pincode": "600128",
+					"country": "India",
+					"gst_category": "Unregistered",
+					"is_primary_address": 1,
+					"links": [{"link_doctype": "Customer", "link_name": customer.name}],
+				}
+			).insert(ignore_permissions=True)
 		frappe.get_doc(
 			{
 				"doctype": "Contact",
@@ -478,3 +525,189 @@ class TestVoiceAgent(FrappeTestCase):
 		self.assertEqual((note.reference_doctype, note.reference_docname), ("CRM Lead", self.lead_only))
 		self.assertEqual(va.get_caller_preferences(phone=LEAD_ONLY, key=KEY)["preferences"], {"preferred_language": "ta"})
 		self.assertEqual(frappe.db.count("CRM Call Log", {"id": "va-test-call-3"}), 1)
+
+	# --- saved addresses [BR-CRM-008] ---------------------------------------
+
+	def _quote_taxes(self, result):
+		self.assertEqual(result["status"], "quoted", result)
+		return sorted((t["type"], t["rate"], t["amount"]) for t in result["taxes"]), result["grand_total"]
+
+	def _with_tax_basis(self, basis):
+		frappe.db.set_single_value("Accounts Settings", "determine_address_tax_category_from", basis)
+		frappe.clear_document_cache("Accounts Settings", "Accounts Settings")
+		self.addCleanup(frappe.clear_document_cache, "Accounts Settings", "Accounts Settings")
+
+	def test_addresses_customer_with_none(self):
+		self.assertEqual(va.caller_context(phone=NO_ADDRESS_CUSTOMER, key=KEY)["addresses"], [])
+
+	def test_addresses_customer_with_one(self):
+		addresses = va.caller_context(phone=CUSTOMER_ONLY, key=KEY)["addresses"]
+		self.assertEqual(len(addresses), 1)
+		self.assertEqual(set(addresses[0]), ADDRESS_KEYS, "exact keys - no `disabled`")
+		self.assertEqual((addresses[0]["city"], addresses[0]["pincode"]), ("Chennai", "600128"))
+
+	def test_addresses_order_skip_disabled_and_cap(self):
+		names = [a["name"] for a in va.caller_context(phone=THREE_ADDRESS_CUSTOMER, key=KEY)["addresses"]]
+		self.assertEqual(names, [self.three_shipping, self.three_primary, self.three_newest])
+		self.assertNotIn(self.three_disabled, names)
+
+		frappe.db.set_single_value(SARVAM_SETTINGS_DOCTYPE, "address_list_limit", 2)
+		frappe.clear_document_cache(SARVAM_SETTINGS_DOCTYPE, SARVAM_SETTINGS_DOCTYPE)
+		capped = [a["name"] for a in va.caller_context(phone=THREE_ADDRESS_CUSTOMER, key=KEY)["addresses"]]
+		self.assertEqual(capped, [self.three_shipping, self.three_primary])
+
+	def test_addresses_lead_only_and_blocked(self):
+		self.assertEqual(va.caller_context(phone=LEAD_ONLY, key=KEY)["addresses"], [], "never parsed from company_description")
+		self.assertEqual(va.caller_context(phone=UNKNOWN, key=KEY)["addresses"], [])
+		self.assertNotIn("addresses", va.caller_context(phone=BLOCKED, key=KEY))
+
+	def test_call_started_returns_addresses_too(self):
+		with patch.object(frappe, "request", None, create=True), patch.object(va, "create_request_log"):
+			result = va.call_started(key=KEY, user_phone_number=CUSTOMER_ONLY, interaction_id="va-test-call-addr")
+		self.assertEqual(result["addresses"], va.caller_context(phone=CUSTOMER_ONLY, key=KEY)["addresses"])
+
+	def test_new_caller_address_is_saved_and_linked_to_the_lead(self):
+		result = va.save_request(
+			phone=NEW_CALLER, key=KEY, name="VA Address Caller", caller_type="individual",
+			address="Plot 45, Sai Nagar", city="Hyderabad", pincode="500072",
+		)
+		self.assertEqual(result["status"], "saved", result)
+		address = frappe.get_doc("Address", result["address"])
+		self.assertEqual((address.address_type, address.city, address.state, address.pincode), ("Shipping", "Hyderabad", "Telangana", "500072"))
+		self.assertEqual([(l.link_doctype, l.link_name) for l in address.links], [("CRM Lead", result["lead"])])
+		self.assertIn("Address: Plot 45, Sai Nagar", frappe.db.get_value("CRM Lead", result["lead"], "company_description"))
+		self.assertEqual([a["name"] for a in va.caller_context(phone=NEW_CALLER, key=KEY)["addresses"]], [address.name])
+
+		again = va.save_request(phone=NEW_CALLER, key=KEY, name="VA Address Caller", address="Plot 45, Sai Nagar", city="Hyderabad", pincode="500072")
+		self.assertEqual(again["address"], address.name, "same address is reused, not duplicated")
+
+	def test_address_without_city_saves_the_request_but_not_an_address(self):
+		result = va.save_request(phone=NEW_CALLER, key=KEY, name="VA No City", address="5 Main Road, 600089")
+		self.assertEqual(result["status"], "saved")
+		self.assertIsNone(result["address"])
+		self.assertIn("ADDRESS_NOT_SAVED: missing city", result["warnings"])
+
+	def test_another_customers_address_is_refused_and_nothing_is_saved(self):
+		other = self.three_shipping
+		quote = va.upsert_quote(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}], address_name=other)
+		self.assertEqual((quote["status"], quote["error"]), ("error", "ADDRESS_NOT_ON_RECORD"))
+		self.assertTrue(quote["message"])
+		self.assertFalse(frappe.db.exists("Quotation", {"party_name": self.customer_only, "docstatus": 0}))
+
+		before = (frappe.db.count("CRM Lead"), frappe.db.count("CRM Task"), frappe.db.count("CRM Deal"))
+		for phone, name in ((CUSTOMER_ONLY, None), (NEW_CALLER, "VA Stranger")):
+			with self.subTest(phone=phone):
+				saved = va.save_request(phone=phone, key=KEY, name=name, items=[{"item_code": PACK, "qty": 1}], address_name=other)
+				self.assertEqual((saved["status"], saved["error"]), ("error", "ADDRESS_NOT_ON_RECORD"))
+		self.assertEqual((frappe.db.count("CRM Lead"), frappe.db.count("CRM Task"), frappe.db.count("CRM Deal")), before)
+
+	def test_disabled_address_cannot_be_used(self):
+		quote = va.upsert_quote(phone=THREE_ADDRESS_CUSTOMER, key=KEY, items=[{"item_code": PACK, "qty": 1}], address_name=self.three_disabled)
+		self.assertEqual(quote["error"], "ADDRESS_NOT_ON_RECORD")
+
+	def test_lead_address_gives_same_gst_as_its_pincode(self):
+		saved = va.save_request(phone=NEW_CALLER, key=KEY, name="VA Two Addresses", caller_type="individual", address="Plot 45", city="Hyderabad", pincode="500072")
+		chennai = va.save_request(phone=NEW_CALLER, key=KEY, address="1 Anna Salai", city="Chennai", pincode="600002")["address"]
+		items = [{"item_code": PACK, "qty": 1}]
+		for address_name, pincode, expected in ((saved["address"], "500072", ["IGST"]), (chennai, "600002", ["CGST", "SGST"])):
+			with self.subTest(pincode=pincode):
+				by_address = va.upsert_quote(phone=NEW_CALLER, key=KEY, items=items, address_name=address_name)
+				self.assertEqual(frappe.db.get_value("Quotation", by_address["quotation"], "shipping_address_name"), address_name)
+				by_pincode = va.upsert_quote(phone=NEW_CALLER, key=KEY, items=items, ship_to_pincode=pincode)
+				self.assertEqual(self._quote_taxes(by_address), self._quote_taxes(by_pincode))
+				self.assertEqual([t["type"] for t in sorted(by_address["taxes"], key=lambda t: t["type"])], expected)
+
+	def test_address_name_wins_over_pincode(self):
+		chennai = va.upsert_quote(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}], ship_to_pincode="500072",
+			address_name=va.caller_context(phone=CUSTOMER_ONLY, key=KEY)["addresses"][0]["name"])
+		self.assertEqual(sorted(t["type"] for t in chennai["taxes"]), ["CGST", "SGST"])
+
+	def test_customer_address_gst_follows_india_compliance_shipping_basis(self):
+		"""With "Determine Address Tax Category From" = Shipping Address, the chosen address decides GST - same as its pincode."""
+		self._with_tax_basis("Shipping Address")
+		items = [{"item_code": PACK, "qty": 1}]
+		lead = self._lead("VA Pincode Reference", NEW_CALLER, category="individual")
+		for address_name, pincode, expected in ((self.three_shipping, "500062", ["IGST"]), (self.three_newest, "641001", ["CGST", "SGST"])):
+			with self.subTest(pincode=pincode):
+				by_address = va.upsert_quote(phone=THREE_ADDRESS_CUSTOMER, key=KEY, items=items, address_name=address_name)
+				self.assertEqual(sorted(t["type"] for t in by_address["taxes"]), expected)
+				by_pincode = va.upsert_quote(phone=NEW_CALLER, key=KEY, items=items, ship_to_pincode=pincode)
+				self.assertEqual(self._quote_taxes(by_address), self._quote_taxes(by_pincode))
+		self.assertTrue(lead)
+
+	def test_customer_address_gst_follows_billing_when_site_uses_billing_basis(self):
+		"""This site's current setting: GST follows the billing address, whichever shipping address is chosen (as in Desk)."""
+		self._with_tax_basis("Billing Address")
+		quote = va.upsert_quote(phone=THREE_ADDRESS_CUSTOMER, key=KEY, items=[{"item_code": PACK, "qty": 1}], address_name=self.three_shipping)
+		self.assertEqual(frappe.db.get_value("Quotation", quote["quotation"], "shipping_address_name"), self.three_shipping)
+		self.assertEqual(sorted(t["type"] for t in quote["taxes"]), ["CGST", "SGST"], "billing address is in Tamil Nadu")
+
+	def test_lead_addresses_follow_the_lead_to_its_customer(self):
+		saved = va.save_request(phone=CONVERTING_CALLER, key=KEY, name="VA Converting", caller_type="individual", address="7 Lake View", city="Chennai", pincode="600040")
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "VA Converted Customer", "customer_group": "Individual", "customer_type": "Individual",
+			 "default_price_list": "Standard Selling", "gst_category": "Unregistered", "mobile_no": CONVERTING_CALLER}
+		).insert(ignore_permissions=True)
+		links = frappe.get_all("Dynamic Link", {"parenttype": "Address", "parent": saved["address"]}, ["link_doctype", "link_name"])
+		self.assertCountEqual([(l.link_doctype, l.link_name) for l in links], [("CRM Lead", saved["lead"]), ("Customer", customer.name)])
+		self.assertEqual([a["name"] for a in va.caller_context(phone=CONVERTING_CALLER, key=KEY)["addresses"]], [saved["address"]])
+
+	def test_lead_addresses_follow_through_a_contact_linking_both(self):
+		saved = va.save_request(phone=CONVERTING_CALLER, key=KEY, name="VA Contact Path", address="9 Hill Rd", city="Chennai", pincode="600040")
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "VA Contact Path Customer", "customer_group": "Individual", "customer_type": "Individual",
+			 "default_price_list": "Standard Selling", "gst_category": "Unregistered"}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{"doctype": "Contact", "first_name": "VA Contact Path",
+			 "links": [{"link_doctype": "Customer", "link_name": customer.name}, {"link_doctype": "CRM Lead", "link_name": saved["lead"]}]}
+		).insert(ignore_permissions=True)
+		self.assertTrue(frappe.db.exists("Dynamic Link", {"parenttype": "Address", "parent": saved["address"], "link_doctype": "Customer", "link_name": customer.name}))
+
+	def _undecided_logs(self, customer):
+		return frappe.get_all(
+			"Error Log", filters={"method": ("like", f"Lead Address Link: could not decide the CRM Lead for Customer {customer}%")}, pluck="name"
+		)
+
+	def _delete_undecided_logs(self, customer):
+		# Error Log lives in Frappe's separate log database, which commits on its
+		# own - outside this test's rollback - so the rows are removed explicitly.
+		for name in self._undecided_logs(customer):
+			frappe.delete_doc("Error Log", name, ignore_permissions=True, force=True)
+
+	def test_two_leads_on_the_customers_mobile_are_logged_not_linked(self):
+		self._delete_undecided_logs("VA Twin Customer")
+		self.addCleanup(self._delete_undecided_logs, "VA Twin Customer")
+		first = va.save_request(phone=CONVERTING_CALLER, key=KEY, name="VA Twin One", address="1 Twin Rd", city="Chennai", pincode="600040")
+		# A legacy duplicate the [BR-CRM-001] guard would refuse today - written directly.
+		twin = self._lead("VA Twin Two", TWIN_SEED)
+		frappe.db.set_value("CRM Lead", twin, "mobile_no", CONVERTING_CALLER)
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "VA Twin Customer", "customer_group": "Individual", "customer_type": "Individual",
+			 "default_price_list": "Standard Selling", "gst_category": "Unregistered", "mobile_no": CONVERTING_CALLER}
+		).insert(ignore_permissions=True)
+		self.assertFalse(frappe.db.exists("Dynamic Link", {"parenttype": "Address", "parent": first["address"], "link_doctype": "Customer"}))
+		logs = self._undecided_logs(customer.name)
+		self.assertEqual(len(logs), 1)
+		# Error Log is in the log database - read it through the doctype API, not frappe.db.
+		self.assertIn(first["lead"], frappe.get_all("Error Log", filters={"name": logs[0]}, pluck="error")[0])
+
+		customer.save(ignore_permissions=True)
+		self.assertEqual(len(self._undecided_logs(customer.name)), 1, "logged once, not on every save")
+
+	def test_contact_linked_to_two_leads_is_logged_not_linked(self):
+		self._delete_undecided_logs("VA Fork Customer")
+		self.addCleanup(self._delete_undecided_logs, "VA Fork Customer")
+		saved = va.save_request(phone=CONVERTING_CALLER, key=KEY, name="VA Two Lead Contact", address="3 Fork Rd", city="Chennai", pincode="600040")
+		other = self._lead("VA Other Lead", OTHER_LEAD)
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "VA Fork Customer", "customer_group": "Individual", "customer_type": "Individual",
+			 "default_price_list": "Standard Selling", "gst_category": "Unregistered"}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{"doctype": "Contact", "first_name": "VA Fork",
+			 "links": [{"link_doctype": "Customer", "link_name": customer.name},
+			           {"link_doctype": "CRM Lead", "link_name": saved["lead"]}, {"link_doctype": "CRM Lead", "link_name": other}]}
+		).insert(ignore_permissions=True)
+		self.assertFalse(frappe.db.exists("Dynamic Link", {"parenttype": "Address", "parent": saved["address"], "link_doctype": "Customer"}))
+		self.assertTrue(self._undecided_logs(customer.name))

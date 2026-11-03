@@ -236,6 +236,81 @@ def _parse_items(items):
 
 
 # --------------------------------------------------------------------------
+# Saved addresses  [BR-CRM-008]
+# --------------------------------------------------------------------------
+
+ADDRESS_FIELDS = (
+	"name",
+	"address_title",
+	"address_type",
+	"address_line1",
+	"address_line2",
+	"city",
+	"state",
+	"pincode",
+	"is_primary_address",
+	"is_shipping_address",
+)
+
+
+def _address_owner(ctx):
+	"""
+	[BR-CRM-008] Whose Addresses a caller has: their Customer's if they have
+	one, otherwise their CRM Lead's (linked by save_request). Never guessed
+	from the Lead's free-text company_description.
+	"""
+	if ctx.customer:
+		return "Customer", ctx.customer.name
+	if ctx.lead:
+		return "CRM Lead", ctx.lead["name"]
+	return None
+
+
+def _linked_addresses(owner, limit=None):
+	"""Enabled Addresses linked to `owner` - shipping first, then primary, then newest edit."""
+	if not owner:
+		return []
+	columns = ", ".join(f"a.`{f}`" for f in ADDRESS_FIELDS)
+	return frappe.db.sql(
+		f"""select distinct {columns}, a.modified from `tabAddress` a
+		    join `tabDynamic Link` dl on dl.parenttype = 'Address' and dl.parent = a.name
+		    where dl.link_doctype = %(doctype)s and dl.link_name = %(name)s and ifnull(a.disabled, 0) = 0
+		    order by a.is_shipping_address desc, a.is_primary_address desc, a.modified desc
+		    {'limit %(limit)s' if limit else ''}""",
+		{"doctype": owner[0], "name": owner[1], "limit": cint(limit)},
+		as_dict=True,
+	)
+
+
+def _caller_addresses(ctx):
+	rows = _linked_addresses(_address_owner(ctx), cint(_settings().address_list_limit) or None)
+	return [{f: row.get(f) for f in ADDRESS_FIELDS} for row in rows]
+
+
+def _owned_address(ctx, address_name):
+	"""
+	The caller's own enabled Address named `address_name`, or an
+	ADDRESS_NOT_ON_RECORD error - nothing from an Address the caller does not
+	own is ever used.
+	"""
+	owner = _address_owner(ctx)
+	match = next((a for a in _linked_addresses(owner) if a.name == address_name), None) if owner else None
+	if not match:
+		return None, _error(
+			"ADDRESS_NOT_ON_RECORD",
+			"That saved address isn't on this caller's record - ask for the delivery address again.",
+			address_name=address_name,
+		)
+	return match, None
+
+
+def _address_text(address):
+	parts = [address.get("address_line1"), address.get("address_line2"), address.get("city"), address.get("state")]
+	text = ", ".join(p.strip() for p in parts if p and p.strip())
+	return f"{text} {address.get('pincode') or ''}".strip()
+
+
+# --------------------------------------------------------------------------
 # 1. Call started / caller context  [BR-TEL-007]
 # --------------------------------------------------------------------------
 
@@ -296,6 +371,7 @@ def _caller_context(phone, call_id=None, to_number=None):
 		ctx = _resolve(phone)
 		preferences, source = _preferences(ctx)
 		call_log = _ensure_call_log(call_id, ctx, to_number) if call_id else None
+		addresses = _caller_addresses(ctx)
 
 	return {
 		**gate,
@@ -305,6 +381,7 @@ def _caller_context(phone, call_id=None, to_number=None):
 		"preferences": preferences,
 		"preferences_source": source,
 		"call_log": call_log,
+		"addresses": addresses,
 	}
 
 
@@ -569,6 +646,15 @@ def _apply_pincode(doc, pincode):
 		quotation_gst._set_place_of_supply(doc, state)
 
 
+def _template_for_place_of_supply(doc):
+	"""In-State/Out-State Sales Taxes template matching `doc.place_of_supply` ("36-Telangana")."""
+	home_code = (doc.get("company_gstin") or "")[:2]
+	place = doc.get("place_of_supply") or ""
+	if not home_code or not place[:2].isdigit():
+		return doc.taxes_and_charges
+	return quotation_gst._template(doc.company, "In-State" if place[:2] == home_code else "Out-State") or doc.taxes_and_charges
+
+
 def _has_gst_rows(doc):
 	return any(t.charge_type != "Actual" for t in doc.get("taxes") or [])
 
@@ -642,15 +728,30 @@ def _find_draft_quotation(quotation_to, party_name, user):
 	)
 
 
-def _upsert_quote(ctx, items, ship_to_pincode=None):
+def _upsert_quote(ctx, items, ship_to_pincode=None, address_name=None):
 	"""
 	[BR-CRM-006] Creates (or updates today's) draft Quotation for the caller
 	and returns its own saved totals - so the figures the agent reads out are,
 	by construction, the figures on the document.
 
+	[BR-CRM-008] With `address_name` (one of the caller's own saved
+	Addresses), that Address becomes the Quotation's `shipping_address_name`
+	and wins over `ship_to_pincode`. For a Customer, India Compliance then
+	works out the place of supply exactly as it does in Desk (which address
+	it reads follows Accounts Settings > "Determine Address Tax Category
+	From"). For a CRM Deal quotation India Compliance does not read the
+	address at all, so the Address's own pincode drives the same
+	in-state/out-state decision `quotation_gst` makes.
+
 	Runs inside a savepoint: any failure after the document is written (e.g.
 	GST could not be determined) leaves nothing behind.
 	"""
+	address = None
+	if address_name:
+		address, err = _owned_address(ctx, address_name)
+		if err:
+			return err
+		ship_to_pincode = address.pincode
 	party, err = _quote_party(ctx)
 	if err:
 		return err
@@ -670,6 +771,9 @@ def _upsert_quote(ctx, items, ship_to_pincode=None):
 			doc = frappe.get_doc("Quotation", existing)
 			doc.items = []
 			doc.taxes = []
+			# A re-quote may be for a different address/state - let GST be worked out afresh.
+			doc.taxes_and_charges = None
+			doc.place_of_supply = None
 		else:
 			from frappe.contacts.doctype.address.address import get_company_address
 
@@ -689,18 +793,29 @@ def _upsert_quote(ctx, items, ship_to_pincode=None):
 		doc.selling_price_list = party.price_list
 		doc.contact_mobile = ctx.phone
 		doc.shipping_rule = shipping_rule
+		doc.shipping_address_name = address.name if address else None
 		for row in items:
 			doc.append("items", row)
-		if ship_to_pincode:
+		if ship_to_pincode and not (address and party.quotation_to == "Customer"):
 			_apply_pincode(doc, str(ship_to_pincode).strip())
 
 		doc.save(ignore_permissions=True)
-		# India Compliance picks the GST template for a Customer during
-		# validate; on a server-side save nothing then copies its rows (the
-		# Desk form does that client-side). A second save lets
-		# quotation_gst.apply_gst (before_validate) fill them from the template.
-		if not _has_gst_rows(doc) and doc.taxes_and_charges:
-			doc.save(ignore_permissions=True)
+		# India Compliance works out the place of supply during validate, but
+		# on a server-side save it neither copies the GST rows nor re-picks the
+		# template when the place of supply comes from a different state than
+		# the billing address (the Desk form does both client-side). So pick
+		# the In-State/Out-State template matching the place of supply it
+		# decided, and save again - quotation_gst.apply_gst (before_validate)
+		# then fills the rows from it.
+		# Only when the place of supply rests on a real address or pincode -
+		# otherwise it is just the company's own state, and the caller must be
+		# asked for a pincode (PINCODE_REQUIRED below), never quoted on a guess.
+		grounded = doc.get("customer_address") or doc.get("shipping_address_name") or ship_to_pincode
+		if not _has_gst_rows(doc) and grounded:
+			template = _template_for_place_of_supply(doc)
+			if template:
+				doc.taxes_and_charges = template
+				doc.save(ignore_permissions=True)
 
 		if not _has_gst_rows(doc):
 			frappe.db.rollback(save_point="voice_agent_quote")
@@ -720,6 +835,7 @@ def upsert_quote(
 	key: str | None = None,
 	items: str | list | None = None,
 	ship_to_pincode: str | None = None,
+	address_name: str | None = None,
 ):
 	"""
 	Business Purpose: [BR-CRM-006] Creates or updates the caller's draft
@@ -736,6 +852,9 @@ def upsert_quote(
 		items (list | JSON str): [{"item_code": ..., "qty": ...}].
 		ship_to_pincode (str | None): Delivery pincode, when the caller's
 			Lead has no Address line yet / the Customer has no address.
+		address_name (str | None): One of the caller's saved Addresses (as
+			returned in caller_context's `addresses`); wins over
+			ship_to_pincode. Not the caller's -> ADDRESS_NOT_ON_RECORD.
 
 	Returns:
 		dict: {allowed, status: "quoted", quotation, created, deal, items,
@@ -751,7 +870,7 @@ def upsert_quote(
 	if problem or not parsed:
 		return _error("INVALID_ITEMS", problem or "items is empty")
 	with _as_automation_user():
-		return _upsert_quote(_resolve(phone), parsed, ship_to_pincode)
+		return _upsert_quote(_resolve(phone), parsed, ship_to_pincode, address_name)
 
 
 # --------------------------------------------------------------------------
@@ -827,15 +946,87 @@ def _parse_token(message, token):
 	return dict(part.strip().split("=", 1) for part in body.split(";") if "=" in part)
 
 
-def _save_request(ctx, *, name, caller_type, organization, items, address, whatsapp_number, notes, store_type, area, ship_to_pincode):
-	result = {"allowed": True, "status": "saved", "lead": None, "deal": None, "quotation": None, "task": None, "quote": None, "warnings": [], "message": ""}
+class _RequestRefused(Exception):
+	"""Aborts save_request after writes have started; the caller rolls back and returns `result`."""
+
+	def __init__(self, result):
+		super().__init__(result.get("error"))
+		self.result = result
+
+
+def _save_lead_address(lead, title, line, city, state, pincode):
+	"""
+	[BR-CRM-008] A new caller has no Customer, so their delivery address is
+	saved as a real Shipping `Address` linked to their CRM Lead through its
+	`links` Dynamic Link table - the same mechanism `contact_lead_link` uses
+	to link a Lead's Contact. A repeat of the same line + pincode reuses the
+	existing Address.
+
+	Returns:
+		tuple: (address name, None) or (None, warning) when a field Frappe's
+		Address requires is missing - the request is still saved then, with
+		the address kept only as text.
+	"""
+	state = state or (quotation_gst.state_from_pincode(pincode) if pincode else None)
+	missing = [field for field, value in (("city", city), ("pincode", pincode), ("state", state)) if not value]
+	if missing:
+		return None, f"ADDRESS_NOT_SAVED: missing {', '.join(missing)}"
+
+	for existing in _linked_addresses(("CRM Lead", lead)):
+		if (existing.address_line1 or "").strip().lower() == line.strip().lower() and existing.pincode == pincode:
+			return existing.name, None
+
+	try:
+		doc = frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": title,
+				"address_type": "Shipping",
+				"address_line1": line.strip(),
+				"city": city.strip(),
+				"state": state,
+				"pincode": pincode,
+				"country": frappe.db.get_value("Company", _quote_company(), "country"),
+				"is_shipping_address": 1,
+				"links": [{"link_doctype": "CRM Lead", "link_name": lead}],
+			}
+		).insert(ignore_permissions=True)
+	except frappe.ValidationError as e:
+		if "CALLER_BLOCKED:" in str(e):
+			raise
+		raise _RequestRefused(
+			_error("ADDRESS_INVALID", "That address could not be saved - check the city, state and pincode.", detail=str(e))
+		) from e
+	return doc.name, None
+
+
+def _save_request(
+	ctx, *, name, caller_type, organization, items, address, whatsapp_number, notes, store_type, area,
+	ship_to_pincode, address_name, city, state, pincode,
+):
+	result = {
+		"allowed": True, "status": "saved", "lead": None, "deal": None, "quotation": None, "task": None,
+		"quote": None, "warnings": [], "message": "", "address": None,
+	}
+
+	# [BR-CRM-008] A saved Address must be the caller's own - checked before anything is written.
+	saved_address = None
+	if address_name:
+		saved_address, err = _owned_address(ctx, address_name)
+		if err:
+			return err
+		address, pincode, city, state = _address_text(saved_address), saved_address.pincode, saved_address.city, saved_address.state
+		result["address"] = saved_address.name
+	pin_in_text = _PIN.search(address or "")
+	pincode = pincode or ship_to_pincode or (pin_in_text.group() if pin_in_text else None)
+
 	category = (caller_type or "").strip().lower() or None
 	if category and not _category_rows(category):
 		result["warnings"].append(f"UNKNOWN_CATEGORY: {caller_type}")
 	elif category and not _category_default(category):
 		result["warnings"].append(f"CUSTOMER_GROUP_NEEDS_REVIEW: {category}")
 
-	description = _description_lines(caller_type, store_type, area, notes, address, whatsapp_number, ship_to_pincode)
+	description = _description_lines(caller_type, store_type, area, notes, address, whatsapp_number, pincode)
 	display_name = name or (ctx.customer.customer_name if ctx.customer else None) or (ctx.lead or {}).get("lead_name")
 
 	if ctx.lead:
@@ -853,6 +1044,7 @@ def _save_request(ctx, *, name, caller_type, organization, items, address, whats
 				"organization": organization,
 				"status": "New",
 				"lead_owner": settings.default_lead_owner or frappe.session.user,
+				# Keeps the "Address:" line quotation_gst.apply_gst and staff views read.
 				"company_description": description,
 				"custom_caller_category": category,
 				"custom_store_type": store_type,
@@ -861,9 +1053,17 @@ def _save_request(ctx, *, name, caller_type, organization, items, address, whats
 		ctx.lead = _find_lead(last_10_digits(ctx.phone))
 		result.update(lead=lead.name, message="Saved.")
 
+	# [BR-CRM-008] A lead (no Customer) giving a new address gets a real, linked Address.
+	if not saved_address and (address or "").strip() and ctx.lead and not ctx.customer:
+		new_address, warning = _save_lead_address(ctx.lead["name"], display_name or ctx.phone, address, city, state, pincode)
+		if warning:
+			result["warnings"].append(warning)
+		else:
+			result["address"] = new_address
+
 	quoted = False
 	if items:
-		quote = _upsert_quote(ctx, items, ship_to_pincode)
+		quote = _upsert_quote(ctx, items, pincode, result["address"])
 		result["quote"] = quote
 		if quote.get("status") == "quoted":
 			quoted = True
@@ -904,6 +1104,10 @@ def save_request(
 	store_type: str | None = None,
 	area: str | None = None,
 	ship_to_pincode: str | None = None,
+	address_name: str | None = None,
+	city: str | None = None,
+	state: str | None = None,
+	pincode: str | None = None,
 ):
 	"""
 	Business Purpose: [BR-CRM-004] Saves everything the caller asked for in
@@ -918,11 +1122,18 @@ def save_request(
 	- Existing Customer: a CRM Deal and draft Quotation for the items; a
 	  callback Task if there were no items or the quote couldn't be made.
 
+	[BR-CRM-008] `address_name` (one of the caller's saved Addresses from
+	caller_context) is used instead of a spoken address and wins over
+	`address`/`ship_to_pincode`; one that isn't the caller's returns
+	ADDRESS_NOT_ON_RECORD and saves nothing. A spoken `address` (+ `city`,
+	`state`, `pincode`) from a caller with no Customer is saved as a Shipping
+	Address linked to their CRM Lead.
+
 	All-or-nothing: if any write fails, nothing is kept.
 
 	Returns:
 		dict: {allowed, status: "saved" | "duplicate" | "blocked" | "error",
-		lead, deal, quotation, task, quote, warnings, message}.
+		lead, deal, quotation, task, quote, warnings, message, address}.
 	"""
 	_check_webhook_key(key)
 	gate = evaluate(phone)
@@ -950,7 +1161,14 @@ def save_request(
 				store_type=store_type,
 				area=area,
 				ship_to_pincode=ship_to_pincode,
+				address_name=address_name,
+				city=city,
+				state=state,
+				pincode=pincode,
 			)
+		except _RequestRefused as refused:
+			frappe.db.rollback(save_point="voice_agent_save_request")
+			return refused.result
 		except frappe.DuplicateEntryError as e:
 			# [BR-CRM-001] Another request created the Lead between our lookup and insert.
 			frappe.db.rollback(save_point="voice_agent_save_request")

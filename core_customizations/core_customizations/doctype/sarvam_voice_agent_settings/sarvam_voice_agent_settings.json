@@ -42,6 +42,7 @@
   "column_break_voice_agent_records",
   "quotation_company",
   "deal_status",
+  "address_list_limit",
   "section_break_caller_categories",
   "caller_categories",
   "pack_items",
@@ -290,6 +291,13 @@
    "fieldtype": "Link",
    "options": "CRM Deal Status",
    "label": "New Deal Status"
+  },
+  {
+   "default": "5",
+   "fieldname": "address_list_limit",
+   "fieldtype": "Int",
+   "label": "Saved Addresses Returned",
+   "description": "[BR-CRM-008] How many of the caller's saved Addresses caller_context returns (shipping first, then primary, then most recently modified)."
   },
   {
    "fieldname": "section_break_caller_categories",

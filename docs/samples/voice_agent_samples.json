@@ -24,7 +24,8 @@
     "customer": null,
     "preferences": {},
     "preferences_source": null,
-    "call_log": null
+    "call_log": null,
+    "addresses": []
    }
   },
   "lead_only_with_call_id": {
@@ -48,7 +49,8 @@
     "call_log": {
      "id": "sample-call-1",
      "created": true
-    }
+    },
+    "addresses": []
    }
   },
   "repeat_same_call_id": {
@@ -72,7 +74,8 @@
     "call_log": {
      "id": "sample-call-1",
      "created": false
-    }
+    },
+    "addresses": []
    }
   },
   "customer_only": {
@@ -96,7 +99,21 @@
     },
     "preferences": {},
     "preferences_source": "Contact:VA Test Individual Customer-VA Test Individual Customer",
-    "call_log": null
+    "call_log": null,
+    "addresses": [
+     {
+      "name": "VA Test Individual Customer-Billing",
+      "address_title": "VA Test Individual Customer",
+      "address_type": "Billing",
+      "address_line1": "1 Test Street",
+      "address_line2": null,
+      "city": "Chennai",
+      "state": "Tamil Nadu",
+      "pincode": "600128",
+      "is_primary_address": 1,
+      "is_shipping_address": 0
+     }
+    ]
    }
   },
   "lead_plus_customer": {
@@ -124,7 +141,21 @@
     },
     "preferences": {},
     "preferences_source": "CRM Lead:CRM-LEAD-2026-04272",
-    "call_log": null
+    "call_log": null,
+    "addresses": [
+     {
+      "name": "VA Test Individual Customer-Billing",
+      "address_title": "VA Test Individual Customer",
+      "address_type": "Billing",
+      "address_line1": "1 Test Street",
+      "address_line2": null,
+      "city": "Chennai",
+      "state": "Tamil Nadu",
+      "pincode": "600128",
+      "is_primary_address": 1,
+      "is_shipping_address": 0
+     }
+    ]
    }
   },
   "legacy_spaced_number": {
@@ -145,7 +176,95 @@
     "customer": null,
     "preferences": {},
     "preferences_source": "CRM Lead:CRM-LEAD-2026-04273",
-    "call_log": null
+    "call_log": null,
+    "addresses": []
+   }
+  },
+  "customer_no_addresses": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": null,
+    "contact": {
+     "name": "VA Test No Address Customer-VA Test No Address Customer",
+     "full_name": "VA Test No Address Customer",
+     "mobile_no": "+917000000110"
+    },
+    "customer": {
+     "name": "VA Test No Address Customer",
+     "customer_name": "VA Test No Address Customer",
+     "customer_group": "Individual",
+     "default_price_list": "Standard Selling",
+     "category": "individual",
+     "group_supported": true
+    },
+    "preferences": {},
+    "preferences_source": "Contact:VA Test No Address Customer-VA Test No Address Customer",
+    "call_log": null,
+    "addresses": []
+   }
+  },
+  "customer_three_addresses_one_disabled": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": null,
+    "contact": {
+     "name": "VA Test Three Address Customer-VA Test Three Address Customer",
+     "full_name": "VA Test Three Address Customer",
+     "mobile_no": "+917000000111"
+    },
+    "customer": {
+     "name": "VA Test Three Address Customer",
+     "customer_name": "VA Test Three Address Customer",
+     "customer_group": "Individual",
+     "default_price_list": "Standard Selling",
+     "category": "individual",
+     "group_supported": true
+    },
+    "preferences": {},
+    "preferences_source": "Contact:VA Test Three Address Customer-VA Test Three Address Customer",
+    "call_log": null,
+    "addresses": [
+     {
+      "name": "VA Test Three Address Customer Hyderabad-Shipping",
+      "address_title": "VA Test Three Address Customer Hyderabad",
+      "address_type": "Shipping",
+      "address_line1": "Godown Rd",
+      "address_line2": null,
+      "city": "Hyderabad",
+      "state": "Telangana",
+      "pincode": "500062",
+      "is_primary_address": 0,
+      "is_shipping_address": 1
+     },
+     {
+      "name": "VA Test Three Address Customer-Billing",
+      "address_title": "VA Test Three Address Customer",
+      "address_type": "Billing",
+      "address_line1": "1 Test Street",
+      "address_line2": null,
+      "city": "Chennai",
+      "state": "Tamil Nadu",
+      "pincode": "600128",
+      "is_primary_address": 1,
+      "is_shipping_address": 0
+     },
+     {
+      "name": "VA Test Three Address Customer Coimbatore-Billing",
+      "address_title": "VA Test Three Address Customer Coimbatore",
+      "address_type": "Billing",
+      "address_line1": "Branch Rd",
+      "address_line2": null,
+      "city": "Coimbatore",
+      "state": "Tamil Nadu",
+      "pincode": "641001",
+      "is_primary_address": 0,
+      "is_shipping_address": 0
+     }
+    ]
    }
   },
   "customer_only_mahaveer_agencies_ramapuram": {
@@ -153,15 +272,7 @@
     "allowed": true,
     "reason": null,
     "message": "",
-    "lead": {
-     "name": "CRM-LEAD-2026-04241",
-     "lead_name": "Rakesh",
-     "mobile_no": "+919840456658",
-     "status": "Converted",
-     "organization": null,
-     "caller_category": null,
-     "store_type": null
-    },
+    "lead": null,
     "contact": {
      "name": "Mahaveer Agency - Ramapuram-Mahaveer Agency - Ramapuram",
      "full_name": "Mahaveer Agencies - Ramapuram",
@@ -176,8 +287,107 @@
      "group_supported": true
     },
     "preferences": {},
-    "preferences_source": "CRM Lead:CRM-LEAD-2026-04241",
-    "call_log": null
+    "preferences_source": "Contact:Mahaveer Agency - Ramapuram-Mahaveer Agency - Ramapuram",
+    "call_log": null,
+    "addresses": [
+     {
+      "name": "Mahaveer Agency - Ramapuram-Billing",
+      "address_title": "Mahaveer Agencies - Ramapuram",
+      "address_type": "Billing",
+      "address_line1": "No 1/6, Gangai Amman Koil Street, Ramapuram, Chennai 600089",
+      "address_line2": null,
+      "city": "Chennai ",
+      "state": "Tamil Nadu",
+      "pincode": "600089",
+      "is_primary_address": 1,
+      "is_shipping_address": 0
+     }
+    ]
+   }
+  },
+  "mahaveer_with_two_addresses_second_is_temporary": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": null,
+    "contact": {
+     "name": "Mahaveer Agency - Ramapuram-Mahaveer Agency - Ramapuram",
+     "full_name": "Mahaveer Agencies - Ramapuram",
+     "mobile_no": "+919840456658"
+    },
+    "customer": {
+     "name": "Mahaveer Agencies - Ramapuram",
+     "customer_name": "Mahaveer Agencies - Ramapuram",
+     "customer_group": "Commercial",
+     "default_price_list": "Distributor Pricelist 40.50",
+     "category": "wholesale",
+     "group_supported": true
+    },
+    "preferences": {},
+    "preferences_source": "Contact:Mahaveer Agency - Ramapuram-Mahaveer Agency - Ramapuram",
+    "call_log": null,
+    "addresses": [
+     {
+      "name": "Mahaveer Agencies - Ramapuram Hyderabad-Shipping",
+      "address_title": "Mahaveer Agencies - Ramapuram Hyderabad",
+      "address_type": "Shipping",
+      "address_line1": "12 Godown Street",
+      "address_line2": null,
+      "city": "Hyderabad",
+      "state": "Telangana",
+      "pincode": "500062",
+      "is_primary_address": 0,
+      "is_shipping_address": 1
+     },
+     {
+      "name": "Mahaveer Agency - Ramapuram-Billing",
+      "address_title": "Mahaveer Agencies - Ramapuram",
+      "address_type": "Billing",
+      "address_line1": "No 1/6, Gangai Amman Koil Street, Ramapuram, Chennai 600089",
+      "address_line2": null,
+      "city": "Chennai ",
+      "state": "Tamil Nadu",
+      "pincode": "600089",
+      "is_primary_address": 1,
+      "is_shipping_address": 0
+     }
+    ]
+   }
+  },
+  "lead_with_saved_address": {
+   "message": {
+    "allowed": true,
+    "reason": null,
+    "message": "",
+    "lead": {
+     "name": "CRM-LEAD-2026-04276",
+     "lead_name": "Lakshmi",
+     "mobile_no": "+917000000112",
+     "status": "New",
+     "organization": null,
+     "caller_category": "individual",
+     "store_type": null
+    },
+    "contact": null,
+    "customer": null,
+    "preferences": {},
+    "preferences_source": "CRM Lead:CRM-LEAD-2026-04276",
+    "call_log": null,
+    "addresses": [
+     {
+      "name": "Lakshmi-Shipping",
+      "address_title": "Lakshmi",
+      "address_type": "Shipping",
+      "address_line1": "7 Lake View Road",
+      "address_line2": null,
+      "city": "Chennai",
+      "state": "Tamil Nadu",
+      "pincode": "600040",
+      "is_primary_address": 0,
+      "is_shipping_address": 1
+     }
+    ]
    }
   }
  },
@@ -355,6 +565,53 @@
     "customer_group": "Commercial"
    }
   },
+  "hyderabad_shipping_address_on_billing_basis_site": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00337",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00040",
+    "price_list": "Standard Selling",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 1.0,
+      "rate": 476.25,
+      "amount": 476.25
+     }
+    ],
+    "net_total": 476.25,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 11.91
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 11.91
+     }
+    ],
+    "shipping": 60.0,
+    "rounding_adjustment": -0.07,
+    "grand_total": 560.07,
+    "rounded_total": 560.0,
+    "total_to_say": 560.0
+   }
+  },
+  "address_of_another_customer": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "ADDRESS_NOT_ON_RECORD",
+    "message": "That saved address isn't on this caller's record - ask for the delivery address again.",
+    "address_name": "VA Test Three Address Customer Hyderabad-Shipping"
+   }
+  },
   "no_pincode_on_record": {
    "message": {
     "allowed": true,
@@ -396,12 +653,14 @@
     "lead": "CRM-LEAD-2026-04275",
     "deal": null,
     "quotation": null,
-    "task": 13,
+    "task": 85,
     "quote": null,
     "warnings": [
-     "CUSTOMER_GROUP_NEEDS_REVIEW: retailer"
+     "CUSTOMER_GROUP_NEEDS_REVIEW: retailer",
+     "ADDRESS_NOT_SAVED: missing city"
     ],
-    "message": "Saved."
+    "message": "Saved.",
+    "address": null
    }
   },
   "repeat_same_caller": {
@@ -411,12 +670,13 @@
     "lead": "CRM-LEAD-2026-04275",
     "deal": null,
     "quotation": null,
-    "task": 13,
+    "task": 85,
     "quote": null,
     "warnings": [
      "CUSTOMER_GROUP_NEEDS_REVIEW: retailer"
     ],
     "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04275; lead_name=Ravi; mobile_no=+917000000108; status=New",
+    "address": null,
     "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
    }
   },
@@ -427,10 +687,11 @@
     "lead": "CRM-LEAD-2026-04271",
     "deal": null,
     "quotation": null,
-    "task": 14,
+    "task": 86,
     "quote": null,
     "warnings": [],
     "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04271; lead_name=VA Lead Only; mobile_no=+917000000103; status=New",
+    "address": null,
     "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
    }
   },
@@ -441,10 +702,11 @@
     "lead": "CRM-LEAD-2026-04273",
     "deal": null,
     "quotation": null,
-    "task": 15,
+    "task": 87,
     "quote": null,
     "warnings": [],
     "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04273; lead_name=VA Legacy Spaced; mobile_no=70000 00106; status=New",
+    "address": null,
     "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
    }
   },
@@ -453,7 +715,7 @@
     "allowed": true,
     "status": "saved",
     "lead": null,
-    "deal": "CRM-DEAL-2026-00040",
+    "deal": "CRM-DEAL-2026-00041",
     "quotation": "SAL-QTN-2026-00336",
     "task": null,
     "quote": {
@@ -461,7 +723,7 @@
      "status": "quoted",
      "quotation": "SAL-QTN-2026-00336",
      "created": false,
-     "deal": "CRM-DEAL-2026-00040",
+     "deal": "CRM-DEAL-2026-00041",
      "price_list": "Standard Selling",
      "place_of_supply": "33-Tamil Nadu",
      "items": [
@@ -493,7 +755,8 @@
      "total_to_say": 560.0
     },
     "warnings": [],
-    "message": ""
+    "message": "",
+    "address": null
    }
   },
   "lead_plus_customer_no_items": {
@@ -501,29 +764,88 @@
     "allowed": true,
     "status": "duplicate",
     "lead": "CRM-LEAD-2026-04272",
-    "deal": "CRM-DEAL-2026-00041",
+    "deal": "CRM-DEAL-2026-00042",
     "quotation": null,
-    "task": 16,
+    "task": 88,
     "quote": null,
     "warnings": [],
     "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04272; lead_name=VA Lead And Customer; mobile_no=+917000000105; status=New",
+    "address": null,
     "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
+   }
+  },
+  "address_of_another_customer": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "ADDRESS_NOT_ON_RECORD",
+    "message": "That saved address isn't on this caller's record - ask for the delivery address again.",
+    "address_name": "VA Test Three Address Customer Hyderabad-Shipping"
+   }
+  },
+  "new_caller_with_address": {
+   "message": {
+    "allowed": true,
+    "status": "saved",
+    "lead": "CRM-LEAD-2026-04276",
+    "deal": "CRM-DEAL-2026-00043",
+    "quotation": "SAL-QTN-2026-00338",
+    "task": 89,
+    "quote": {
+     "allowed": true,
+     "status": "quoted",
+     "quotation": "SAL-QTN-2026-00338",
+     "created": true,
+     "deal": "CRM-DEAL-2026-00043",
+     "price_list": "Standard Selling",
+     "place_of_supply": "33-Tamil Nadu",
+     "items": [
+      {
+       "item_code": "SASB-50INR-PACK-10",
+       "item_name": "Sastry Balm 50 INR Pack of 10",
+       "qty": 1.0,
+       "rate": 476.25,
+       "amount": 476.25
+      }
+     ],
+     "net_total": 476.25,
+     "taxes": [
+      {
+       "type": "SGST",
+       "rate": 2.5,
+       "amount": 11.91
+      },
+      {
+       "type": "CGST",
+       "rate": 2.5,
+       "amount": 11.91
+      }
+     ],
+     "shipping": 60.0,
+     "rounding_adjustment": -0.07,
+     "grand_total": 560.07,
+     "rounded_total": 560.0,
+     "total_to_say": 560.0
+    },
+    "warnings": [],
+    "message": "Saved.",
+    "address": "Lakshmi-Shipping"
    }
   },
   "new_individual_with_items": {
    "message": {
     "allowed": true,
     "status": "saved",
-    "lead": "CRM-LEAD-2026-04276",
-    "deal": "CRM-DEAL-2026-00042",
-    "quotation": "SAL-QTN-2026-00337",
-    "task": 17,
+    "lead": "CRM-LEAD-2026-04277",
+    "deal": "CRM-DEAL-2026-00044",
+    "quotation": "SAL-QTN-2026-00339",
+    "task": 90,
     "quote": {
      "allowed": true,
      "status": "quoted",
-     "quotation": "SAL-QTN-2026-00337",
+     "quotation": "SAL-QTN-2026-00339",
      "created": true,
-     "deal": "CRM-DEAL-2026-00042",
+     "deal": "CRM-DEAL-2026-00044",
      "price_list": "Standard Selling",
      "place_of_supply": "36-Telangana",
      "items": [
@@ -549,8 +871,11 @@
      "rounded_total": 560.0,
      "total_to_say": 560.0
     },
-    "warnings": [],
-    "message": "Saved."
+    "warnings": [
+     "ADDRESS_NOT_SAVED: missing city"
+    ],
+    "message": "Saved.",
+    "address": null
    }
   }
  },

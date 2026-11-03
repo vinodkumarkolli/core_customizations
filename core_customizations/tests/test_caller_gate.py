@@ -92,6 +92,7 @@ class TestCallerGate(FrappeTestCase):
 				"lead_name": lead_name,
 				"mobile_no": mobile_no,
 				"status": "New",
+				"lead_owner": STAFF_USER,
 			}
 		)
 		return doc

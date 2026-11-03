@@ -246,18 +246,26 @@ def lookup_by_phone(phone: str | None = None):
 				frappe.ValidationError,
 			)
 
-	normalised = normalise(phone)
+	# [BR-CRM-002] Matches whichever spelling the record's own mobile_no
+	# happens to be stored in (+91..., bare 91..., or bare 10-digit) -
+	# older records predate the before_validate normalisation hook and are
+	# never rewritten by it retroactively, so an exact match on only the
+	# fully-normalised spelling silently misses them. Same three spellings
+	# Sarvam's own lookup_caller_lead/lookup_caller_contact tools already
+	# match against.
+	normalised = normalise(phone) or phone
+	spellings = [normalised, normalised[-12:], normalised[-10:]]
 
 	leads = frappe.get_list(
 		"CRM Lead",
-		filters={"mobile_no": normalised},
+		filters={"mobile_no": ("in", spellings)},
 		fields=["name", "lead_name", "mobile_no", "status"],
 		limit=1,
 		ignore_permissions=is_automation_user,
 	)
 	contacts = frappe.get_list(
 		"Contact",
-		filters={"mobile_no": normalised},
+		filters={"mobile_no": ("in", spellings)},
 		fields=["name", "full_name", "mobile_no"],
 		limit=1,
 	)

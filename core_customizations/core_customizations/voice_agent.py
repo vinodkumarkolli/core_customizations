@@ -51,11 +51,14 @@ from core_customizations.core_customizations.caller_gate import (
 	last_10_digits,
 )
 from core_customizations.core_customizations.lead_duplicate_guard import DUPLICATE_LEAD_MESSAGE
-from core_customizations.core_customizations.phone_normalise import normalise
+from core_customizations.core_customizations.phone_normalise import MOBILE, normalise
 from core_customizations.core_customizations.sarvam_telephony import SARVAM_SETTINGS_DOCTYPE
 
 CLOSED_DEAL_STATUSES = ("Won", "Lost")
 OPEN_TASK_STATUSES = ("Backlog", "Todo", "In Progress")
+# [BR-CRM-004] First words of a callback Task saved from a number the caller
+# spoke (save_request's `callback_number`), not the number Sarvam saw.
+CALLBACK_NUMBER_NOTE = "Callback request (number given by the caller, not the line):"
 
 # Keys read from the call-ended webhook's `output_agent_variables`. Sarvam's
 # inbound payload shape is not yet confirmed against a real delivery (see
@@ -1002,19 +1005,22 @@ def _description_lines(caller_type, store_type, area, notes, address, whatsapp_n
 
 
 def _upsert_callback_task(reference_doctype, reference_name, title, description):
-	"""[BR-CRM-004] One open callback task per record per day - a repeat save updates it."""
+	"""
+	[BR-CRM-004] One open callback task per record per day - a repeat save
+	updates it. A task with no record to hang on (a spoken callback number
+	that matches only a Customer) is matched on its title instead.
+	"""
 	settings = _settings()
-	existing = frappe.db.get_value(
-		"CRM Task",
-		{
-			"reference_doctype": reference_doctype,
-			"reference_docname": reference_name,
-			"status": ("in", OPEN_TASK_STATUSES),
-			"owner": frappe.session.user,
-			"creation": (">=", nowdate()),
-		},
-		"name",
-	)
+	filters = {
+		"status": ("in", OPEN_TASK_STATUSES),
+		"owner": frappe.session.user,
+		"creation": (">=", nowdate()),
+	}
+	if reference_name:
+		filters.update(reference_doctype=reference_doctype, reference_docname=reference_name)
+	else:
+		filters.update(reference_docname=("is", "not set"), title=title)
+	existing = frappe.db.get_value("CRM Task", filters, "name")
 	if existing:
 		frappe.db.set_value("CRM Task", existing, {"title": title, "description": description})
 		return existing
@@ -1106,13 +1112,22 @@ def _save_lead_address(lead, title, line, city, state, pincode):
 	return doc.name, None
 
 
+def _spoken_mobile(number):
+	"""[BR-CRM-004] A spoken callback number as +91 and ten digits - an Indian mobile only - else None."""
+	canonical = normalise((number or "").strip())
+	if canonical and canonical.startswith("+91") and MOBILE.fullmatch(canonical[3:]):
+		return canonical
+	return None
+
+
 def _save_request(
 	ctx, *, name, caller_type, organization, items, address, whatsapp_number, notes, store_type, area,
-	ship_to_pincode, address_name, city, state, pincode,
+	ship_to_pincode, address_name, city, state, pincode, callback_only=False,
 ):
 	result = {
 		"allowed": True, "status": "saved", "lead": None, "deal": None, "quotation": None, "task": None,
 		"quote": None, "warnings": [], "message": "", "address": None,
+		"number_source": "callback_number" if callback_only else "phone",
 	}
 
 	# [BR-CRM-008] A saved Address must be the caller's own - checked before anything is written.
@@ -1138,6 +1153,9 @@ def _save_request(
 			result["warnings"].append(f"CUSTOMER_GROUP_NEEDS_REVIEW: {category}")
 
 	description = _description_lines(caller_type, store_type, area, notes, address, whatsapp_number, pincode)
+	if callback_only:
+		# The Lead's own record says the number wasn't seen on the line.
+		description = "\n".join(filter(None, [f"Number: {ctx.phone} (given by the caller, not the line)", description]))
 	display_name = name or (ctx.customer.customer_name if ctx.customer else None) or (ctx.lead or {}).get("lead_name")
 
 	if ctx.lead:
@@ -1173,7 +1191,11 @@ def _save_request(
 			result["address"] = new_address
 
 	quoted = False
-	if items:
+	if callback_only:
+		# [BR-CRM-004] A spoken number is unverified: callback only - no quote, no Deal.
+		if items:
+			result["warnings"].append("NOT_QUOTED: callback number given by the caller - the team will quote on the callback")
+	elif items:
 		quote = _upsert_quote(ctx, items, pincode, result["address"])
 		result["quote"] = quote
 		if quote.get("status") == "quoted":
@@ -1189,11 +1211,25 @@ def _save_request(
 	if not quoted or not ctx.customer:
 		if ctx.lead:
 			ref = ("CRM Lead", ctx.lead["name"])
+		elif callback_only:
+			# A Customer with no Lead: their open Deal if they have one, never a new one.
+			open_deal = _open_deal(ctx)
+			ref = ("CRM Deal", open_deal) if open_deal else (None, None)
+			result["deal"] = open_deal
 		else:
 			ref = ("CRM Deal", result["deal"] or _get_or_create_deal(ctx)[0])
 			result["deal"] = ref[1]
 		flags = "\n".join(result["warnings"])
-		task_description = "\n".join(filter(None, [f"Phone: {ctx.phone}", description, flags]))
+		lines = [f"Phone: {ctx.phone}", description, flags]
+		if callback_only:
+			asked = ", ".join(f"{i['item_code']} x {i['qty']}" for i in items or [])
+			lines = [
+				f"{CALLBACK_NUMBER_NOTE} {notes or ''}".strip(),
+				f"Customer: {ctx.customer.customer_name}" if ctx.customer else None,
+				f"Items asked for: {asked}" if asked else None,
+				*lines,
+			]
+		task_description = "\n".join(filter(None, lines))
 		result["task"] = _upsert_callback_task(*ref, f"Callback: {display_name or ctx.phone}", task_description)
 
 	if result["status"] == "duplicate":
@@ -1219,6 +1255,7 @@ def save_request(
 	city: str | None = None,
 	state: str | None = None,
 	pincode: str | None = None,
+	callback_number: str | None = None,
 ):
 	"""
 	Business Purpose: [BR-CRM-004] Saves everything the caller asked for in
@@ -1240,13 +1277,33 @@ def save_request(
 	`state`, `pincode`) from a caller with no Customer is saved as a Shipping
 	Address linked to their CRM Lead.
 
+	[BR-CRM-004] `callback_number` - the number the caller said - is used
+	only when `phone` (the line's number) is blank, and ignored otherwise.
+	It must be an Indian mobile (saved as +91 and ten digits; anything else
+	is CALLBACK_NUMBER_INVALID) and goes through the same caller gate as
+	`phone`. Such a save is a callback only: the Lead is created (or the
+	existing one matched, same duplicate rules) with a callback Task whose
+	notes start "Callback request (number given by the caller, not the
+	line):" - never a quote or a Deal.
+
 	All-or-nothing: if any write fails, nothing is kept.
 
 	Returns:
 		dict: {allowed, status: "saved" | "duplicate" | "blocked" | "error",
-		lead, deal, quotation, task, quote, warnings, message, address}.
+		lead, deal, quotation, task, quote, warnings, message, address,
+		number_source: "phone" | "callback_number"}.
 	"""
 	_check_webhook_key(key)
+	callback_only = False
+	if not last_10_digits(phone) and (callback_number or "").strip():
+		spoken = _spoken_mobile(callback_number)
+		if not spoken:
+			return _error(
+				"CALLBACK_NUMBER_INVALID",
+				"That doesn't sound like a 10-digit Indian mobile number - ask the caller to say it again.",
+				callback_number=callback_number,
+			)
+		phone, callback_only = spoken, True
 	gate = evaluate(phone)
 	if not gate["allowed"]:
 		return {**gate, "status": "blocked", "lead": None, "deal": None, "quotation": None, "task": None}
@@ -1276,6 +1333,7 @@ def save_request(
 				city=city,
 				state=state,
 				pincode=pincode,
+				callback_only=callback_only,
 			)
 		except _RequestRefused as refused:
 			frappe.db.rollback(save_point="voice_agent_save_request")

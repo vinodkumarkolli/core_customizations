@@ -48,7 +48,7 @@ Every method first runs `caller_gate.evaluate(phone)`. A blocked or foreign call
 | `caller_context` | same as above, as a tool instead of a webhook | `phone`, `key`, `call_id` (optional — Sarvam's `interaction_id`) |
 | `get_caller_preferences` / `set_caller_preferences` | `fetch_caller_preferences` | `phone`, `key`; set also takes `preferences` (JSON object) and `merge` (default 1) |
 | `upsert_quote` | the agent's own price/tax/shipping arithmetic | `phone`, `key`, `items` = `[{"item_code", "qty"}]`, `address_name` or `ship_to_pincode` (optional) |
-| `save_request` | the chain of create-lead / create-deal / create-quotation / create-task calls | `phone`, `key`, `name`, `caller_type`, `store_type`, `area`, `organization`, `items`, `address_name` **or** `address` + `city` + `pincode` (+ `state`), `whatsapp_number`, `notes`, `ship_to_pincode` |
+| `save_request` | the chain of create-lead / create-deal / create-quotation / create-task calls | `phone`, `key`, `name`, `caller_type`, `store_type`, `area`, `organization`, `items`, `address_name` **or** `address` + `city` + `pincode` (+ `state`), `whatsapp_number`, `notes`, `ship_to_pincode`, `callback_number` |
 | `transfer_target` | `check_transfer_hours` (timeapi.io), `route_to_*` (httpbin) | `phone`, `key` |
 | call-ended webhook (`sarvam_telephony.handle_inbound_webhook`, unchanged URL) | `update_call_log`, `update_call_log_conversation_ref` | Sarvam's call-end payload; reads `output_agent_variables.summary`, `.conversation_ref`, `.preferences` |
 
@@ -117,7 +117,17 @@ Errors:
 | `saved` | New Lead created (+ callback Task; + Deal and draft Quotation when quotable items were given), or an existing Customer's Deal/Quotation |
 | `duplicate` | The caller already has a Lead — **no new Lead was created**; `lead` is the existing one, `message` is the `DUPLICATE_LEAD:` token, and the request was recorded on a callback Task against it |
 | `blocked` | Caller is blocked/foreign (or became so mid-call — the `CALLER_BLOCKED:` guard fired); nothing saved |
-| `error` | `NAME_REQUIRED`, `PHONE_REQUIRED`, `INVALID_ITEMS`, `ADDRESS_NOT_ON_RECORD` or `ADDRESS_INVALID` — nothing was saved; ask and retry |
+| `error` | `NAME_REQUIRED`, `PHONE_REQUIRED`, `CALLBACK_NUMBER_INVALID`, `INVALID_ITEMS`, `ADDRESS_NOT_ON_RECORD` or `ADDRESS_INVALID` — nothing was saved; ask and retry |
+
+**When Sarvam gives no caller number — `callback_number`.** Fill `phone` from the call as always; when it is blank, ask the caller for their number and send it as `callback_number` (any spelling: `98404 56658`, `098404…`, `+91…`). Rules:
+
+- Used **only when `phone` is blank** — with a number on the line, `callback_number` is ignored (`number_source: "phone"`).
+- Must be an Indian **mobile** number; it is saved as `+91` and ten digits. Anything else (too short/long, a landline, a foreign number, words) → `CALLBACK_NUMBER_INVALID` with a `message` to ask again; nothing is saved.
+- Checked by the same caller gate as `phone` — a blocked number gets `status: "blocked"` and no callback.
+- **Callback only:** no quote and no Deal, even with `items` (they are listed on the Task, plus a `NOT_QUOTED` warning). A new caller gets a CRM Lead (name still required) and a callback Task; a number that already has a Lead is `duplicate` as usual, with the request on that Lead's Task. A number that matches only a Customer gets a Task on their open Deal if they have one, else a Task with no reference that names the Customer — never a new Deal.
+- The Task's notes start *"Callback request (number given by the caller, not the line):"*, and the Lead's description says the number was given by the caller.
+- The response carries `number_source: "callback_number"`.
+- Both blank → `PHONE_REQUIRED`, as before.
 
 **One deal per caller.** `upsert_quote` and `save_request` share the caller's open CRM Deal — the Deal of their CRM Lead, or for a Customer the open Deal that has their Contact in its Contacts table (or, with no Contact, their number). A new Deal gets the caller's Contact as its primary contact (CRM Deal takes its `mobile_no` from that and blanks it without one, which is why a Customer's quote used to open a new Deal every time). The same day, a second quote — even for different items — updates the same draft Quotation (its items are replaced) on the same Deal; a callback Task is likewise one per record per day.
 

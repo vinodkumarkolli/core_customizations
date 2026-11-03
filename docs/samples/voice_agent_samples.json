@@ -1225,6 +1225,83 @@
     "message": "Saved.",
     "address": null
    }
+  },
+  "callback_number_spoken": {
+   "message": {
+    "allowed": true,
+    "status": "saved",
+    "lead": "CRM-LEAD-2026-04271",
+    "deal": null,
+    "quotation": null,
+    "task": 468,
+    "quote": null,
+    "warnings": [
+     "NOT_QUOTED: callback number given by the caller - the team will quote on the callback"
+    ],
+    "message": "Saved.",
+    "address": null,
+    "number_source": "callback_number"
+   }
+  },
+  "callback_number_repeat_call": {
+   "message": {
+    "allowed": true,
+    "status": "duplicate",
+    "lead": "CRM-LEAD-2026-04271",
+    "deal": null,
+    "quotation": null,
+    "task": 468,
+    "quote": null,
+    "warnings": [],
+    "message": "DUPLICATE_LEAD: name=CRM-LEAD-2026-04271; lead_name=Meena; mobile_no=+917000001116; status=New",
+    "address": null,
+    "number_source": "callback_number",
+    "note": "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
+   }
+  },
+  "callback_number_invalid": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "CALLBACK_NUMBER_INVALID",
+    "message": "That doesn't sound like a 10-digit Indian mobile number - ask the caller to say it again.",
+    "callback_number": "98404 5665"
+   }
+  },
+  "callback_number_blocked": {
+   "message": {
+    "allowed": false,
+    "reason": "BLOCKED_LIST",
+    "message": "This caller is on the blocked list.",
+    "status": "blocked",
+    "lead": null,
+    "deal": null,
+    "quotation": null,
+    "task": null
+   }
+  },
+  "no_phone_no_callback_number": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "PHONE_REQUIRED",
+    "message": "Ask for the caller's mobile number before saving."
+   }
+  },
+  "callback_number_ignored_line_has_number": {
+   "message": {
+    "allowed": true,
+    "status": "saved",
+    "lead": "CRM-LEAD-2026-04272",
+    "deal": null,
+    "quotation": null,
+    "task": 469,
+    "quote": null,
+    "warnings": [],
+    "message": "Saved.",
+    "address": null,
+    "number_source": "phone"
+   }
   }
  },
  "transfer_target": {

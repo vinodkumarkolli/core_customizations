@@ -60,11 +60,12 @@ CONVERTING_CALLER = "+917000001112"
 TWIN_SEED = "+917000001113"
 OTHER_LEAD = "+917000001114"
 CONTACTLESS_CUSTOMER = "+917000001115"  # a Customer found by its own mobile_no, no Contact
+SPOKEN_CALLER = "+917000001116"  # a number the caller says when the line has none
 
 TEST_NUMBERS = [
 	BLOCKED, UNKNOWN, LEAD_ONLY, CUSTOMER_ONLY, LEAD_AND_CUSTOMER, LEGACY_SPACED_CALLER, COMMERCIAL_CUSTOMER,
 	NEW_CALLER, NO_ADDRESS_CUSTOMER, THREE_ADDRESS_CUSTOMER, CONVERTING_CALLER, TWIN_SEED, OTHER_LEAD,
-	CONTACTLESS_CUSTOMER,
+	CONTACTLESS_CUSTOMER, SPOKEN_CALLER,
 ]
 ADDRESS_KEYS = {
 	"name", "address_title", "address_type", "address_line1", "address_line2", "city", "state", "pincode",
@@ -1071,3 +1072,71 @@ class TestVoiceAgent(FrappeTestCase):
 		saved = va.save_request(phone=LEAD_ONLY, key=KEY, items=items)
 		self.assertEqual((saved["deal"], saved["quotation"]), (quote["deal"], quote["quotation"]))
 		self.assertEqual(self._new_deals_since(before), [quote["deal"]])
+
+	# --- callback number spoken by the caller [BR-CRM-004] ---------------------
+
+	def test_spoken_callback_number_saves_a_lead_and_callback_task_only(self):
+		before = frappe.utils.now()
+		result = va.save_request(
+			phone="", key=KEY, callback_number="70000 01116", name="VA Unit Spoken Caller",
+			notes="Wants packs", items=[{"item_code": PACK, "qty": 1}],
+		)
+		self.assertEqual((result["status"], result["number_source"]), ("saved", "callback_number"), result)
+		self.assertEqual(frappe.db.get_value("CRM Lead", result["lead"], "mobile_no"), SPOKEN_CALLER)
+		self.assertIsNone(result["deal"])
+		self.assertIsNone(result["quotation"])
+		self.assertEqual(self._new_deals_since(before), [], "no deal for a spoken number")
+		self.assertFalse(frappe.db.exists("Quotation", {"creation": (">=", before)}))
+		task = frappe.get_doc("CRM Task", result["task"])
+		self.assertEqual((task.reference_doctype, task.reference_docname), ("CRM Lead", result["lead"]))
+		self.assertTrue(task.description.startswith("Callback request (number given by the caller, not the line): Wants packs"), task.description)
+		self.assertIn(f"Items asked for: {PACK} x 1", task.description)
+		self.assertIn("(given by the caller, not the line)", frappe.db.get_value("CRM Lead", result["lead"], "company_description"))
+
+		# Same duplicate rule as a line number: a repeat call matches the lead.
+		again = va.save_request(phone=None, key=KEY, callback_number=SPOKEN_CALLER, name="VA Unit Spoken Caller", notes="Again")
+		self.assertEqual((again["status"], again["lead"], again["task"]), ("duplicate", result["lead"], result["task"]))
+		self.assertEqual(frappe.db.count("CRM Lead", {"mobile_no": SPOKEN_CALLER}), 1)
+
+	def test_spoken_number_is_normalised(self):
+		for spoken in ("07000001116", "917000001116", "+91 70000-01116"):
+			with self.subTest(spoken=spoken):
+				self.assertEqual(va._spoken_mobile(spoken), SPOKEN_CALLER)
+
+	def test_invalid_spoken_number_is_refused(self):
+		for spoken in ("12345", "+14155552671", "04423456789", "nine eight four", "70000011160"):
+			with self.subTest(spoken=spoken):
+				result = va.save_request(phone="", key=KEY, callback_number=spoken, name="VA Unit Bad Number")
+				self.assertEqual((result["status"], result["error"]), ("error", "CALLBACK_NUMBER_INVALID"), result)
+		self.assertFalse(frappe.db.exists("CRM Lead", {"first_name": "VA Unit Bad Number"}))
+
+	def test_blocked_spoken_number_gets_no_callback(self):
+		before = frappe.utils.now()
+		result = va.save_request(phone="", key=KEY, callback_number=BLOCKED, name="VA Unit Blocked Spoken")
+		self.assertEqual((result["allowed"], result["status"], result["reason"]), (False, "blocked", "BLOCKED_LIST"))
+		self.assertFalse(frappe.db.exists("CRM Lead", {"first_name": "VA Unit Blocked Spoken"}))
+		self.assertFalse(frappe.db.exists("CRM Task", {"creation": (">=", before)}))
+
+	def test_blank_phone_and_blank_callback_number_is_phone_required(self):
+		for callback_number in (None, "", "  "):
+			with self.subTest(callback_number=callback_number):
+				result = va.save_request(phone="", key=KEY, callback_number=callback_number, name="VA Unit Nobody")
+				self.assertEqual(result["error"], "PHONE_REQUIRED")
+
+	def test_callback_number_is_ignored_when_the_line_has_a_number(self):
+		result = va.save_request(phone=NEW_CALLER, key=KEY, callback_number=SPOKEN_CALLER, name="VA Unit Line Caller")
+		self.assertEqual((result["status"], result["number_source"]), ("saved", "phone"))
+		self.assertEqual(frappe.db.get_value("CRM Lead", result["lead"], "mobile_no"), NEW_CALLER)
+		self.assertFalse(frappe.db.exists("CRM Lead", {"mobile_no": SPOKEN_CALLER}))
+		self.assertFalse(frappe.db.get_value("CRM Task", result["task"], "description").startswith("Callback request"))
+
+	def test_spoken_number_of_a_customer_opens_no_deal(self):
+		before = frappe.utils.now()
+		result = va.save_request(phone="", key=KEY, callback_number=CUSTOMER_ONLY, notes="Call me", items=[{"item_code": PACK, "qty": 1}])
+		again = va.save_request(phone="", key=KEY, callback_number=CUSTOMER_ONLY, notes="Call me")
+		self.assertEqual(self._new_deals_since(before), [])
+		self.assertIsNone(result["quotation"])
+		task = frappe.get_doc("CRM Task", result["task"])
+		self.assertFalse(task.reference_docname)
+		self.assertIn("Customer: VA Unit Individual Customer", task.description)
+		self.assertEqual(again["task"], result["task"], "one open callback task per day")

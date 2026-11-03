@@ -20,7 +20,11 @@ def guard_duplicate_mobile(doc, method=None):
 	Runs on `validate`, after `phone_normalise.normalise_lead`'s
 	`before_validate` hook, so `mobile_no` is already in canonical +91 form
 	before being checked - two spellings of the same number can't slip past
-	as "different".
+	as "different" on the *new* Lead's own side. The *existing* Lead being
+	matched against may still predate that hook and be stored in another
+	spelling (bare 91..., bare 10-digit), so the match itself checks all
+	three spellings rather than relying on both sides already being
+	canonical - see `lookup_by_phone`'s identical fix for the same gap.
 
 	The refusal message is a fixed `DUPLICATE_LEAD: ...` token, not a
 	human-facing sentence - see `DUPLICATE_LEAD_MESSAGE`.
@@ -31,13 +35,17 @@ def guard_duplicate_mobile(doc, method=None):
 
 	Raises:
 		frappe.DuplicateEntryError: If this is a new Lead and another CRM
-			Lead already has the same `mobile_no`.
+			Lead already has the same `mobile_no`, in any spelling.
 	"""
 	if not doc.is_new() or not doc.mobile_no:
 		return
 
+	spellings = [doc.mobile_no, doc.mobile_no[-12:], doc.mobile_no[-10:]]
 	existing = frappe.db.get_value(
-		"CRM Lead", {"mobile_no": doc.mobile_no}, ["name", "lead_name", "mobile_no", "status"], as_dict=True
+		"CRM Lead",
+		{"mobile_no": ("in", spellings)},
+		["name", "lead_name", "mobile_no", "status"],
+		as_dict=True,
 	)
 	if existing:
 		frappe.throw(

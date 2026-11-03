@@ -32,7 +32,9 @@
   "section_break_s3_paths",
   "s3_inbound_path_prefix",
   "column_break_s3_paths",
-  "s3_outbound_path_prefix"
+  "s3_outbound_path_prefix",
+  "section_break_caller_gate",
+  "caller_gate_automation_user"
  ],
  "fields": [
   {
@@ -214,6 +216,18 @@
    "fieldtype": "Data",
    "label": "Outbound Calls Path Prefix",
    "mandatory_depends_on": "enable_call_logging"
+  },
+  {
+   "fieldname": "section_break_caller_gate",
+   "fieldtype": "Section Break",
+   "label": "Caller Gate Settings"
+  },
+  {
+   "description": "[BR-CRM-002] The ERPNext user Sarvam's voice agent authenticates as for every call (reads/writes to zap.sravie.in, directly or via the zap-crm MCP connector). caller_gate's server-side enforcement (the CRM Lead/Contact/Customer/CRM Deal/Quotation/FCRM Note validate hook, and the matching read restrictions) is scoped to this user only - a staff member's own session is never affected, whatever is set here. Leave blank to disable caller-gate enforcement entirely.",
+   "fieldname": "caller_gate_automation_user",
+   "fieldtype": "Link",
+   "label": "Caller Gate Automation User",
+   "options": "User"
   }
  ],
  "index_web_pages_for_search": 1,

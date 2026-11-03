@@ -129,13 +129,26 @@ after_migrate = "core_customizations.setup.after_migrate"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+# @businessRule [BR-CRM-002] Scoped inside each function to whichever user
+# "Sarvam Voice Agent Settings".caller_gate_automation_user names (the
+# Sarvam voice agent's integration user) - a "" return for anyone else, or
+# when that setting is blank, leaves every other user's list/search
+# queries on these doctypes completely unrestricted.
+permission_query_conditions = {
+	"CRM Lead": "core_customizations.core_customizations.caller_gate.get_permission_query_conditions_crm_lead",
+	"Contact": "core_customizations.core_customizations.caller_gate.get_permission_query_conditions_contact",
+	"Customer": "core_customizations.core_customizations.caller_gate.get_permission_query_conditions_customer",
+	"CRM Deal": "core_customizations.core_customizations.caller_gate.get_permission_query_conditions_crm_deal",
+	"Quotation": "core_customizations.core_customizations.caller_gate.get_permission_query_conditions_quotation",
+}
+
+has_permission = {
+	"CRM Lead": "core_customizations.core_customizations.caller_gate.has_permission",
+	"Contact": "core_customizations.core_customizations.caller_gate.has_permission",
+	"Customer": "core_customizations.core_customizations.caller_gate.has_permission",
+	"CRM Deal": "core_customizations.core_customizations.caller_gate.has_permission",
+	"Quotation": "core_customizations.core_customizations.caller_gate.has_permission",
+}
 
 # DocType Class
 # ---------------
@@ -152,14 +165,40 @@ after_migrate = "core_customizations.setup.after_migrate"
 doc_events = {
     "CRM Lead": {
         "before_validate": "core_customizations.core_customizations.phone_normalise.normalise_lead",
+        "validate": [
+            "core_customizations.core_customizations.caller_gate.guard_caller_gate",
+            "core_customizations.core_customizations.lead_duplicate_guard.guard_duplicate_mobile",
+        ],
         "on_update": "core_customizations.core_customizations.contact_lead_link.on_lead_update",
 	},
     "Contact":  {
         "before_validate": "core_customizations.core_customizations.phone_normalise.normalise_contact",
+        "validate": "core_customizations.core_customizations.caller_gate.guard_caller_gate",
         "on_update": "core_customizations.core_customizations.contact_lead_link.on_lead_update",
+	},
+	"Customer": {
+		"validate": "core_customizations.core_customizations.caller_gate.guard_caller_gate",
+	},
+	"CRM Deal": {
+		"validate": "core_customizations.core_customizations.caller_gate.guard_caller_gate",
+	},
+	"FCRM Note": {
+		"validate": "core_customizations.core_customizations.caller_gate.guard_caller_gate",
 	},
 	"Quotation": {
 		"before_validate": "core_customizations.core_customizations.quotation_gst.apply_gst",
+		"validate": "core_customizations.core_customizations.caller_gate.guard_caller_gate",
+	},
+	"Blocked Contact Request": {
+		# @businessRule [BR-CRM-003] The Pending -> Approved transition is a
+		# same-docstatus (1 -> 1) save of an `allow_on_submit` field, which
+		# Frappe classifies as "update after submit" - a DIFFERENT doc event
+		# from the plain "on_update" the Draft -> Pending submit itself
+		# fires. Both route to the same handler; it only ever acts when
+		# workflow_state is actually "Approved".
+		"on_update": "core_customizations.core_customizations.caller_gate.handle_blocked_contact_request_update",
+		"on_update_after_submit": "core_customizations.core_customizations.caller_gate.handle_blocked_contact_request_update",
+		"on_cancel": "core_customizations.core_customizations.caller_gate.handle_blocked_contact_request_cancel",
 	},
 	"Material Request": {
 		"on_submit": "core_customizations.core_customizations.material_request.auto_create_po"

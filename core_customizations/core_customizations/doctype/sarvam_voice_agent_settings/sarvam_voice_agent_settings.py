@@ -13,6 +13,7 @@ class SarvamVoiceAgentSettings(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		caller_gate_automation_user: DF.Link | None
 		enable_call_logging: DF.Check
 		enabled: DF.Check
 		org_id: DF.Data | None

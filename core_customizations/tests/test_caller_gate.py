@@ -305,6 +305,7 @@ class TestLookupByPhone(FrappeTestCase):
 				"phone_nos": [{"phone": "+919812500003", "is_primary_mobile_no": 1}],
 			}
 		).insert(ignore_permissions=True)
+		self._created_customers = []
 
 	def tearDown(self):
 		frappe.set_user(STAFF_USER)
@@ -314,14 +315,18 @@ class TestLookupByPhone(FrappeTestCase):
 		frappe.delete_doc("CRM Lead", self.lead.name, ignore_permissions=True, force=True)
 		frappe.delete_doc("Contact", self.contact.name, ignore_permissions=True, force=True)
 		frappe.db.delete("Blocked Contact", {"mobile_no": "9812500001"})
+		for customer in self._created_customers:
+			frappe.delete_doc("Customer", customer, ignore_permissions=True, force=True)
 
 	def test_blank_phone_returns_none_without_querying(self):
-		self.assertEqual(lookup_by_phone(""), {"lead": None, "contact": None})
-		self.assertEqual(lookup_by_phone(None), {"lead": None, "contact": None})
+		self.assertEqual(lookup_by_phone(""), {"lead": None, "contact": None, "customer": None})
+		self.assertEqual(lookup_by_phone(None), {"lead": None, "contact": None, "customer": None})
 
 	def test_no_match_returns_none(self):
 		frappe.set_user(AUTOMATION_USER)
-		self.assertEqual(lookup_by_phone("+919999999999"), {"lead": None, "contact": None})
+		self.assertEqual(
+			lookup_by_phone("+919999999999"), {"lead": None, "contact": None, "customer": None}
+		)
 
 	def test_automation_user_finds_lead_it_does_not_own(self):
 		frappe.set_user(AUTOMATION_USER)
@@ -334,6 +339,32 @@ class TestLookupByPhone(FrappeTestCase):
 		result = lookup_by_phone("+919812500003")
 		self.assertIsNotNone(result["contact"])
 		self.assertEqual(result["contact"]["name"], self.contact.name)
+
+	def test_resolves_customer_via_contact_dynamic_link(self):
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "Lookup Test Customer Via Link", "customer_type": "Company", "customer_group": "Commercial", "default_price_list": "Distributor Pricelist 40.50"}
+		).insert(ignore_permissions=True)
+		self._created_customers.append(customer.name)
+		self.contact.append("links", {"link_doctype": "Customer", "link_name": customer.name})
+		self.contact.save(ignore_permissions=True)
+
+		frappe.set_user(AUTOMATION_USER)
+		result = lookup_by_phone("+919812500003")
+		self.assertIsNotNone(result["customer"])
+		self.assertEqual(result["customer"]["name"], customer.name)
+
+	def test_resolves_customer_via_lead_organization(self):
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "Lookup Test Customer Via Org", "customer_type": "Company", "customer_group": "Commercial", "default_price_list": "Distributor Pricelist 40.50"}
+		).insert(ignore_permissions=True)
+		self._created_customers.append(customer.name)
+		self.lead.organization = customer.customer_name
+		self.lead.save(ignore_permissions=True)
+
+		frappe.set_user(AUTOMATION_USER)
+		result = lookup_by_phone("+919812500002")
+		self.assertIsNotNone(result["customer"])
+		self.assertEqual(result["customer"]["name"], customer.name)
 
 	def test_other_sales_user_does_not_see_a_lead_it_does_not_own(self):
 		# Proves the ignore_permissions bypass is scoped to AUTOMATION_USER

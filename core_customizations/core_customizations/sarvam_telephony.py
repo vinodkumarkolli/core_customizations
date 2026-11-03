@@ -771,20 +771,23 @@ def handle_outbound_webhook(**kwargs):
 	Args:
 		**kwargs: The webhook body, forwarded as request args by Frappe.
 	"""
-	key = frappe.request.args.get("key")
-	webhook_secret = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE).get_password(
-		"webhook_secret", raise_exception=False
-	)
-	if not key or not webhook_secret or key != webhook_secret:
-		frappe.throw(_("Unauthorized request"), exc=frappe.PermissionError)
+	# Shared check: key from the body, the URL query string or the X-Webhook-Key
+	# header, compared in constant time (caller_gate imports this module, hence
+	# the local import).
+	from core_customizations.core_customizations.caller_gate import _check_webhook_key, without_webhook_key
 
-	payload = frappe.request.get_json(silent=True) or kwargs
+	_check_webhook_key(kwargs.get("key"))
+
+	# Never log the shared secret - drop it from the payload and the headers.
+	payload, logged_headers = without_webhook_key(
+		frappe.request.get_json(silent=True) or kwargs, frappe.request.headers
+	)
 
 	request_log = create_request_log(
 		payload,
 		request_description="Sarvam Outbound Call",
 		service_name="Sarvam",
-		request_headers=frappe.request.headers,
+		request_headers=logged_headers,
 		is_remote_request=1,
 	)
 
@@ -879,20 +882,23 @@ def handle_inbound_webhook(**kwargs):
 	Args:
 		**kwargs: The webhook body, forwarded as request args by Frappe.
 	"""
-	key = frappe.request.args.get("key")
-	webhook_secret = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE).get_password(
-		"webhook_secret", raise_exception=False
-	)
-	if not key or not webhook_secret or key != webhook_secret:
-		frappe.throw(_("Unauthorized request"), exc=frappe.PermissionError)
+	# Shared check: key from the body, the URL query string or the X-Webhook-Key
+	# header, compared in constant time (caller_gate imports this module, hence
+	# the local import).
+	from core_customizations.core_customizations.caller_gate import _check_webhook_key, without_webhook_key
 
-	payload = frappe.request.get_json(silent=True) or kwargs
+	_check_webhook_key(kwargs.get("key"))
+
+	# Never log the shared secret - drop it from the payload and the headers.
+	payload, logged_headers = without_webhook_key(
+		frappe.request.get_json(silent=True) or kwargs, frappe.request.headers
+	)
 
 	request_log = create_request_log(
 		payload,
 		request_description="Sarvam Inbound Call",
 		service_name="Sarvam",
-		request_headers=frappe.request.headers,
+		request_headers=logged_headers,
 		is_remote_request=1,
 	)
 

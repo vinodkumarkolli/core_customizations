@@ -45,6 +45,7 @@ from core_customizations.core_customizations import quotation_gst
 from core_customizations.core_customizations.caller_gate import (
 	_check_webhook_key,
 	_resolve_customer,
+	without_webhook_key,
 	evaluate,
 	get_automation_user,
 	last_10_digits,
@@ -431,12 +432,9 @@ def call_started(**kwargs):
 	Configure on the Sarvam deployment as:
 	`<site>/api/method/core_customizations.core_customizations.voice_agent.call_started?key=<webhook_secret>`
 	"""
-	request = getattr(frappe, "request", None)
-	key = (request.args.get("key") if request else None) or kwargs.get("key")
-	_check_webhook_key(key)
+	_check_webhook_key(kwargs.get("key"))
 
-	payload = _request_payload(kwargs)
-	payload.pop("key", None)
+	payload, _headers = without_webhook_key(_request_payload(kwargs))
 	create_request_log(
 		payload,
 		request_description="Sarvam Call Started",

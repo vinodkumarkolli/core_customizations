@@ -14,6 +14,26 @@ The "Sravi Enterprises Customer Care" agent used to run ~16 start/end-of-call to
 
 All are `POST /api/method/core_customizations.core_customizations.voice_agent.<method>`, `allow_guest` and authenticated by `key` = `Sarvam Voice Agent Settings.webhook_secret` (same as `caller_gate.check`). Responses use the standard `{"message": {...}}` envelope.
 
+**Sending the key.** The shared secret (`Sarvam Voice Agent Settings.webhook_secret`) is accepted from the first of these that carries it — for every method here, `caller_gate.check`, and both call webhooks (`handle_inbound_webhook`, `handle_outbound_webhook`):
+
+1. a `key` **form field** (`application/x-www-form-urlencoded` / multipart) or a `key` field in a **JSON body**;
+2. the **URL query string**, `?key=<secret>` — works with a JSON body too (Frappe builds a JSON request's arguments from the body alone, so the server reads the query string off the request itself);
+3. the **`X-Webhook-Key` request header**.
+
+It is compared in constant time; a wrong, empty or missing key is `403 PermissionError: Unauthorized request`. The key is never logged — it is stripped from the payload and the headers before an Integration Request is written.
+
+```bash
+# JSON body, key in the URL
+curl -X POST 'https://<site>/api/method/core_customizations.core_customizations.voice_agent.save_request?key=<secret>' \
+  -H 'Content-Type: application/json' -d '{"phone": "+919876543210", "name": "Ravi", "caller_type": "individual"}'
+# JSON body, key in the body
+curl -X POST 'https://<site>/api/method/core_customizations.core_customizations.voice_agent.save_request' \
+  -H 'Content-Type: application/json' -d '{"key": "<secret>", "phone": "+919876543210", "name": "Ravi", "caller_type": "individual"}'
+# JSON body, key in the header
+curl -X POST 'https://<site>/api/method/core_customizations.core_customizations.voice_agent.save_request' \
+  -H 'Content-Type: application/json' -H 'X-Webhook-Key: <secret>' -d '{"phone": "+919876543210", "name": "Ravi", "caller_type": "individual"}'
+```
+
 Every method first runs `caller_gate.evaluate(phone)`. A blocked or foreign caller gets only:
 
 ```json

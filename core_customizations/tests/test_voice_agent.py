@@ -24,11 +24,15 @@ from datetime import datetime
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from werkzeug.test import EnvironBuilder
+from werkzeug.wrappers import Request
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils.password import set_encrypted_password
 
 from core_customizations.core_customizations import voice_agent as va
+from core_customizations.core_customizations.caller_gate import without_webhook_key
 from core_customizations.core_customizations.sarvam_telephony import SARVAM_SETTINGS_DOCTYPE
 
 KEY = "test-voice-agent-key"
@@ -711,3 +715,86 @@ class TestVoiceAgent(FrappeTestCase):
 		).insert(ignore_permissions=True)
 		self.assertFalse(frappe.db.exists("Dynamic Link", {"parenttype": "Address", "parent": saved["address"], "link_doctype": "Customer"}))
 		self.assertTrue(self._undecided_logs(customer.name))
+
+	# --- where the shared key may be sent ------------------------------------
+
+	def _api(self, method, http_method="POST", query=None, form=None, json_body=None, headers=None):
+		"""
+		Runs `method` the way /api/method/<method> does - a real werkzeug
+		Request, Frappe's own make_form_dict (which drops the URL query string
+		for a JSON body) and execute_cmd (whitelist + HTTP-method checks), as
+		Guest - without the WSGI app's own connection and commit.
+		"""
+		from frappe.app import make_form_dict
+		from frappe.handler import execute_cmd
+
+		environ = EnvironBuilder(
+			method=http_method, path=f"/api/method/{method}", query_string=query, data=form, json=json_body, headers=headers
+		).get_environ()
+		previous = (getattr(frappe.local, "request", None), frappe.local.form_dict)
+		frappe.local.request = Request(environ)
+		try:
+			# Guest first: set_user resets form_dict, and a real request also
+			# resolves its user before the arguments are built.
+			frappe.set_user("Guest")
+			make_form_dict(frappe.local.request)
+			return execute_cmd(method)
+		finally:
+			frappe.set_user("Administrator")
+			frappe.local.request, frappe.local.form_dict = previous
+
+	KEY_METHODS = {
+		"save_request": {"phone": BLOCKED, "name": "Key Test", "caller_type": "individual"},
+		"upsert_quote": {"phone": BLOCKED, "items": json.dumps([{"item_code": PACK, "qty": 1}])},
+		"set_caller_preferences": {"phone": BLOCKED, "preferences": json.dumps({"preferred_language": "ta"})},
+	}
+
+	def _ways(self, key):
+		"""The four ways Sarvam's tools may send the key, each carrying `key`."""
+		return {
+			"form POST, key in URL": lambda m, a: self._api(m, query={"key": key}, form=a),
+			"JSON POST, key in URL only": lambda m, a: self._api(m, query={"key": key}, json_body=a),
+			"JSON POST, key in body only": lambda m, a: self._api(m, json_body={**a, "key": key}),
+			"key in X-Webhook-Key header only": lambda m, a: self._api(m, json_body=a, headers={"X-Webhook-Key": key}),
+		}
+
+	def _counts(self):
+		return {dt: frappe.db.count(dt) for dt in ("CRM Lead", "CRM Task", "CRM Deal", "Quotation")}
+
+	def test_key_is_accepted_from_form_url_json_body_and_header(self):
+		before = self._counts()
+		for method, args in self.KEY_METHODS.items():
+			for way, call in self._ways(KEY).items():
+				with self.subTest(method=method, way=way):
+					result = call(f"core_customizations.core_customizations.voice_agent.{method}", args)
+					# Past the key check: the gate answered (blocked caller, so nothing is written).
+					self.assertEqual((result["allowed"], result["reason"]), (False, "BLOCKED_LIST"))
+		self.assertEqual(self._counts(), before)
+
+	def test_wrong_or_missing_key_is_refused_everywhere(self):
+		before = self._counts()
+		for method, args in self.KEY_METHODS.items():
+			cmd = f"core_customizations.core_customizations.voice_agent.{method}"
+			for bad in ("wrong-key", ""):
+				for way, call in self._ways(bad).items():
+					with self.subTest(method=method, way=way, key=bad or "<empty>"), self.assertRaises(frappe.PermissionError):
+						call(cmd, args)
+			with self.subTest(method=method, way="no key at all"), self.assertRaises(frappe.PermissionError):
+				self._api(cmd, json_body=args)
+		self.assertEqual(self._counts(), before)
+
+	def test_get_caller_context_with_key_in_url_still_works(self):
+		result = self._api(
+			"core_customizations.core_customizations.voice_agent.caller_context", http_method="GET", query={"key": KEY, "phone": LEAD_ONLY}
+		)
+		self.assertEqual(result["lead"]["name"], self.lead_only)
+
+	def test_caller_gate_check_accepts_a_json_post_with_key_in_url(self):
+		result = self._api("core_customizations.core_customizations.caller_gate.check", query={"key": KEY}, json_body={"phone": BLOCKED})
+		self.assertEqual(result["reason"], "BLOCKED_LIST")
+
+	def test_the_key_is_never_kept_for_logging(self):
+		payload, headers = without_webhook_key({"key": KEY, "phone": BLOCKED}, {"X-Webhook-Key": KEY, "Content-Type": "application/json"})
+		self.assertEqual(payload, {"phone": BLOCKED})
+		self.assertEqual(headers, {"Content-Type": "application/json"})
+		self.assertNotIn(KEY, json.dumps([payload, headers]))

@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "creation": "2026-11-03 00:00:00.000000",
+ "description": "[BR-CRM-006] An item sold only to one Customer Group, always shipped with the given Shipping Rule.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "customer_group",
+  "shipping_rule"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "options": "Item",
+   "in_list_view": 1,
+   "label": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "customer_group",
+   "fieldtype": "Link",
+   "options": "Customer Group",
+   "in_list_view": 1,
+   "label": "Only For Customer Group",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shipping_rule",
+   "fieldtype": "Link",
+   "options": "Shipping Rule",
+   "in_list_view": 1,
+   "label": "Shipping Rule",
+   "reqd": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Core Customizations",
+ "name": "Sarvam Pack Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

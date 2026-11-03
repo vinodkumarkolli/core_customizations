@@ -771,20 +771,23 @@ def handle_outbound_webhook(**kwargs):
 	Args:
 		**kwargs: The webhook body, forwarded as request args by Frappe.
 	"""
-	key = frappe.request.args.get("key")
-	webhook_secret = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE).get_password(
-		"webhook_secret", raise_exception=False
-	)
-	if not key or not webhook_secret or key != webhook_secret:
-		frappe.throw(_("Unauthorized request"), exc=frappe.PermissionError)
+	# Shared check: key from the body, the URL query string or the X-Webhook-Key
+	# header, compared in constant time (caller_gate imports this module, hence
+	# the local import).
+	from core_customizations.core_customizations.caller_gate import _check_webhook_key, without_webhook_key
 
-	payload = frappe.request.get_json(silent=True) or kwargs
+	_check_webhook_key(kwargs.get("key"))
+
+	# Never log the shared secret - drop it from the payload and the headers.
+	payload, logged_headers = without_webhook_key(
+		frappe.request.get_json(silent=True) or kwargs, frappe.request.headers
+	)
 
 	request_log = create_request_log(
 		payload,
 		request_description="Sarvam Outbound Call",
 		service_name="Sarvam",
-		request_headers=frappe.request.headers,
+		request_headers=logged_headers,
 		is_remote_request=1,
 	)
 
@@ -879,20 +882,23 @@ def handle_inbound_webhook(**kwargs):
 	Args:
 		**kwargs: The webhook body, forwarded as request args by Frappe.
 	"""
-	key = frappe.request.args.get("key")
-	webhook_secret = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE).get_password(
-		"webhook_secret", raise_exception=False
-	)
-	if not key or not webhook_secret or key != webhook_secret:
-		frappe.throw(_("Unauthorized request"), exc=frappe.PermissionError)
+	# Shared check: key from the body, the URL query string or the X-Webhook-Key
+	# header, compared in constant time (caller_gate imports this module, hence
+	# the local import).
+	from core_customizations.core_customizations.caller_gate import _check_webhook_key, without_webhook_key
 
-	payload = frappe.request.get_json(silent=True) or kwargs
+	_check_webhook_key(kwargs.get("key"))
+
+	# Never log the shared secret - drop it from the payload and the headers.
+	payload, logged_headers = without_webhook_key(
+		frappe.request.get_json(silent=True) or kwargs, frappe.request.headers
+	)
 
 	request_log = create_request_log(
 		payload,
 		request_description="Sarvam Inbound Call",
 		service_name="Sarvam",
-		request_headers=frappe.request.headers,
+		request_headers=logged_headers,
 		is_remote_request=1,
 	)
 
@@ -931,12 +937,20 @@ def handle_inbound_webhook(**kwargs):
 			call_log.recording_url = payload.get("recording_url")
 		call_log.save(ignore_permissions=True)
 
+		# @businessRule [BR-TEL-007] The agent's output variables (summary,
+		# conversation ref, preferences) are written here, from the
+		# webhook, instead of by the agent's own end-of-call tool calls.
+		from core_customizations.core_customizations.voice_agent import apply_call_outcome
+
+		apply_call_outcome(call_log, payload)
+
+		# @businessRule [BR-TEL-007] The transcript is kept as an FCRM Note
+		# referencing this Call Log (one per call - a redelivery updates it),
+		# not a comment.
+		from core_customizations.core_customizations.voice_agent import save_transcript_note
+
 		transcript = payload.get("interaction_transcript")
-		if transcript:
-			transcript_text = "\n".join(
-				f"{turn.get('role', '?')}: {turn.get('en_text', '')}" for turn in transcript
-			)
-			call_log.add_comment("Comment", _("Sarvam transcript:\n{0}").format(transcript_text))
+		save_transcript_note(call_log, transcript)
 
 		# @businessRule [BR-TEL-004] Same S3 archive helper used by the
 		# outbound webhook - no-op unless Call Logging Settings is enabled.

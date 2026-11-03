@@ -56,7 +56,9 @@ def link_for_number(number):
 def _queue(numbers):
     for n in numbers:
         frappe.enqueue(
-            "core_customizations.contact_lead_link.link_for_number",
+            # Full dotted path - the module lives in the app's inner
+            # `core_customizations` package; the short path never imported.
+            "core_customizations.core_customizations.contact_lead_link.link_for_number",
             queue="short", number=n, enqueue_after_commit=True,
             job_id=f"contact_lead_link:{n}", deduplicate=True)
 

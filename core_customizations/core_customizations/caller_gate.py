@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Vinod Kumar K and contributors
 # For license information, please see license.txt
 
+import hmac
 import re
 
 import frappe
@@ -152,13 +153,60 @@ def evaluate(phone):
 	return {"allowed": True, "reason": None, "message": ""}
 
 
-def _check_webhook_key(key):
-	"""Same `key` query-param convention `sarvam_telephony`'s webhooks use."""
+WEBHOOK_KEY_PARAM = "key"
+WEBHOOK_KEY_HEADER = "X-Webhook-Key"
+
+
+def _supplied_webhook_key(key=None):
+	"""
+	The shared secret a caller sent, from the first place it appears:
+
+	1. the `key` argument - a form field, or a field of a JSON body;
+	2. the URL query string (`?key=`) - which Frappe drops from the method's
+	   arguments when the body is JSON (`frappe.app.make_form_dict` then
+	   builds them from the JSON alone), so it is read off the request here;
+	3. the `X-Webhook-Key` request header.
+	"""
+	if key:
+		return str(key)
+	request = getattr(frappe.local, "request", None)
+	if request is None:
+		return None
+	return request.args.get(WEBHOOK_KEY_PARAM) or request.headers.get(WEBHOOK_KEY_HEADER) or None
+
+
+def _check_webhook_key(key=None):
+	"""
+	Authenticates a Sarvam call against Sarvam Voice Agent Settings'
+	`webhook_secret`, wherever the caller put the key (see
+	`_supplied_webhook_key`). Compared in constant time. A missing or empty
+	key, or no secret configured, is always refused.
+
+	Raises:
+		frappe.PermissionError: "Unauthorized request".
+	"""
+	supplied = _supplied_webhook_key(key)
 	webhook_secret = frappe.get_cached_doc(SARVAM_SETTINGS_DOCTYPE).get_password(
 		"webhook_secret", raise_exception=False
 	)
-	if not key or not webhook_secret or key != webhook_secret:
+	if not supplied or not webhook_secret or not hmac.compare_digest(supplied.encode(), webhook_secret.encode()):
 		frappe.throw(_("Unauthorized request"), exc=frappe.PermissionError)
+
+
+def without_webhook_key(payload=None, headers=None):
+	"""
+	Copies of a request payload / its headers with the shared secret removed,
+	for anything that gets logged (Integration Request): the `key` field a
+	form-encoded or JSON body may carry, and the `X-Webhook-Key` header.
+
+	Returns:
+		tuple: (payload dict | original non-dict value, headers dict | None).
+	"""
+	if isinstance(payload, dict):
+		payload = {k: v for k, v in payload.items() if k != WEBHOOK_KEY_PARAM}
+	if headers is not None:
+		headers = {k: v for k, v in dict(headers).items() if k.lower() != WEBHOOK_KEY_HEADER.lower()}
+	return payload, headers
 
 
 @frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method

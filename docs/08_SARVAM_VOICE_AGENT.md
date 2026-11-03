@@ -14,6 +14,16 @@ The "Sravi Enterprises Customer Care" agent used to run ~16 start/end-of-call to
 
 All are `POST /api/method/core_customizations.core_customizations.voice_agent.<method>`, `allow_guest` and authenticated by `key` = `Sarvam Voice Agent Settings.webhook_secret` (same as `caller_gate.check`). Responses use the standard `{"message": {...}}` envelope.
 
+**`caller_gate.check` returns the number.** Besides `allowed` / `reason` / `message`, `check` returns **`phone`**, for the agent's `caller_phone` mapping:
+
+| `phone` sent | `phone` returned |
+|---|---|
+| A real Indian mobile in any spelling — `+91…`, `91…`, `0…`, ten bare digits, with spaces or dashes | `+91` and ten digits, e.g. `+919840456658` |
+| A 64-character hex hash — the plain SHA-256 of the E.164 number (`sha256("+919840456658")`), either case | The CRM Lead / Contact (incl. its phone rows) / Customer number whose `+91…` form hashes to it; the gate then judges **that number** (a hash used to be refused as `FOREIGN_NUMBER`). Enabled Blocked Contacts are hashed too, so a hashed blocked caller is still `BLOCKED_LIST`. |
+| Blank, an unmatched hash, a foreign or junk number, or any caller with `allowed: false` | `""` — the agent asks for the number |
+
+The hash lookup hashes every number on record per call (about 3,900 on dev, ~60 ms); nothing is cached, so a Lead created a minute ago is found.
+
 **Sending the key.** The shared secret (`Sarvam Voice Agent Settings.webhook_secret`) is accepted from the first of these that carries it — for every method here, `caller_gate.check`, and both call webhooks (`handle_inbound_webhook`, `handle_outbound_webhook`):
 
 1. a `key` **form field** (`application/x-www-form-urlencoded` / multipart) or a `key` field in a **JSON body**;

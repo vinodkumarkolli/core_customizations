@@ -429,7 +429,8 @@
     "rounding_adjustment": 0.02,
     "grand_total": 404.98,
     "rounded_total": 405.0,
-    "total_to_say": 405.0
+    "total_to_say": 405.0,
+    "price_list_source": "customer"
    }
   },
   "mahaveer_chennai_billing_address_same_state": {
@@ -469,7 +470,8 @@
     "rounding_adjustment": 0.02,
     "grand_total": 404.98,
     "rounded_total": 405.0,
-    "total_to_say": 405.0
+    "total_to_say": 405.0,
+    "price_list_source": "customer"
    }
   },
   "blocked": {
@@ -519,7 +521,8 @@
     "rounding_adjustment": -0.06,
     "grand_total": 560.06,
     "rounded_total": 560.0,
-    "total_to_say": 560.0
+    "total_to_say": 560.0,
+    "price_list_source": "settings"
    }
   },
   "repeat_updates_same_draft": {
@@ -554,7 +557,8 @@
     "rounding_adjustment": -0.12,
     "grand_total": 1080.12,
     "rounded_total": 1080.0,
-    "total_to_say": 1080.0
+    "total_to_say": 1080.0,
+    "price_list_source": "settings"
    }
   },
   "customer_only_in_state": {
@@ -594,7 +598,8 @@
     "rounding_adjustment": -0.07,
     "grand_total": 560.07,
     "rounded_total": 560.0,
-    "total_to_say": 560.0
+    "total_to_say": 560.0,
+    "price_list_source": "customer"
    }
   },
   "pack_for_commercial_customer": {
@@ -646,7 +651,8 @@
     "rounding_adjustment": -0.07,
     "grand_total": 560.07,
     "rounded_total": 560.0,
-    "total_to_say": 560.0
+    "total_to_say": 560.0,
+    "price_list_source": "customer"
    }
   },
   "hyderabad_shipping_address_on_billing_basis_site": {
@@ -686,7 +692,8 @@
     "rounding_adjustment": -0.07,
     "grand_total": 560.07,
     "rounded_total": 560.0,
-    "total_to_say": 560.0
+    "total_to_say": 560.0,
+    "price_list_source": "customer"
    }
   },
   "address_of_another_customer": {
@@ -696,6 +703,161 @@
     "error": "ADDRESS_NOT_ON_RECORD",
     "message": "That saved address isn't on this caller's record - ask for the delivery address again.",
     "address_name": "VA Unit Three Address Customer Hyderabad-Shipping"
+   }
+  },
+  "price_list_from_customer": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00339",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00045",
+    "price_list": "VA Test Individual Pricelist",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 1.0,
+      "rate": 465.0,
+      "amount": 465.0
+     }
+    ],
+    "net_total": 465.0,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 11.62
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 11.62
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 23.24,
+    "shipping": 60.0,
+    "rounding_adjustment": -0.24,
+    "grand_total": 548.24,
+    "rounded_total": 548.0,
+    "total_to_say": 548.0,
+    "price_list_source": "customer"
+   }
+  },
+  "price_list_from_customer_group": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00340",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00046",
+    "price_list": "VA Test Group Pricelist",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-12.6 ML",
+      "item_name": "Sastry Balm-12.6 ML",
+      "qty": 1.0,
+      "rate": 45.0,
+      "amount": 45.0
+     }
+    ],
+    "net_total": 45.0,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 1.12
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 1.12
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 2.24,
+    "shipping": 0.0,
+    "rounding_adjustment": -0.24,
+    "grand_total": 47.24,
+    "rounded_total": 47.0,
+    "total_to_say": 47.0,
+    "price_list_source": "customer_group"
+   }
+  },
+  "pack_for_non_individual_group": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "PACK_NOT_AVAILABLE",
+    "message": "These packs are only sold to another customer group.",
+    "items": [
+     "SASB-50INR-PACK-10"
+    ],
+    "customer_group": "VA Test Individual Group"
+   }
+  },
+  "price_list_from_settings": {
+   "message": {
+    "allowed": true,
+    "status": "quoted",
+    "quotation": "SAL-QTN-2026-00341",
+    "created": true,
+    "deal": "CRM-DEAL-2026-00047",
+    "price_list": "Standard Selling",
+    "place_of_supply": "33-Tamil Nadu",
+    "items": [
+     {
+      "item_code": "SASB-50INR-PACK-10",
+      "item_name": "Sastry Balm 50 INR Pack of 10",
+      "qty": 1.0,
+      "rate": 476.25,
+      "amount": 476.25
+     }
+    ],
+    "net_total": 476.25,
+    "taxes": [
+     {
+      "type": "SGST",
+      "rate": 2.5,
+      "amount": 11.91
+     },
+     {
+      "type": "CGST",
+      "rate": 2.5,
+      "amount": 11.91
+     }
+    ],
+    "gst_percent": 5.0,
+    "gst_amount": 23.82,
+    "shipping": 60.0,
+    "rounding_adjustment": -0.07,
+    "grand_total": 560.07,
+    "rounded_total": 560.0,
+    "total_to_say": 560.0,
+    "price_list_source": "settings"
+   }
+  },
+  "price_list_unusable_disabled": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "PRICE_LIST_UNUSABLE",
+    "message": "The caller's price list can't be used right now - the team will call back with prices.",
+    "price_list": "VA Test Individual Pricelist",
+    "price_list_source": "customer",
+    "reason": "is disabled"
+   }
+  },
+  "no_price_list_anywhere": {
+   "message": {
+    "allowed": true,
+    "status": "error",
+    "error": "NO_PRICE_LIST",
+    "message": "No price list is set for this customer - the team will call back with prices.",
+    "customer": "VA Unit Commercial Customer"
    }
   },
   "no_pincode_on_record": {
@@ -879,7 +1041,8 @@
      "rounding_adjustment": -0.07,
      "grand_total": 560.07,
      "rounded_total": 560.0,
-     "total_to_say": 560.0
+     "total_to_say": 560.0,
+     "price_list_source": "customer"
     },
     "warnings": [],
     "message": "",
@@ -945,7 +1108,8 @@
      "rounding_adjustment": -0.07,
      "grand_total": 560.07,
      "rounded_total": 560.0,
-     "total_to_say": 560.0
+     "total_to_say": 560.0,
+     "price_list_source": "customer"
     },
     "warnings": [],
     "message": "",
@@ -1005,7 +1169,8 @@
      "rounding_adjustment": -0.07,
      "grand_total": 560.07,
      "rounded_total": 560.0,
-     "total_to_say": 560.0
+     "total_to_say": 560.0,
+     "price_list_source": "settings"
     },
     "warnings": [],
     "message": "Saved.",
@@ -1051,7 +1216,8 @@
      "rounding_adjustment": -0.06,
      "grand_total": 560.06,
      "rounded_total": 560.0,
-     "total_to_say": 560.0
+     "total_to_say": 560.0,
+     "price_list_source": "settings"
     },
     "warnings": [
      "ADDRESS_NOT_SAVED: missing city"

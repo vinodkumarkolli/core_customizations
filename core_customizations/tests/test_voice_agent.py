@@ -40,6 +40,8 @@ KEY = "test-voice-agent-key"
 AUTOMATION_USER = "test-voice-agent-automation@example.com"
 COMPANY = "Sravi Enterprises - Kolapakkam"
 PACK = "SASB-50INR-PACK-10"
+LOOSE = "SASB-12.6 ML"  # not a pack - sold to any customer group
+STANDARD_PACK_RATE = 476.25  # Standard Selling, the settings default for "individual"
 
 # Test-only numbers (none exist on the site - asserted in setUpClass).
 BLOCKED = "+917000001101"
@@ -129,6 +131,15 @@ class TestVoiceAgent(FrappeTestCase):
 		cls.three_shipping = cls._address(cls.three, "Godown Rd", "Hyderabad", "Telangana", "500062", shipping=1)
 		cls.three_newest = cls._address(cls.three, "Branch Rd", "Coimbatore", "Tamil Nadu", "641001", address_type="Billing")
 
+		# Price lists for the price-list resolution tests - each pack-10 rate is
+		# different, so a quote taken from the wrong list fails on the rate.
+		cls._price_list("VA Unit Customer List", {PACK: 470, LOOSE: 40})
+		cls._price_list("VA Unit Group List", {PACK: 460, LOOSE: 39})
+		cls._price_list("VA Unit No Pack List", {LOOSE: 38})
+		cls._price_list("VA Unit Disabled List", {PACK: 450}, enabled=0)
+		cls._price_list("VA Unit Buying List", {PACK: 440}, selling=0)
+		cls._price_list("VA Unit USD List", {PACK: 6}, currency="USD")
+
 	@classmethod
 	def tearDownClass(cls):
 		frappe.db.rollback()
@@ -173,6 +184,18 @@ class TestVoiceAgent(FrappeTestCase):
 			settings.append("pack_items", {"item_code": item_code, "customer_group": group, "shipping_rule": rule})
 		settings.flags.ignore_mandatory = True
 		settings.save(ignore_permissions=True)
+
+	@classmethod
+	def _price_list(cls, name, rates, enabled=1, selling=1, currency="INR"):
+		frappe.get_doc(
+			{"doctype": "Price List", "price_list_name": name, "enabled": 1, "selling": selling, "buying": int(not selling), "currency": currency}
+		).insert(ignore_permissions=True)
+		for item_code, rate in rates.items():
+			frappe.get_doc({"doctype": "Item Price", "item_code": item_code, "price_list": name, "price_list_rate": rate}).insert(ignore_permissions=True)
+		if not enabled:
+			# ERPNext refuses Item Prices on a disabled list - disable it afterwards,
+			# as happens when a list with prices is retired.
+			frappe.db.set_value("Price List", name, "enabled", 0)
 
 	@classmethod
 	def _address(cls, customer, line, city, state, pincode, address_type="Shipping", shipping=0, disabled=0):
@@ -893,3 +916,88 @@ class TestVoiceAgent(FrappeTestCase):
 		self.assertFalse(frappe.db.exists("Comment", {"reference_doctype": "CRM Call Log", "reference_name": log.name, "comment_type": "Comment"}))
 		self.assertIsNone(va.save_transcript_note(log, None))
 
+	# --- price list resolution [BR-CRM-006] -----------------------------------
+
+	def _set_lists(self, customer, customer_list=None, group_list=None, settings_list="Standard Selling", category="individual"):
+		"""Customer's own list, its group's list and the settings fallback for `category` (None = blank)."""
+		frappe.db.set_value("Customer", customer, "default_price_list", customer_list)
+		group = frappe.db.get_value("Customer", customer, "customer_group")
+		frappe.db.set_value("Customer Group", group, "default_price_list", group_list)
+		for row in frappe.get_single(SARVAM_SETTINGS_DOCTYPE).caller_categories:
+			if row.category == category:
+				frappe.db.set_value("Sarvam Caller Category", row.name, "price_list", settings_list if row.is_default or row.customer_group == group else row.price_list)
+		frappe.clear_document_cache(SARVAM_SETTINGS_DOCTYPE, SARVAM_SETTINGS_DOCTYPE)
+
+	def _quote_both_ways(self, phone, items):
+		"""Case 8: the same request through upsert_quote and through save_request's quote."""
+		quote = va.upsert_quote(phone=phone, key=KEY, items=items)
+		saved = va.save_request(phone=phone, key=KEY, items=items)["quote"]
+		return {"upsert_quote": quote, "save_request": saved}
+
+	def _assert_list(self, result, price_list, rate, source):
+		self.assertEqual(result["status"], "quoted", result)
+		self.assertEqual((result["price_list"], result["price_list_source"]), (price_list, source))
+		self.assertEqual(result["items"][0]["rate"], rate)
+		self.assertEqual(frappe.db.get_value("Quotation", result["quotation"], "selling_price_list"), price_list)
+
+	def test_customer_list_wins_over_group_and_settings(self):
+		self._set_lists(self.customer_only, "VA Unit Customer List", "VA Unit Group List", "Standard Selling")
+		for way, result in self._quote_both_ways(CUSTOMER_ONLY, [{"item_code": PACK, "qty": 1}]).items():
+			with self.subTest(way=way):
+				self._assert_list(result, "VA Unit Customer List", 470, "customer")
+
+	def test_falls_back_to_the_customer_group_list(self):
+		self._set_lists(self.customer_only, None, "VA Unit Group List", "Standard Selling")
+		for way, result in self._quote_both_ways(CUSTOMER_ONLY, [{"item_code": PACK, "qty": 1}]).items():
+			with self.subTest(way=way):
+				self._assert_list(result, "VA Unit Group List", 460, "customer_group")
+
+	def test_falls_back_to_the_settings_list(self):
+		self._set_lists(self.customer_only, None, None, "Standard Selling")
+		for way, result in self._quote_both_ways(CUSTOMER_ONLY, [{"item_code": PACK, "qty": 1}]).items():
+			with self.subTest(customer=True, way=way):
+				self._assert_list(result, "Standard Selling", STANDARD_PACK_RATE, "settings")
+		for way, result in self._quote_both_ways(LEAD_ONLY, [{"item_code": PACK, "qty": 1}]).items():
+			with self.subTest(lead=True, way=way):
+				self._assert_list(result, "Standard Selling", STANDARD_PACK_RATE, "settings")
+
+	def test_no_list_anywhere_is_an_error_with_no_price(self):
+		self._set_lists(self.commercial, None, None, None, category="wholesale")
+		before = frappe.db.count("Quotation", {"party_name": self.commercial})
+		result = va.upsert_quote(phone=COMMERCIAL_CUSTOMER, key=KEY, items=[{"item_code": LOOSE, "qty": 1}])
+		self.assertEqual((result["status"], result["error"]), ("error", "NO_PRICE_LIST"))
+		self.assertNotIn("items", result)
+		saved = va.save_request(phone=COMMERCIAL_CUSTOMER, key=KEY, items=[{"item_code": LOOSE, "qty": 1}])
+		self.assertIsNone(saved["quotation"])
+		self.assertEqual(saved["quote"]["error"], "NO_PRICE_LIST")
+		self.assertEqual(frappe.db.count("Quotation", {"party_name": self.commercial}), before, "nothing saved with a guessed rate")
+
+	def test_changing_the_settings_list_does_not_change_a_customer_with_its_own_list(self):
+		self._set_lists(self.customer_only, "VA Unit Customer List", None, "Standard Selling")
+		before = va.upsert_quote(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}])
+		self._set_lists(self.customer_only, "VA Unit Customer List", None, "VA Unit Group List")
+		after = va.upsert_quote(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}])
+		for result in (before, after):
+			self._assert_list(result, "VA Unit Customer List", 470, "customer")
+
+	def test_missing_pack_price_is_price_not_found_without_fallback(self):
+		self._set_lists(self.customer_only, "VA Unit No Pack List", "VA Unit Group List", "Standard Selling")
+		result = va.upsert_quote(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}])
+		self.assertEqual((result["error"], result["price_list"], result["items"]), ("PRICE_NOT_FOUND", "VA Unit No Pack List", [PACK]))
+		self.assertFalse(frappe.db.exists("Quotation", {"party_name": self.customer_only, "docstatus": 0}))
+
+	def test_unusable_list_is_an_error_not_a_switch(self):
+		for price_list, reason in (("VA Unit Disabled List", "is disabled"), ("VA Unit Buying List", "is not a selling price list"), ("VA Unit USD List", "is in USD, the quotation is in INR")):
+			with self.subTest(price_list=price_list):
+				self._set_lists(self.customer_only, price_list, "VA Unit Group List", "Standard Selling")
+				result = va.upsert_quote(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}])
+				self.assertEqual((result["error"], result["price_list"], result["reason"]), ("PRICE_LIST_UNUSABLE", price_list, reason))
+		self.assertFalse(frappe.db.exists("Quotation", {"party_name": self.customer_only, "docstatus": 0}))
+
+	def test_wholesale_customer_with_its_own_list(self):
+		self._set_lists(self.commercial, "VA Unit Customer List", None, None, category="wholesale")
+		no_items = va.save_request(phone=COMMERCIAL_CUSTOMER, key=KEY, notes="Call me about an order")
+		self.assertIsNone(no_items["quotation"])
+		self.assertFalse(frappe.db.exists("Quotation", {"party_name": self.commercial}), "no items -> no quote")
+		with_items = va.save_request(phone=COMMERCIAL_CUSTOMER, key=KEY, items=[{"item_code": LOOSE, "qty": 2}])
+		self._assert_list(with_items["quote"], "VA Unit Customer List", 40, "customer")

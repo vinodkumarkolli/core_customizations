@@ -93,6 +93,8 @@ The call-ended payload's transcript (`interaction_transcript`, a list of `{role,
 
 **`upsert_quote`** → `status: "quoted"` with `net_total`, `taxes: [{type: CGST|SGST|IGST, rate, amount}]`, **`gst_percent`**, **`gst_amount`**, `shipping`, `rounding_adjustment`, `grand_total`, `rounded_total`, **`total_to_say`**, or `status: "error"` with `error`.
 
+**Which price list.** The first of these with a list is used — never a guess: (1) the Customer's own `default_price_list`, (2) its Customer Group's `default_price_list`, (3) the Caller Categories fallback in Sarvam Voice Agent Settings for the caller's category (a new caller / lead; or a Customer whose group maps to a category — the row for that group if it has a list, else the category's default row; Individual → Standard Selling). Nothing found → `NO_PRICE_LIST` for a Customer (`QUOTE_NOT_AVAILABLE` for a lead's category). The quote returns `price_list` and `price_list_source` (`customer` / `customer_group` / `settings`) for logging — the agent doesn't speak them. A chosen list that is disabled, not a selling list, or in another currency than the quotation is refused (`PRICE_LIST_UNUSABLE`, with `reason`) — never swapped for another list; an item with no Item Price in it is `PRICE_NOT_FOUND`, again with no fallback. Changing the settings lists never changes the quote of a Customer who has a list of its own.
+
 **What the agent reads aloud:** only "GST", `gst_percent`, `gst_amount` and `total_to_say` — e.g. *"GST at 5 percent is ₹23.81; the total is ₹560."* Never IGST/CGST/SGST, and never a sum it works out itself. `gst_percent` is the GST rows' rates summed (2.5 + 2.5, or 5); `gst_amount` is their amounts summed, each already rounded by the Quotation (so an in-state quote can be a paisa above the same out-of-state one — 11.91 + 11.91 = 23.82 vs 23.81 — while `total_to_say` rounds to the same rupee). `taxes` stays for staff and documents. The same fields are in `save_request`'s `quote`.
 
 Errors:
@@ -104,6 +106,8 @@ Errors:
 | `PACK_NOT_AVAILABLE` | Packs of 4/10/20 are for Individual customers only |
 | `PINCODE_REQUIRED` | Ask for the delivery pincode, call again with `ship_to_pincode` |
 | `ADDRESS_NOT_ON_RECORD` | The `address_name` isn't this caller's — ask for the address again (`message` says so) |
+| `NO_PRICE_LIST` | No list on the Customer, its group or the settings fallback — team calls back |
+| `PRICE_LIST_UNUSABLE` | The caller's list is disabled / not for selling / in another currency (`reason`) — team calls back |
 | `PRICE_NOT_FOUND` / `ITEM_NOT_AVAILABLE` / `MIXED_SHIPPING` / `INVALID_ITEMS` | Can't quote these items — team calls back |
 
 **`save_request`** → `status`:
@@ -151,6 +155,14 @@ Kept on the dev site for automated Sarvam test calls — do not delete; never cr
 | Address (Billing, primary) | `VA Test Individual Customer Chennai-Billing` | 1 Test Street, Chennai, Tamil Nadu 600128 |
 | Address (Shipping) | `VA Test Individual Customer Hyderabad-Shipping` | 12 Test Godown Road, Hyderabad, Telangana 500062 |
 | Blocked Contact | `7000000199` | **+917000000199**, enabled — returns `BLOCKED_LIST` from the real list |
+| Price List | `VA Test Individual Pricelist` | Selling, INR — PACK-4 185, PACK-10 465, PACK-20 890, SASB-12.6 ML 44 |
+| Price List | `VA Test Group Pricelist` | Selling, INR — PACK-4 188, PACK-10 470, PACK-20 895, SASB-12.6 ML 45 |
+| Customer Group | `VA Test Individual Group` | Parent All Customer Groups, default list `VA Test Group Pricelist` |
+| Customer (own list) | `VA Test Custom List Customer` | Group Individual, list `VA Test Individual Pricelist`; Contact **+917000000105**; Billing Chennai 600128, Shipping Hyderabad 500062 → quotes `customer` |
+| Customer (group list) | `VA Test Group List Customer` | Group `VA Test Individual Group`, **no list** on the Customer; Contact **+917000000106**; same two addresses → quotes `customer_group` for SASB-12.6 ML; **packs are refused** (`PACK_NOT_AVAILABLE` — packs are Individual-group only) |
+| Customer (no list) | `VA Test No List Customer` | Group Individual, **no list** on Customer or group; Contact **+917000000107**; same two addresses → quotes `settings` (Standard Selling) |
+
+`Customer.default_price_list` is mandatory on this site, so the two "no list" customers had it blanked directly in the database (as a legacy record would be); saving them in Desk will ask for a list again. Contact names follow `<customer>-<customer>`, addresses `<customer> Chennai-Billing` / `<customer> Hyderabad-Shipping`.
 
 ## Data notes
 

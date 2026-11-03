@@ -555,41 +555,114 @@ def _get_or_create_deal(ctx):
 	return doc.name, True
 
 
+def _settings_price_list(category, customer_group=None):
+	"""
+	[BR-CRM-006] The Caller Categories fallback list for `category`: the row
+	for the caller's own Customer Group if it has a list, else the category's
+	default row. Returns None when neither carries a list.
+	"""
+	rows = _category_rows(category)
+	own = next((r for r in rows if customer_group and r.customer_group == customer_group and r.price_list), None)
+	default = next((r for r in rows if r.is_default and r.price_list), None)
+	row = own or default
+	return row.price_list if row else None
+
+
+def _customer_price_list(customer):
+	"""
+	[BR-CRM-006] A Customer's price list, from the first source that has one:
+	the Customer's own `default_price_list`, its Customer Group's, then the
+	Caller Categories fallback for the category its group maps to. Never a
+	guess (no Selling Settings default) - (None, None) when none has a list.
+
+	Returns:
+		tuple: (price list name | None, source "customer" | "customer_group" | "settings" | None).
+	"""
+	if customer.default_price_list:
+		return customer.default_price_list, "customer"
+	group_list = frappe.db.get_value("Customer Group", customer.customer_group, "default_price_list") if customer.customer_group else None
+	if group_list:
+		return group_list, "customer_group"
+	settings_list = _settings_price_list(customer.category, customer.customer_group) if customer.category else None
+	if settings_list:
+		return settings_list, "settings"
+	return None, None
+
+
+def _price_list_problem(price_list, currency):
+	"""
+	[BR-CRM-006] Why `price_list` can't be quoted from - disabled, not a
+	selling list, or in another currency than the Quotation - or None. An
+	unusable list is an error, never a silent switch to another list.
+	"""
+	pl = frappe.db.get_value("Price List", price_list, ["enabled", "selling", "currency"], as_dict=True)
+	if not pl:
+		return "does not exist"
+	if not pl.enabled:
+		return "is disabled"
+	if not pl.selling:
+		return "is not a selling price list"
+	if currency and pl.currency != currency:
+		return f"is in {pl.currency}, the quotation is in {currency}"
+	return None
+
+
 def _quote_party(ctx):
 	"""
 	[BR-CRM-006] Who a voice-agent Quotation is addressed to, and at what
 	price list. An existing Customer is quoted as the Customer at their own
-	price list. A caller with only a CRM Lead is quoted through a CRM Deal
-	(ERPNext Quotations accept `CRM Deal`, never `CRM Lead`) at the price list
-	their caller category maps to - a category with no price list is never
-	quoted by the agent.
+	price list (`_customer_price_list`: Customer, then Customer Group, then
+	the Caller Categories fallback). A caller with only a CRM Lead is quoted
+	through a CRM Deal (ERPNext Quotations accept `CRM Deal`, never
+	`CRM Lead`) at the price list their caller category maps to - a category
+	with no price list is never quoted by the agent. The list chosen must be
+	usable (`_price_list_problem`) or the quote is refused.
 	"""
+	company_currency = frappe.db.get_value("Company", _quote_company(), "default_currency")
+
 	if ctx.customer:
-		price_list = (
-			ctx.customer.default_price_list
-			or frappe.db.get_value("Customer Group", ctx.customer.customer_group, "default_price_list")
-			or frappe.db.get_single_value("Selling Settings", "selling_price_list")
-		)
-		return frappe._dict(
+		price_list, source = _customer_price_list(ctx.customer)
+		if not price_list:
+			return None, _error(
+				"NO_PRICE_LIST",
+				"No price list is set for this customer - the team will call back with prices.",
+				customer=ctx.customer.name,
+			)
+		currency = frappe.db.get_value("Customer", ctx.customer.name, "default_currency") or company_currency
+		party = frappe._dict(
 			quotation_to="Customer",
 			party_name=ctx.customer.name,
 			customer_group=ctx.customer.customer_group,
 			price_list=price_list,
-		), None
-
-	if ctx.lead:
-		row = _category_default(ctx.lead.get("caller_category"))
-		if not row or not row.price_list:
+			price_list_source=source,
+		)
+	elif ctx.lead:
+		category = ctx.lead.get("caller_category")
+		row = _category_default(category)
+		price_list = _settings_price_list(category)
+		if not row or not price_list:
 			return None, _error(
 				"QUOTE_NOT_AVAILABLE",
 				"The team will call back with prices for this caller category.",
-				caller_category=ctx.lead.get("caller_category"),
+				caller_category=category,
 			)
-		return frappe._dict(
-			quotation_to="CRM Deal", party_name=None, customer_group=row.customer_group, price_list=row.price_list
-		), None
+		currency = company_currency
+		party = frappe._dict(
+			quotation_to="CRM Deal", party_name=None, customer_group=row.customer_group, price_list=price_list, price_list_source="settings"
+		)
+	else:
+		return None, _error("NOT_ON_RECORD", "Save the caller's name and number (save_request) before quoting.")
 
-	return None, _error("NOT_ON_RECORD", "Save the caller's name and number (save_request) before quoting.")
+	problem = _price_list_problem(party.price_list, currency)
+	if problem:
+		return None, _error(
+			"PRICE_LIST_UNUSABLE",
+			"The caller's price list can't be used right now - the team will call back with prices.",
+			price_list=party.price_list,
+			price_list_source=party.price_list_source,
+			reason=problem,
+		)
+	return party, None
 
 
 def _check_items(items, party):
@@ -830,7 +903,10 @@ def _upsert_quote(ctx, items, ship_to_pincode=None, address_name=None):
 		frappe.db.rollback(save_point="voice_agent_quote")
 		raise
 
-	return _quote_response(doc, not existing, deal)
+	response = _quote_response(doc, not existing, deal)
+	# Which source the list came from - for logging; the agent doesn't speak it.
+	response["price_list_source"] = party.price_list_source
+	return response
 
 
 @frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method

@@ -225,9 +225,11 @@ def lookup_by_phone(phone: str | None = None):
 			returns both as None without querying.
 
 	Returns:
-		dict: {"lead": {...} | None, "contact": {...} | None}. Each, if
-		present, is {name, lead_name/full_name, mobile_no, status}
-		(status only on the Lead).
+		dict: {"lead": {...} | None, "contact": {...} | None,
+		"customer": {...} | None}. "lead" is {name, lead_name, mobile_no,
+		status, organization}; "contact" is {name, full_name, mobile_no};
+		"customer", resolved by `_resolve_customer`, is {name,
+		customer_name, customer_group, default_price_list}.
 
 	Raises:
 		frappe.ValidationError: If called by the configured automation
@@ -235,7 +237,7 @@ def lookup_by_phone(phone: str | None = None):
 			`CALLER_BLOCKED: ...` token, same as `guard_caller_gate`.
 	"""
 	if not (phone or "").strip():
-		return {"lead": None, "contact": None}
+		return {"lead": None, "contact": None, "customer": None}
 
 	is_automation_user = frappe.session.user == get_automation_user()
 	if is_automation_user:
@@ -259,7 +261,7 @@ def lookup_by_phone(phone: str | None = None):
 	leads = frappe.get_list(
 		"CRM Lead",
 		filters={"mobile_no": ("in", spellings)},
-		fields=["name", "lead_name", "mobile_no", "status"],
+		fields=["name", "lead_name", "mobile_no", "status", "organization"],
 		limit=1,
 		ignore_permissions=is_automation_user,
 	)
@@ -270,10 +272,69 @@ def lookup_by_phone(phone: str | None = None):
 		limit=1,
 	)
 
+	lead = leads[0] if leads else None
+	contact = contacts[0] if contacts else None
+
 	return {
-		"lead": leads[0] if leads else None,
-		"contact": contacts[0] if contacts else None,
+		"lead": lead,
+		"contact": contact,
+		"customer": _resolve_customer(lead, contact),
 	}
+
+
+def _resolve_customer(lead, contact):
+	"""
+	Business Purpose: [BR-CRM-002] Replicates, in one call, the two ways
+	Sarvam's own on-start tools resolve a caller's Customer today -
+	`lookup_caller_contact`'s join from the Contact to its Customer via the
+	`Dynamic Link` child table, and `lookup_contact_customer`'s fallback of
+	matching the Lead's `organization` against an enabled Customer's exact
+	`customer_name` (`lookup_lead_organization` reads the field that feeds
+	this). A real caller can resolve through only one of the two: a Lead's
+	free-text `organization` need not exactly match any Customer's name
+	even when the same caller already has a Contact properly linked to one
+	via `Dynamic Link` (and vice versa, a caller with no Contact yet but an
+	organization that happens to match an existing Customer).
+
+	When both resolve, the organization match wins - the same precedence
+	Sarvam's own tools have today purely from their execution order
+	(`lookup_caller_contact` first, `lookup_contact_customer` last, both
+	writing the same `crm_customer_id` variable), now made explicit here
+	instead of being an accident of two tools' relative ordering.
+
+	Args:
+		lead (dict | None): As returned by the CRM Lead query above, must
+			include "organization".
+		contact (dict | None): As returned by the Contact query above,
+			must include "name".
+
+	Returns:
+		dict | None: {name, customer_name, customer_group,
+		default_price_list}, or None if neither path resolves a Customer.
+	"""
+	customer_fields = ["name", "customer_name", "customer_group", "default_price_list"]
+	customer = None
+
+	if contact:
+		link_name = frappe.db.get_value(
+			"Dynamic Link",
+			{"parenttype": "Contact", "parent": contact["name"], "link_doctype": "Customer"},
+			"link_name",
+		)
+		if link_name:
+			customer = frappe.db.get_value("Customer", link_name, customer_fields, as_dict=True)
+
+	if lead and lead.get("organization"):
+		matched = frappe.get_list(
+			"Customer",
+			filters={"customer_name": lead["organization"], "disabled": 0},
+			fields=customer_fields,
+			limit=1,
+		)
+		if matched:
+			customer = matched[0]
+
+	return customer
 
 
 def _get_phone_for_gate(doc):

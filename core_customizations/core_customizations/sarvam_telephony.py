@@ -864,13 +864,15 @@ def handle_inbound_webhook(**kwargs):
 	a real delivery - fires on it loosely and logs every payload via
 	`create_request_log` regardless, so any drift is visible and correctable.
 
-	An inbound call connects by definition (Sarvam only fires this webhook
-	for a connected call, never retries) so there is no status to map -
-	every Call Log created here is `status = "Completed"`.
+	The Call Log itself - number, link, status (Completed / No Answer /
+	Blocked), times, summary, transcript - is written by
+	`voice_agent.record_inbound_call`; see it for the rules. The caller is
+	looked up by the voice agent's own Lead -> Contact -> Customer lookup
+	(and a hashed number as `caller_gate.check` resolves it).
 
-	Caller resolution reuses [BR-TEL-001]'s `get_contact_lead_or_deal_from_number`
-	so an inbound call lands on the same CRM Lead/Deal/Issue/Contact priority
-	as everywhere else in this app, rather than a separate lookup.
+	Always answers 200 once the key is right - a duplicate delivery updates
+	the same log, and a payload that can't be recorded is kept on its
+	Integration Request (status Failed) and in Error Log.
 
 	Webhook authenticity is enforced the same way as `handle_outbound_webhook`
 	- the `key` query param matched against `webhook_secret` - since Sarvam
@@ -903,62 +905,27 @@ def handle_inbound_webhook(**kwargs):
 	)
 
 	try:
-		interaction_id = payload.get("interaction_id")
-		if not interaction_id:
-			raise frappe.ValidationError(f"Sarvam inbound webhook payload missing interaction_id: {payload}")
+		# @businessRule [BR-TEL-005] One CRM Call Log per interaction_id
+		# (created or updated), linked to the caller's Lead/Contact/Customer,
+		# Blocked for a blocked or non-Indian number, with the summary,
+		# transcript and this call's callback Tasks - and no Lead, Deal or
+		# Task created. [BR-TEL-007] output variables are applied there too.
+		from core_customizations.core_customizations.voice_agent import record_inbound_call
 
-		user_phone_number = payload.get("user_phone_number")
-
-		# @businessRule [BR-TEL-005] `CRM Call Log` is autonamed `field:id` -
-		# keying it by `interaction_id` makes a redelivered webhook (Sarvam
-		# retries a failed delivery) idempotent: it updates the same Call Log
-		# instead of creating a duplicate.
-		if frappe.db.exists("CRM Call Log", interaction_id):
-			call_log = frappe.get_doc("CRM Call Log", interaction_id)
-		else:
-			call_log = frappe.new_doc("CRM Call Log")
-			call_log.id = interaction_id
-			call_log.type = "Incoming"
-			call_log.telephony_medium = "Sarvam"
-
-			reference_docname, reference_doctype = (None, None)
-			if user_phone_number:
-				reference_docname, reference_doctype = get_contact_lead_or_deal_from_number(user_phone_number)
-			if reference_doctype and reference_docname:
-				call_log.reference_doctype = reference_doctype
-				call_log.reference_docname = reference_docname
-
-		setattr(call_log, "from", user_phone_number)
-		call_log.to = payload.get("agent_phone_number")
-		call_log.status = "Completed"
-		if payload.get("duration") is not None:
-			call_log.duration = payload.get("duration")
-		if payload.get("recording_url"):
-			call_log.recording_url = payload.get("recording_url")
-		call_log.save(ignore_permissions=True)
-
-		# @businessRule [BR-TEL-007] The agent's output variables (summary,
-		# conversation ref, preferences) are written here, from the
-		# webhook, instead of by the agent's own end-of-call tool calls.
-		from core_customizations.core_customizations.voice_agent import apply_call_outcome
-
-		apply_call_outcome(call_log, payload)
-
-		# @businessRule [BR-TEL-007] The transcript is kept as an FCRM Note
-		# referencing this Call Log (one per call - a redelivery updates it),
-		# not a comment.
-		from core_customizations.core_customizations.voice_agent import save_transcript_note
-
-		transcript = payload.get("interaction_transcript")
-		save_transcript_note(call_log, transcript)
+		call_log = record_inbound_call(payload)
 
 		# @businessRule [BR-TEL-004] Same S3 archive helper used by the
 		# outbound webhook - no-op unless Call Logging Settings is enabled.
-		upload_conversation_to_s3(
-			"inbound",
-			interaction_id,
+		# Queued after this commit, so downloading the recording never holds
+		# up Sarvam's webhook call.
+		frappe.enqueue(
+			"core_customizations.core_customizations.sarvam_telephony.upload_conversation_to_s3",
+			queue="long",
+			enqueue_after_commit=True,
+			direction="inbound",
+			interaction_id=call_log.name,
 			recording_url=payload.get("recording_url"),
-			transcript=transcript,
+			transcript=payload.get("interaction_transcript"),
 		)
 
 		request_log.status = "Completed"

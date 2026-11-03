@@ -1369,5 +1369,305 @@
     "checked_at": "2026-11-03T20:30+05:30"
    }
   }
+ },
+ "handle_inbound_webhook": {
+  "lead_caller_asked_for_a_person": {
+   "payload": {
+    "interaction_id": "sample-lead",
+    "user_phone_number": "+917000001103",
+    "agent_phone_number": "+918064276261",
+    "duration": 95,
+    "start_datetime": "2026-11-04T05:30:00Z",
+    "end_datetime": "2026-11-04T05:31:35Z",
+    "recording_url": "https://example.invalid/recording.mp3",
+    "interaction_transcript": [
+     {
+      "role": "agent",
+      "en_text": "Welcome to Sravi Enterprises."
+     },
+     {
+      "role": "user",
+      "en_text": "Can I talk to someone?"
+     }
+    ],
+    "output_agent_variables": {
+     "call_summary": "Caller asked for a person.",
+     "transferred": "false"
+    }
+   },
+   "call_log": {
+    "name": "sample-lead",
+    "type": "Incoming",
+    "from": "+917000001103",
+    "to": "+918064276261",
+    "status": "Completed",
+    "custom_status_reason": null,
+    "reference_doctype": "CRM Lead",
+    "reference_docname": "CRM-LEAD-2026-04272",
+    "start_time": "2026-11-04 11:00:00",
+    "end_time": "2026-11-04 11:01:35",
+    "duration": 95.0,
+    "note": "1uu2m11i7o",
+    "links": []
+   }
+  },
+  "hashed_number_on_record": {
+   "payload": {
+    "interaction_id": "sample-hash",
+    "user_phone_number": "a6418edf530a24997209e50bbc53df092fca8b785325a9486a5f5d0facd99cd2",
+    "agent_phone_number": "+918064276261",
+    "duration": 95,
+    "start_datetime": "2026-11-04T05:30:00Z",
+    "end_datetime": "2026-11-04T05:31:35Z",
+    "recording_url": "https://example.invalid/recording.mp3",
+    "interaction_transcript": [
+     {
+      "role": "agent",
+      "en_text": "Welcome to Sravi Enterprises."
+     },
+     {
+      "role": "user",
+      "en_text": "Can I talk to someone?"
+     }
+    ],
+    "output_agent_variables": {
+     "call_summary": "Caller asked for a person.",
+     "transferred": "false"
+    }
+   },
+   "call_log": {
+    "name": "sample-hash",
+    "type": "Incoming",
+    "from": "+917000001103",
+    "to": "+918064276261",
+    "status": "Completed",
+    "custom_status_reason": null,
+    "reference_doctype": "CRM Lead",
+    "reference_docname": "CRM-LEAD-2026-04272",
+    "start_time": "2026-11-04 11:00:00",
+    "end_time": "2026-11-04 11:01:35",
+    "duration": 95.0,
+    "note": "1uvklqaqlg",
+    "links": []
+   }
+  },
+  "caller_not_on_record": {
+   "payload": {
+    "interaction_id": "sample-unknown",
+    "user_phone_number": "+917000001102",
+    "agent_phone_number": "+918064276261",
+    "duration": 95,
+    "start_datetime": "2026-11-04T05:30:00Z",
+    "end_datetime": "2026-11-04T05:31:35Z",
+    "recording_url": "https://example.invalid/recording.mp3",
+    "interaction_transcript": [
+     {
+      "role": "agent",
+      "en_text": "Welcome to Sravi Enterprises."
+     },
+     {
+      "role": "user",
+      "en_text": "Can I talk to someone?"
+     }
+    ],
+    "output_agent_variables": {
+     "call_summary": "Asked about SUJITHA."
+    }
+   },
+   "call_log": {
+    "name": "sample-unknown",
+    "type": "Incoming",
+    "from": "+917000001102",
+    "to": "+918064276261",
+    "status": "Completed",
+    "custom_status_reason": null,
+    "reference_doctype": null,
+    "reference_docname": null,
+    "start_time": "2026-11-04 11:00:00",
+    "end_time": "2026-11-04 11:01:35",
+    "duration": 95.0,
+    "note": "1uvirl7vs9",
+    "links": []
+   }
+  },
+  "hung_up_straight_away": {
+   "payload": {
+    "interaction_id": "sample-hangup",
+    "user_phone_number": "+917000001102",
+    "agent_phone_number": "+918064276261",
+    "duration": 3,
+    "start_datetime": "2026-11-04T05:30:00Z",
+    "end_datetime": "2026-11-04T05:30:03Z",
+    "recording_url": "https://example.invalid/recording.mp3",
+    "interaction_transcript": [
+     {
+      "role": "agent",
+      "en_text": "Welcome to Sravi Enterprises."
+     }
+    ],
+    "output_agent_variables": {}
+   },
+   "call_log": {
+    "name": "sample-hangup",
+    "type": "Incoming",
+    "from": "+917000001102",
+    "to": "+918064276261",
+    "status": "No Answer",
+    "custom_status_reason": null,
+    "reference_doctype": null,
+    "reference_docname": null,
+    "start_time": "2026-11-04 11:00:00",
+    "end_time": "2026-11-04 11:00:03",
+    "duration": 3.0,
+    "note": null,
+    "links": []
+   }
+  },
+  "transferred": {
+   "payload": {
+    "interaction_id": "sample-transfer",
+    "user_phone_number": "+917000001103",
+    "agent_phone_number": "+918064276261",
+    "duration": 95,
+    "start_datetime": "2026-11-04T05:30:00Z",
+    "end_datetime": "2026-11-04T05:31:35Z",
+    "recording_url": "https://example.invalid/recording.mp3",
+    "interaction_transcript": [
+     {
+      "role": "agent",
+      "en_text": "Welcome to Sravi Enterprises."
+     },
+     {
+      "role": "user",
+      "en_text": "Can I talk to someone?"
+     }
+    ],
+    "output_agent_variables": {
+     "call_summary": "Transferred to Kalpana.",
+     "transferred": "true"
+    }
+   },
+   "call_log": {
+    "name": "sample-transfer",
+    "type": "Incoming",
+    "from": "+917000001103",
+    "to": "+918064276261",
+    "status": "Completed",
+    "custom_status_reason": "transferred",
+    "reference_doctype": "CRM Lead",
+    "reference_docname": "CRM-LEAD-2026-04272",
+    "start_time": "2026-11-04 11:00:00",
+    "end_time": "2026-11-04 11:01:35",
+    "duration": 95.0,
+    "note": "1v0ig3d4kc",
+    "links": []
+   }
+  },
+  "blocked_number": {
+   "payload": {
+    "interaction_id": "sample-blocked",
+    "user_phone_number": "+917000001101",
+    "agent_phone_number": "+918064276261",
+    "duration": 4,
+    "start_datetime": "2026-11-04T05:30:00Z",
+    "end_datetime": "2026-11-04T05:30:04Z",
+    "recording_url": "https://example.invalid/recording.mp3",
+    "interaction_transcript": [
+     {
+      "role": "agent",
+      "en_text": "Sorry, we can't take this call."
+     }
+    ],
+    "output_agent_variables": {}
+   },
+   "call_log": {
+    "name": "sample-blocked",
+    "type": "Incoming",
+    "from": "+917000001101",
+    "to": "+918064276261",
+    "status": "Blocked",
+    "custom_status_reason": "on blocked list",
+    "reference_doctype": "Blocked Contact",
+    "reference_docname": "7000001101",
+    "start_time": "2026-11-04 11:00:00",
+    "end_time": "2026-11-04 11:00:04",
+    "duration": 4.0,
+    "note": null,
+    "links": []
+   }
+  },
+  "foreign_number": {
+   "payload": {
+    "interaction_id": "sample-foreign",
+    "user_phone_number": "+14155552671",
+    "agent_phone_number": "+918064276261",
+    "duration": 4,
+    "start_datetime": "2026-11-04T05:30:00Z",
+    "end_datetime": "2026-11-04T05:30:04Z",
+    "recording_url": "https://example.invalid/recording.mp3",
+    "interaction_transcript": [
+     {
+      "role": "agent",
+      "en_text": "Sorry, we can't take this call."
+     }
+    ],
+    "output_agent_variables": {}
+   },
+   "call_log": {
+    "name": "sample-foreign",
+    "type": "Incoming",
+    "from": "+14155552671",
+    "to": "+918064276261",
+    "status": "Blocked",
+    "custom_status_reason": "non-Indian number",
+    "reference_doctype": null,
+    "reference_docname": null,
+    "start_time": "2026-11-04 11:00:00",
+    "end_time": "2026-11-04 11:00:04",
+    "duration": 4.0,
+    "note": null,
+    "links": []
+   }
+  },
+  "blank_number": {
+   "payload": {
+    "interaction_id": "sample-blank",
+    "user_phone_number": "",
+    "agent_phone_number": "+918064276261",
+    "duration": 95,
+    "start_datetime": "2026-11-04T05:30:00Z",
+    "end_datetime": "2026-11-04T05:31:35Z",
+    "recording_url": "https://example.invalid/recording.mp3",
+    "interaction_transcript": [
+     {
+      "role": "agent",
+      "en_text": "Welcome to Sravi Enterprises."
+     },
+     {
+      "role": "user",
+      "en_text": "Can I talk to someone?"
+     }
+    ],
+    "output_agent_variables": {
+     "call_summary": "Caller asked for a person.",
+     "transferred": "false"
+    }
+   },
+   "call_log": {
+    "name": "sample-blank",
+    "type": "Incoming",
+    "from": "",
+    "to": "+918064276261",
+    "status": "Completed",
+    "custom_status_reason": null,
+    "reference_doctype": null,
+    "reference_docname": null,
+    "start_time": "2026-11-04 11:00:00",
+    "end_time": "2026-11-04 11:01:35",
+    "duration": 95.0,
+    "note": "1v14rgukss",
+    "links": []
+   }
+  }
  }
 }

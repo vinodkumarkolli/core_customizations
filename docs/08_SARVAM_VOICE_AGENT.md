@@ -60,12 +60,43 @@ Every method first runs `caller_gate.evaluate(phone)`. A blocked or foreign call
 | `upsert_quote` | the agent's own price/tax/shipping arithmetic | `phone`, `key`, `items` = `[{"item_code", "qty"}]`, `address_name` or `ship_to_pincode` (optional) |
 | `save_request` | the chain of create-lead / create-deal / create-quotation / create-task calls | `phone`, `key`, `name`, `caller_type`, `store_type`, `area`, `organization`, `items`, `address_name` **or** `address` + `city` + `pincode` (+ `state`), `whatsapp_number`, `notes`, `ship_to_pincode`, `callback_number` |
 | `transfer_target` | `check_transfer_hours` (timeapi.io), `route_to_*` (httpbin) | `phone`, `key` |
-| call-ended webhook (`sarvam_telephony.handle_inbound_webhook`, unchanged URL) | `update_call_log`, `update_call_log_conversation_ref` | Sarvam's call-end payload; reads `output_agent_variables.summary`, `.conversation_ref`, `.preferences` |
+| call-ended webhook (`sarvam_telephony.handle_inbound_webhook`, unchanged URL) | `update_call_log`, `update_call_log_conversation_ref` | Sarvam's call-end payload: `interaction_id`, `user_phone_number`, `agent_phone_number`, `duration`, `start_datetime`, `end_datetime`, `recording_url`, `interaction_transcript`, `output_agent_variables` (`call_summary`/`summary`, `conversation_ref`, `preferences`, `transferred`) |
 
 ### Sarvam configuration
 
-- **Call started** webhook: `<site>/api/method/core_customizations.core_customizations.voice_agent.call_started?key=<webhook_secret>`
-- **Call ended** webhook: `<site>/api/method/core_customizations.core_customizations.sarvam_telephony.handle_inbound_webhook?key=<webhook_secret>` (as before)
+- **Call start:** the `check_blocked` tool on `caller_gate.check` (returns `allowed` and `phone`, creates nothing). `voice_agent.call_started` is an optional alternative that also opens an "In Progress" Call Log; it is not needed — the call-ended webhook creates the log itself.
+- **Call ended** webhook (the deployment's `webhook_config`): `<site>/api/method/core_customizations.core_customizations.sarvam_telephony.handle_inbound_webhook?key=<webhook_secret>` — on dev, `https://dev-zap.jayamco.in/api/method/core_customizations.core_customizations.sarvam_telephony.handle_inbound_webhook?key=<webhook_secret>` (or send the key as the `X-Webhook-Key` header).
+
+### Call ended → one CRM Call Log (`[BR-TEL-005]`)
+
+`handle_inbound_webhook` answers 200 once the key is right — for a new call, a repeat delivery or a payload it can't use (that one is kept as a Failed "Sarvam Inbound Call" Integration Request and in Error Log). The work is `voice_agent.record_inbound_call`:
+
+| Log field | From |
+|---|---|
+| Name / `id` | `interaction_id` — a repeat delivery updates the same log |
+| `type` | Incoming |
+| `from` | `user_phone_number` as +91 and ten digits; a SHA-256 hash is looked up as `caller_gate.check` does; blank or unmatched → empty; non-Indian → as received |
+| `to` | `agent_phone_number` (the number called, e.g. +918064276261), normalised |
+| `start_time` / `end_time` | `start_datetime` / `end_datetime` (ISO 8601, with or without offset, or epoch), in the site's time zone |
+| `duration` | `duration` (seconds), else end − start |
+| `recording_url` | `recording_url` |
+| Reference | the caller's CRM Lead, else Contact, else Customer (never created); none for a caller not on record |
+| `status` / `custom_status_reason` | see below |
+| `note` | the summary — `output_agent_variables.call_summary` / `.summary`, or a top-level `call_summary` — as an FCRM Note |
+| Transcript | `interaction_transcript` as one FCRM Note referencing the log |
+| Links | the callback Tasks `save_request` made for the same Lead/Deal during the call |
+
+**Status — decided from the number, never from the call's length or end reason:**
+
+| Caller | `status` | `custom_status_reason` | Reference |
+|---|---|---|---|
+| On the Blocked Contact list | **Blocked** | `on blocked list` | their Customer, else the Blocked Contact |
+| Not an Indian mobile (`+1…`, a landline, junk) | **Blocked** | `non-Indian number` (number kept as received; junk that isn't a phone number is left out of `from` and put in the reason) | none |
+| Never spoke (zero duration, or no `user` turn in the transcript) | No Answer (CRM shows "Missed Call") | — | as found |
+| Transferred (`output_agent_variables.transferred` = true — an agent-defined output variable) | Completed | `transferred` | as found |
+| Anyone else, incl. blank / unmatched number | Completed | — | as found |
+
+No Lead, Deal or Task is ever created here. "Blocked" was added to the Call Log status options and `custom_status_reason` (read-only "Status Reason") to the form, both as fixtures; "From" is no longer mandatory, so a blank number saves. The Frappe CRM app labels only its own statuses, so a Blocked call shows a blank status badge there (Desk shows it normally). Sample payloads and the logs they produce: `docs/samples/voice_agent_samples.json` → `handle_inbound_webhook` (incl. `blocked_number` and `foreign_number`, for posting directly).
 
 Both payload shapes are still unconfirmed against a real delivery — every delivery is logged as an Integration Request ("Sarvam Call Started" / "Sarvam Inbound Call"), so check the first real ones and adjust the key names at the top of `voice_agent.py` (`CALLER_PHONE_KEYS`, `CALL_ID_KEYS`, `SUMMARY_KEYS`, `CONVERSATION_REF_KEYS`) if Sarvam names them differently.
 
@@ -75,9 +106,10 @@ Both payload shapes are still unconfirmed against a real delivery — every deli
 |---|---|---|
 | `CALLER_PHONE_KEYS` | `user_phone_number`, `phone`, `caller_number`, `from` | `user_phone_number` is from Sarvam's published inbound payload schema (the one `handle_inbound_webhook` was written against); the rest are guesses for the call-started payload |
 | `CALL_ID_KEYS` | `interaction_id`, `call_id` | `interaction_id` from that schema; `call_id` a guess |
-| `SUMMARY_KEYS` | `summary`, `call_summary` | Guesses — these are keys of `output_agent_variables`, i.e. **whatever the agent's own output variables are named**: name them `summary`, `conversation_ref` and `preferences` in the agent and they match |
+| `SUMMARY_KEYS` | `summary`, `call_summary` (in `output_agent_variables`, or at the top level of the payload) | Guesses — these are keys of `output_agent_variables`, i.e. **whatever the agent's own output variables are named**: name them `summary`, `conversation_ref` and `preferences` in the agent and they match |
 | `CONVERSATION_REF_KEYS` | `conversation_ref`, `conversation_id` | Same — agent-defined output variables |
 | `PREFERENCES_KEY` | `preferences` | Same |
+| `TRANSFERRED_KEYS` | `transferred`, `call_transferred` | Same — set it true when the agent transfers the call |
 
 The call-ended payload's transcript (`interaction_transcript`, a list of `{role, en_text}` turns, per the schema) is saved as **one FCRM Note referencing the Call Log**, titled *"Call transcript: <date>"*; a redelivery updates that Note rather than adding another (it used to be a Comment). The summary stays a separate Note, linked from the Call Log's `note` field.
 

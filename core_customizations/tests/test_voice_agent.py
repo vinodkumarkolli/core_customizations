@@ -1193,3 +1193,144 @@ class TestVoiceAgent(FrappeTestCase):
 		self.assertFalse(task.reference_docname)
 		self.assertIn("Customer: VA Unit Individual Customer", task.description)
 		self.assertEqual(again["task"], result["task"], "one open callback task per day")
+
+	# --- call ended: the CRM Call Log [BR-TEL-005] ------------------------------
+
+	BUSINESS_NUMBER = "+918064276261"
+
+	def _ended(self, interaction_id, phone, **extra):
+		"""A call-ended payload in Sarvam's inbound shape."""
+		payload = {
+			"interaction_id": interaction_id,
+			"user_phone_number": phone,
+			"agent_phone_number": "08064276261",
+			"duration": 95,
+			"start_datetime": "2026-11-04T05:30:00Z",
+			"end_datetime": "2026-11-04T05:31:35Z",
+			"interaction_transcript": [
+				{"role": "agent", "en_text": "Welcome to Sravi Enterprises."},
+				{"role": "user", "en_text": "I want to talk to someone."},
+			],
+			"output_agent_variables": {"call_summary": "Caller asked for a person."},
+		}
+		payload.update(extra)
+		return payload
+
+	def _record(self, *args, **kwargs):
+		return va.record_inbound_call(self._ended(*args, **kwargs))
+
+	def _created(self):
+		return {dt: frappe.db.count(dt) for dt in ("CRM Lead", "CRM Deal", "CRM Task")}
+
+	def test_call_log_for_a_lead_caller(self):
+		before = self._created()
+		log = self._record("va-end-lead", "917000001103")  # any spelling
+		self.assertEqual(
+			(log.type, log.get("from"), log.to, log.status, log.custom_status_reason),
+			("Incoming", LEAD_ONLY, self.BUSINESS_NUMBER, "Completed", None),
+		)
+		self.assertEqual((log.reference_doctype, log.reference_docname), ("CRM Lead", self.lead_only))
+		self.assertEqual(flt(log.duration), 95)
+		# 05:30Z is 11:00 in Asia/Kolkata, the site's time zone.
+		self.assertEqual((str(log.start_time), str(log.end_time)), ("2026-11-04 11:00:00", "2026-11-04 11:01:35"))
+		self.assertEqual(frappe.db.get_value("FCRM Note", log.note, "content"), "Caller asked for a person.")
+		self.assertTrue(frappe.db.exists("FCRM Note", {"reference_doctype": "CRM Call Log", "reference_docname": log.name, "title": ("like", "Call transcript:%")}))
+		self.assertEqual(self._created(), before, "no lead, deal or task from the call-ended webhook")
+
+	def test_repeat_delivery_updates_the_same_log(self):
+		self._record("va-end-repeat", LEAD_ONLY, duration=10)
+		log = self._record("va-end-repeat", LEAD_ONLY, duration=95)
+		self.assertEqual(frappe.db.count("CRM Call Log", {"id": "va-end-repeat"}), 1)
+		self.assertEqual(flt(log.duration), 95)
+		self.assertEqual(frappe.db.count("FCRM Note", {"reference_doctype": "CRM Call Log", "reference_docname": log.name, "title": ("like", "Call transcript:%")}), 1)
+
+	def test_caller_not_on_record_gets_an_unlinked_log(self):
+		log = self._record("va-end-unknown", UNKNOWN)
+		self.assertEqual((log.get("from"), log.status, log.reference_doctype, log.reference_docname), (UNKNOWN, "Completed", None, None))
+		self.assertTrue(log.note, "the summary is still kept")
+
+	def test_customer_and_contact_callers_are_linked(self):
+		frappe.db.set_value("Customer", self.no_address, "mobile_no", None)
+		log = self._record("va-end-customer", CUSTOMER_ONLY)
+		self.assertEqual(log.reference_doctype, "Contact")
+		self.assertIn(self.customer_only, frappe.get_all("Dynamic Link", {"parenttype": "Contact", "parent": log.reference_docname}, pluck="link_name"))
+		contactless = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "VA Unit Contactless Caller", "customer_group": "Individual",
+			 "customer_type": "Individual", "default_price_list": "Standard Selling", "gst_category": "Unregistered"}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value("Customer", contactless.name, "mobile_no", CONTACTLESS_CUSTOMER)
+		log = self._record("va-end-customer-only", CONTACTLESS_CUSTOMER)
+		self.assertEqual((log.reference_doctype, log.reference_docname), ("Customer", contactless.name))
+
+	def test_hashed_number_is_looked_up(self):
+		import hashlib
+
+		log = self._record("va-end-hash", hashlib.sha256(LEAD_ONLY.encode()).hexdigest())
+		self.assertEqual((log.get("from"), log.reference_docname, log.status), (LEAD_ONLY, self.lead_only, "Completed"))
+
+	def test_blank_or_unmatched_number_is_not_a_block(self):
+		import hashlib
+
+		for case, phone in (("blank", ""), ("missing", None), ("unmatched hash", hashlib.sha256(b"+917000001299").hexdigest())):
+			with self.subTest(case=case):
+				log = self._record(f"va-end-blank-{case}", phone)
+				self.assertEqual((log.get("from"), log.status, log.custom_status_reason, log.reference_docname), ("", "Completed", None, None))
+
+	def test_blocked_caller_gets_a_blocked_log(self):
+		before = self._created()
+		# Short call ended by the agent - Blocked comes from the list, not the length.
+		log = self._record("va-end-blocked", BLOCKED, duration=4, interaction_transcript=[{"role": "agent", "en_text": "Sorry."}])
+		self.assertEqual((log.get("from"), log.status, log.custom_status_reason), (BLOCKED, "Blocked", "on blocked list"))
+		self.assertEqual((log.reference_doctype, log.reference_docname), ("Blocked Contact", BLOCKED[-10:]))
+		self.assertFalse(log.note, "no summary note against a blocked caller")
+		self.assertEqual(self._created(), before)
+
+	def test_blocked_customer_is_linked_to_the_customer(self):
+		frappe.get_doc({"doctype": "Blocked Contact", "mobile_no": CUSTOMER_ONLY[-10:], "enabled": 1, "reason": "test"}).insert(ignore_permissions=True)
+		log = self._record("va-end-blocked-customer", CUSTOMER_ONLY)
+		self.assertEqual((log.status, log.reference_doctype, log.reference_docname), ("Blocked", "Customer", self.customer_only))
+
+	def test_foreign_number_gets_a_blocked_log_with_the_number_as_given(self):
+		log = self._record("va-end-foreign", FOREIGN)
+		self.assertEqual((log.get("from"), log.status, log.custom_status_reason, log.reference_docname), (FOREIGN, "Blocked", "non-Indian number", None))
+		junk = self._record("va-end-junk", "anonymous")
+		self.assertEqual((junk.get("from"), junk.status, junk.custom_status_reason), ("", "Blocked", "non-Indian number: anonymous"))
+
+	def test_caller_who_never_spoke_is_no_answer(self):
+		hung_up = self._record("va-end-hangup", LEAD_ONLY, duration=3, interaction_transcript=[{"role": "agent", "en_text": "Welcome."}])
+		zero = self._record("va-end-zero", LEAD_ONLY, duration=0, interaction_transcript=None)
+		self.assertEqual((hung_up.status, zero.status), ("No Answer", "No Answer"))
+
+	def test_transferred_call_is_completed_with_a_reason(self):
+		log = self._record("va-end-transfer", LEAD_ONLY, output_agent_variables={"call_summary": "Transferred to Kalpana.", "transferred": "true"})
+		self.assertEqual((log.status, log.custom_status_reason), ("Completed", "transferred"))
+
+	def test_callback_task_made_during_the_call_is_linked(self):
+		task = va.save_request(phone=LEAD_ONLY, key=KEY, notes="Call me back")["task"]
+		log = self._record("va-end-task", LEAD_ONLY, start_datetime=None, end_datetime=None)
+		self.assertEqual([(l.link_doctype, str(l.link_name)) for l in log.links], [("CRM Task", str(task))])
+		log = self._record("va-end-task", LEAD_ONLY, start_datetime=None, end_datetime=None)
+		self.assertEqual(len(log.links), 1, "a redelivery doesn't link it twice")
+
+	def test_summary_at_the_top_level_is_kept(self):
+		log = self._record("va-end-top-summary", LEAD_ONLY, output_agent_variables=None, call_summary="Asked about SUJITHA.")
+		self.assertEqual(frappe.db.get_value("FCRM Note", log.note, "content"), "Asked about SUJITHA.")
+
+	def test_webhook_answers_for_new_duplicate_and_unknown_calls(self):
+		from core_customizations.core_customizations import sarvam_telephony
+
+		method = "core_customizations.core_customizations.sarvam_telephony.handle_inbound_webhook"
+		with patch.object(sarvam_telephony, "create_request_log") as request_log, patch.object(frappe.db, "commit"), patch.object(
+			frappe, "enqueue"
+		) as enqueue:
+			for attempt in (1, 2):
+				with self.subTest(attempt=attempt):
+					self.assertIsNone(self._api(method, query={"key": KEY}, json_body=self._ended("va-end-webhook", UNKNOWN)))
+			self.assertEqual(frappe.db.count("CRM Call Log", {"id": "va-end-webhook"}), 1)
+			self.assertEqual(request_log.return_value.status, "Completed")
+			self.assertEqual(enqueue.call_args.kwargs["interaction_id"], "va-end-webhook")
+			with patch.object(frappe.db, "rollback"), patch.object(frappe, "log_error"):
+				self.assertIsNone(self._api(method, query={"key": KEY}, json_body={"user_phone_number": UNKNOWN}))
+			self.assertEqual(request_log.return_value.status, "Failed", "no interaction id: kept as a failed request, still 200")
+		with self.assertRaises(frappe.PermissionError):
+			self._api(method, query={"key": "wrong"}, json_body=self._ended("va-end-webhook-2", UNKNOWN))

@@ -1,0 +1,23 @@
+{
+ "color": "#2490EF",
+ "creation": "2026-11-04 02:53:38.886799",
+ "currency": "INR",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "function": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Live Agent Answered",
+ "method": "core_customizations.core_customizations.callbacks_dashboard.live_agent_answered_calls",
+ "modified": "2026-11-04 02:53:38.886799",
+ "modified_by": "Administrator",
+ "module": "Core Customizations",
+ "name": "Live Agent Answered",
+ "owner": "Administrator",
+ "report_function": "Sum",
+ "show_full_number": 0,
+ "show_percentage_stats": 0,
+ "stats_time_interval": "Daily",
+ "type": "Custom"
+}

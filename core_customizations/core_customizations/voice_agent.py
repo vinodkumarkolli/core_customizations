@@ -39,12 +39,16 @@ from zoneinfo import ZoneInfo
 import frappe
 from frappe import _
 from frappe.integrations.utils import create_request_log
-from frappe.utils import cint, flt, get_time, nowdate
+from frappe.utils import cint, flt, get_system_timezone, get_time, nowdate
 
 from core_customizations.core_customizations import quotation_gst
 from core_customizations.core_customizations.caller_gate import (
+	_PHONE_HASH,
 	_check_webhook_key,
+	_indian_mobile,
 	_resolve_customer,
+	is_blocked_number,
+	number_for_hash,
 	without_webhook_key,
 	evaluate,
 	get_automation_user,
@@ -1586,24 +1590,28 @@ def apply_call_outcome(call_log, payload):
 		payload (dict): The call-ended webhook body.
 	"""
 	variables = _parse_json_arg(payload.get("output_agent_variables"), {}) or {}
-	if not isinstance(variables, dict) or not variables:
+	if not isinstance(variables, dict):
+		variables = {}
+	summary = _first(variables, SUMMARY_KEYS) or _first(payload, SUMMARY_KEYS)
+	if not variables and not summary:
 		return
 
-	values = {"custom_agent_variables": json.dumps(variables)}
+	values = {"custom_agent_variables": json.dumps(variables)} if variables else {}
 	ref = _first(variables, CONVERSATION_REF_KEYS) or _first(payload, CONVERSATION_REF_KEYS)
 	if ref:
 		values["custom_conversation_ref"] = str(ref)
 
 	phone = call_log.get("from")
 	if evaluate(phone)["allowed"]:
-		summary = _first(variables, SUMMARY_KEYS)
 		if summary and not call_log.note:
 			note = frappe.get_doc(
 				{
 					"doctype": "FCRM Note",
 					"title": f"Call summary: {nowdate()}",
 					"content": str(summary),
-					"reference_doctype": call_log.reference_doctype or "CRM Call Log",
+					# CRM Call Log defaults its reference type to CRM Lead even
+					# with no record - only a real link is used, else the log itself.
+					"reference_doctype": call_log.reference_doctype if call_log.reference_docname else "CRM Call Log",
 					"reference_docname": call_log.reference_docname or call_log.name,
 				}
 			).insert(ignore_permissions=True)
@@ -1619,4 +1627,218 @@ def apply_call_outcome(call_log, payload):
 				current = _parse_json_arg(frappe.db.get_value(*target, "custom_caller_preferences"), {}) or {}
 				frappe.db.set_value(*target, "custom_caller_preferences", json.dumps({**current, **preferences}))
 
-	call_log.db_set(values, update_modified=False)
+	if values:
+		call_log.db_set(values, update_modified=False)
+
+
+# --------------------------------------------------------------------------
+# 7. Call ended - the CRM Call Log itself  [BR-TEL-005]
+# --------------------------------------------------------------------------
+
+BLOCKED_CALL_STATUS = "Blocked"
+REASON_ON_BLOCKED_LIST = "on blocked list"
+REASON_NON_INDIAN = "non-Indian number"
+REASON_TRANSFERRED = "transferred"
+# Agent-defined output variable the agent sets when it transferred the call.
+TRANSFERRED_KEYS = ("transferred", "call_transferred")
+_TRUE = ("1", "true", "yes", "y")
+
+
+def _payload_datetime(value):
+	"""
+	A payload time (ISO 8601 with or without an offset, or epoch seconds /
+	milliseconds) as a naive datetime in the site's time zone, or None.
+	"""
+	if value in (None, ""):
+		return None
+	try:
+		if isinstance(value, (int, float)) or str(value).strip().isdigit():
+			stamp = float(value)
+			moment = datetime.fromtimestamp(stamp / 1000 if stamp > 1e12 else stamp, tz=ZoneInfo("UTC"))
+		else:
+			from dateutil import parser
+
+			moment = parser.parse(str(value))
+	except (ValueError, OverflowError, TypeError):
+		return None
+	if moment.tzinfo:
+		moment = moment.astimezone(ZoneInfo(get_system_timezone())).replace(tzinfo=None)
+	return moment
+
+
+def _call_number(raw):
+	"""
+	[BR-TEL-005] The caller's number for the Call Log, and whether it is
+	foreign: an Indian mobile as +91 and ten digits; a SHA-256 hash looked up
+	like caller_gate.check (unmatched -> blank, not foreign); anything else
+	non-blank is foreign and kept as received (blank if it isn't even a
+	valid phone number, so the Call Log still saves).
+
+	Returns:
+		tuple: (number for the log, foreign: bool, the raw value as sent).
+	"""
+	raw = "" if raw is None else str(raw).strip()
+	if not raw:
+		return "", False, raw
+	if _PHONE_HASH.fullmatch(raw):
+		return number_for_hash(raw) or "", False, raw
+	mobile = _indian_mobile(raw)
+	if mobile:
+		return mobile, False, raw
+	try:
+		frappe.utils.validate_phone_number(raw, throw=True)
+		return raw, True, raw
+	except frappe.ValidationError:
+		return "", True, raw
+
+
+def _caller_never_spoke(payload, transcript):
+	"""A zero-length call, or a transcript with no turn from the caller (they hung up at the greeting)."""
+	duration = payload.get("duration")
+	if duration not in (None, "") and flt(duration) <= 0:
+		return True
+	if isinstance(transcript, list):
+		return not any(
+			isinstance(turn, dict)
+			and (turn.get("role") or "").lower() == "user"
+			and (turn.get("en_text") or turn.get("text") or "").strip()
+			for turn in transcript
+		)
+	return False
+
+
+def _link_callback_tasks(call_log, since):
+	"""
+	[BR-TEL-005] Links the callback Tasks save_request made for this caller
+	during the call to the Call Log (its Links table), so the team can go
+	from the call to the callback.
+	"""
+	if call_log.reference_doctype not in ("CRM Lead", "CRM Deal") or not call_log.reference_docname:
+		return
+	filters = {
+		"reference_doctype": call_log.reference_doctype,
+		"reference_docname": call_log.reference_docname,
+		"title": ("like", f"{CALLBACK_TASK_TITLE_PREFIX}%"),
+		"creation": (">=", since),
+	}
+	automation_user = get_automation_user()
+	if automation_user:
+		filters["owner"] = automation_user
+	linked = {(l.link_doctype, str(l.link_name)) for l in call_log.get("links") or []}
+	for task in frappe.get_all("CRM Task", filters=filters, pluck="name", order_by="creation asc"):
+		if ("CRM Task", str(task)) not in linked:
+			call_log.append("links", {"link_doctype": "CRM Task", "link_name": str(task)})
+
+
+def record_inbound_call(payload):
+	"""
+	Business Purpose: [BR-TEL-005] The CRM Call Log for one inbound
+	voice-agent call, from Sarvam's call-ended payload - created, or updated
+	when the same `interaction_id` arrives again (one log per interaction).
+
+	- Type Incoming; from the caller's number (+91 and ten digits; a hash
+	  is looked up as caller_gate.check does); to the number they called.
+	- Linked to the caller's CRM Lead, else Contact, else Customer (the
+	  voice agent's own lookup) - never creating one; a caller not on record
+	  gets an unlinked log.
+	- Status from the number, never from the call's length or end reason:
+	  on the Blocked Contact list -> "Blocked" ("on blocked list", linked to
+	  their Customer, else the Blocked Contact); a non-Indian number ->
+	  "Blocked" ("non-Indian number", number kept as received). Otherwise
+	  "No Answer" when the caller never spoke, else "Completed" (reason
+	  "transferred" when the agent's `transferred` output variable says so).
+	  A blank or unmatched number is not a block.
+	- Start/end time and duration from the payload; the summary and
+	  transcript as FCRM Notes on the log (apply_call_outcome /
+	  save_transcript_note); this call's callback Tasks linked to it.
+	- Creates no Lead, Deal or Task.
+
+	Args:
+		payload (dict): The call-ended webhook body (key already stripped).
+
+	Returns:
+		Document: The saved CRM Call Log.
+	"""
+	interaction_id = _first(payload, CALL_ID_KEYS)
+	if not interaction_id:
+		raise frappe.ValidationError(f"Sarvam call-ended payload has no interaction id ({', '.join(CALL_ID_KEYS)})")
+
+	number, foreign, raw = _call_number(_first(payload, CALLER_PHONE_KEYS))
+	blocked = bool(number) and not foreign and is_blocked_number(number)
+	transcript = payload.get("interaction_transcript")
+	if isinstance(transcript, str):
+		try:
+			transcript = json.loads(transcript)
+		except ValueError:
+			pass
+	variables = payload.get("output_agent_variables")
+	if isinstance(variables, str):
+		try:
+			variables = json.loads(variables)
+		except ValueError:
+			variables = None
+	variables = variables if isinstance(variables, dict) else {}
+
+	if frappe.db.exists("CRM Call Log", interaction_id):
+		call_log = frappe.get_doc("CRM Call Log", interaction_id)
+	else:
+		call_log = frappe.new_doc("CRM Call Log")
+		call_log.id = interaction_id
+		call_log.type = "Incoming"
+		call_log.telephony_medium = "Sarvam"
+
+	call_log.set("from", number)
+	called = payload.get("agent_phone_number")
+	if called:
+		call_log.to = _canonical(called)
+
+	ctx = _resolve(number) if number and not foreign else frappe._dict(lead=None, contact=None, customer=None)
+	reason = None
+	if blocked:
+		status, reason = BLOCKED_CALL_STATUS, REASON_ON_BLOCKED_LIST
+		reference = (
+			("Customer", ctx.customer.name)
+			if ctx.customer
+			else ("Blocked Contact", frappe.db.get_value("Blocked Contact", {"mobile_no": last_10_digits(number), "enabled": 1}, "name"))
+		)
+	elif foreign:
+		status, reason = BLOCKED_CALL_STATUS, REASON_NON_INDIAN if number else f"{REASON_NON_INDIAN}: {raw}"[:140]
+		reference = (None, None)
+	else:
+		status = "No Answer" if _caller_never_spoke(payload, transcript) else "Completed"
+		if status == "Completed" and str(_first(variables, TRANSFERRED_KEYS) or "").strip().lower() in _TRUE:
+			reason = REASON_TRANSFERRED
+		if ctx.lead:
+			reference = ("CRM Lead", ctx.lead["name"])
+		elif ctx.contact:
+			reference = ("Contact", ctx.contact["name"])
+		elif ctx.customer:
+			reference = ("Customer", ctx.customer.name)
+		else:
+			# Keep a link the call-started webhook made, if any.
+			reference = (call_log.reference_doctype, call_log.reference_docname)
+	call_log.reference_doctype, call_log.reference_docname = reference if reference[1] else (None, None)
+	call_log.status = status
+	call_log.custom_status_reason = reason
+
+	start, end = _payload_datetime(payload.get("start_datetime")), _payload_datetime(payload.get("end_datetime"))
+	if start:
+		call_log.start_time = start
+	if end:
+		call_log.end_time = end
+	if payload.get("duration") not in (None, ""):
+		call_log.duration = flt(payload.get("duration"))
+	elif start and end:
+		call_log.duration = max((end - start).total_seconds(), 0)
+	if payload.get("recording_url"):
+		call_log.recording_url = payload.get("recording_url")
+
+	_link_callback_tasks(call_log, start or nowdate())
+	call_log.save(ignore_permissions=True)
+	if not call_log.reference_docname and call_log.reference_doctype:
+		# Insert re-applies the field's "CRM Lead" default - an unlinked log has no type either.
+		call_log.db_set("reference_doctype", None, update_modified=False)
+
+	apply_call_outcome(call_log, payload)
+	save_transcript_note(call_log, transcript)
+	return call_log

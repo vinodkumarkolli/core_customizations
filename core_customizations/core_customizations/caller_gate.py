@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Vinod Kumar K and contributors
 # For license information, please see license.txt
 
+import hashlib
 import hmac
 import re
 
@@ -209,6 +210,48 @@ def without_webhook_key(payload=None, headers=None):
 	return payload, headers
 
 
+_PHONE_HASH = re.compile(r"[0-9a-fA-F]{64}")
+
+# Every stored number a hashed caller could be: CRM Leads, Contacts (and their
+# phone rows), Customers - and the enabled Blocked Contacts, so a hashed
+# blocked caller is still refused.
+_KNOWN_NUMBERS_SQL = """
+	select mobile_no from `tabCRM Lead` where ifnull(mobile_no, '') != ''
+	union select phone from `tabCRM Lead` where ifnull(phone, '') != ''
+	union select mobile_no from `tabContact` where ifnull(mobile_no, '') != ''
+	union select phone from `tabContact Phone` where parenttype = 'Contact' and ifnull(phone, '') != ''
+	union select mobile_no from `tabCustomer` where ifnull(mobile_no, '') != ''
+	union select mobile_no from `tabBlocked Contact` where enabled = 1
+"""
+
+
+def _indian_mobile(raw):
+	"""+91 and ten digits for an Indian mobile in any spelling (+91, 91, 0, bare, spaces/dashes), else None."""
+	canonical = normalise((raw or "").strip())
+	return canonical if is_indian_mobile(canonical) else None
+
+
+def number_for_hash(phone_hash):
+	"""
+	Business Purpose: [BR-CRM-002] Sarvam can send the caller's number as a
+	hash - the plain SHA-256 hex digest of its E.164 form (+91 and ten
+	digits). The number is recovered by hashing that same form of every
+	number on record and returning the one that matches.
+
+	Args:
+		phone_hash (str): 64 hex characters (either case).
+
+	Returns:
+		str | None: The matching +91 number, or None when nothing on record hashes to it.
+	"""
+	wanted = (phone_hash or "").strip().lower()
+	for raw in frappe.db.sql(_KNOWN_NUMBERS_SQL, pluck=True):
+		number = _indian_mobile(raw)
+		if number and hashlib.sha256(number.encode()).hexdigest() == wanted:
+			return number
+	return None
+
+
 @frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
 def check(phone: str | None = None, key: str | None = None):
 	"""
@@ -224,19 +267,34 @@ def check(phone: str | None = None, key: str | None = None):
 	can be reused and the Apps Script retired without provisioning
 	anything new.
 
+	Also returns `phone` - the caller's number as +91 and ten digits, so the
+	agent has it for every later call: a real number is normalised; a
+	64-character hex hash (SHA-256 of the E.164 number) is looked up among
+	the numbers on record (`number_for_hash`) and the gate then judges the
+	number it matched, not the hash. Blank, an unmatched hash, or a caller
+	who isn't allowed gets `phone: ""` - the agent then asks for the number.
+
 	Args:
-		phone (str | None): The caller's number, in any format. Blank is
-			allowed (the agent should ask the caller for their number).
+		phone (str | None): The caller's number, in any format, or its
+			SHA-256 hash. Blank is allowed (the agent should ask the caller
+			for their number).
 		key (str | None): Must match `Sarvam Voice Agent Settings.webhook_secret`.
 
 	Returns:
-		dict: {allowed, reason, message} - see `evaluate`.
+		dict: {allowed, reason, message, phone} - see `evaluate`.
 
 	Raises:
 		frappe.PermissionError: If `key` doesn't match.
 	"""
 	_check_webhook_key(key)
-	return evaluate(phone)
+	raw = (phone or "").strip()
+	if _PHONE_HASH.fullmatch(raw):
+		number = number_for_hash(raw)
+		gate = evaluate(number)
+	else:
+		number = _indian_mobile(raw)
+		gate = evaluate(raw)
+	return {**gate, "phone": number if gate["allowed"] and number else ""}
 
 
 @frappe.whitelist()

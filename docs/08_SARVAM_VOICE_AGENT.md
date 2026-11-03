@@ -1,6 +1,6 @@
 # Manual 08 — Sarvam Inbound Voice Agent: Server Methods
 
-**Files**: `voice_agent.py`, `lead_address_link.py`, `sarvam_telephony.py` (`handle_inbound_webhook`), `doctype/sarvam_voice_agent_settings/`, `doctype/sarvam_transfer_executive/`, `doctype/sarvam_caller_category/`, `doctype/sarvam_pack_item/`, `patches/v1_0/seed_sarvam_voice_agent_rules.py`, `patches/v1_0/seed_sarvam_address_list_limit.py`, `tests/test_voice_agent.py`
+**Files**: `voice_agent.py`, `callbacks_dashboard.py`, `lead_address_link.py`, `sarvam_telephony.py` (`handle_inbound_webhook`), `doctype/sarvam_voice_agent_settings/`, `doctype/sarvam_transfer_executive/`, `doctype/sarvam_caller_category/`, `doctype/sarvam_pack_item/`, `patches/v1_0/seed_sarvam_voice_agent_rules.py`, `patches/v1_0/seed_sarvam_address_list_limit.py`, `tests/test_voice_agent.py`
 **Rules**: `[BR-TEL-006]`, `[BR-TEL-007]`, `[BR-CRM-004]`–`[BR-CRM-008]` (see `.agents/rules/business_blueprint.md`)
 **Sample responses**: [`docs/samples/voice_agent_samples.json`](samples/voice_agent_samples.json) — every case below, generated from real calls on the dev site (the record names in it come from a rolled-back session).
 
@@ -13,6 +13,16 @@ The "Sravi Enterprises Customer Care" agent used to run ~16 start/end-of-call to
 ## Endpoints
 
 All are `POST /api/method/core_customizations.core_customizations.voice_agent.<method>`, `allow_guest` and authenticated by `key` = `Sarvam Voice Agent Settings.webhook_secret` (same as `caller_gate.check`). Responses use the standard `{"message": {...}}` envelope.
+
+**`caller_gate.check` returns the number.** Besides `allowed` / `reason` / `message`, `check` returns **`phone`**, for the agent's `caller_phone` mapping:
+
+| `phone` sent | `phone` returned |
+|---|---|
+| A real Indian mobile in any spelling — `+91…`, `91…`, `0…`, ten bare digits, with spaces or dashes | `+91` and ten digits, e.g. `+919840456658` |
+| A 64-character hex hash — the plain SHA-256 of the E.164 number (`sha256("+919840456658")`), either case | The CRM Lead / Contact (incl. its phone rows) / Customer number whose `+91…` form hashes to it; the gate then judges **that number** (a hash used to be refused as `FOREIGN_NUMBER`). Enabled Blocked Contacts are hashed too, so a hashed blocked caller is still `BLOCKED_LIST`. |
+| Blank, an unmatched hash, a foreign or junk number, or any caller with `allowed: false` | `""` — the agent asks for the number |
+
+The hash lookup hashes every number on record per call (about 3,900 on dev, ~60 ms); nothing is cached, so a Lead created a minute ago is found.
 
 **Sending the key.** The shared secret (`Sarvam Voice Agent Settings.webhook_secret`) is accepted from the first of these that carries it — for every method here, `caller_gate.check`, and both call webhooks (`handle_inbound_webhook`, `handle_outbound_webhook`):
 
@@ -135,6 +145,8 @@ Errors:
 
 **`transfer_target`** → `open: true` with `target` (then `then[]` in order), or `open: false`, `decision: "CALLBACK"`, `reason` `OUTSIDE_HOURS` / `NOT_ON_RECORD` / `NO_EXECUTIVES`.
 
+Every allowed `transfer_target` response — open or not, whatever the `reason` — also carries **`hours_text`**, the transfer hours to say, built from Sarvam Voice Agent Settings (Transfer Open From / Until / Days), e.g. `"10 AM to 8 PM, Monday to Saturday"`. The agent says the hours from this key, never from its prompt, so a settings change changes what it says. Times drop zero minutes (`9:30 AM`, `6 PM`; midnight is `12 AM`); consecutive days become a range, others a list (`Monday, Wednesday and Friday`), all seven `every day`; 00:00–23:59 is `all day` (`"all day, every day"`). A blocked/foreign caller still gets only `{allowed, reason, message}`.
+
 ## Changes to the agent's required inputs
 
 1. **`caller_type` values** are `individual`, `retailer`, `wholesale`, `distributor` (the four spoken categories). The agent's own `caller_type` variable currently allows only direct customer / retailer / distributor — add `wholesale`, and send `individual` for a direct/personal-use caller.
@@ -146,6 +158,21 @@ Errors:
 7. **Remove** `check_transfer_hours` (timeapi.io) and `route_to_*` (httpbin); use `transfer_target`.
 8. **Remove `get_saved_addresses`.** Read `addresses` from `caller_context`, pass the chosen one as `address_name`.
 9. **Collect `city` and `pincode`** with a new caller's address so it can be saved as a real Address (`state` is optional).
+
+## Callbacks workspace (`[BR-CRM-009]`)
+
+Desk → **Callbacks** (roles Sales User, Sales Manager, System Manager) has two Number Cards:
+
+| Card | Counts | Click opens |
+|---|---|---|
+| **Callbacks Awaiting** | CRM Tasks titled `Callback: …`, owned by the Caller Gate Automation User, status Backlog / Todo / In Progress | CRM Task **Report View** with those filters |
+| **Overdue Callbacks** | the same, with a start date before today | Report View with those filters plus *Start Date < today* |
+
+- Only voice-agent callbacks: the owner filter is read from Sarvam Voice Agent Settings (not hardcoded); if it is blank, the `Callback:` title alone decides. A Task staff type by hand is not counted.
+- Moving a callback's start date to a later day takes it out of *Overdue* until that day.
+- The number is the same query the Report View runs, and respects the user's CRM Task permissions.
+- Files: `callbacks_dashboard.py`, `number_card/callbacks_awaiting`, `number_card/overdue_callbacks`, `workspace/callbacks` (standard records - created on another site by `bench migrate`), `tests/test_callbacks_dashboard.py`.
+- Not on the Frappe CRM dashboard: its cards have no click-through, and adding one means changing the CRM app itself.
 
 ## Configuration (Sarvam Voice Agent Settings)
 

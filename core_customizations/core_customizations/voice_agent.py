@@ -59,6 +59,9 @@ OPEN_TASK_STATUSES = ("Backlog", "Todo", "In Progress")
 # [BR-CRM-004] First words of a callback Task saved from a number the caller
 # spoke (save_request's `callback_number`), not the number Sarvam saw.
 CALLBACK_NUMBER_NOTE = "Callback request (number given by the caller, not the line):"
+# [BR-CRM-004] Every voice-agent callback Task's title starts with this - the
+# Callbacks workspace (callbacks_dashboard) counts Tasks by it.
+CALLBACK_TASK_TITLE_PREFIX = "Callback:"
 
 # Keys read from the call-ended webhook's `output_agent_variables`. Sarvam's
 # inbound payload shape is not yet confirmed against a real delivery (see
@@ -1230,7 +1233,7 @@ def _save_request(
 				*lines,
 			]
 		task_description = "\n".join(filter(None, lines))
-		result["task"] = _upsert_callback_task(*ref, f"Callback: {display_name or ctx.phone}", task_description)
+		result["task"] = _upsert_callback_task(*ref, f"{CALLBACK_TASK_TITLE_PREFIX} {display_name or ctx.phone}", task_description)
 
 	if result["status"] == "duplicate":
 		result["note"] = "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."
@@ -1383,10 +1386,70 @@ def _now(tz):
 	return datetime.now(tz)
 
 
+WEEK = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+DAY_NAMES = dict(zip(WEEK, ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")))
+
+
+def _transfer_days(settings):
+	return [d.strip()[:3].title() for d in (settings.transfer_days or "").split(",") if d.strip()]
+
+
+def _spoken_time(t):
+	"""10:00 -> "10 AM", 10:30 -> "10:30 AM", 00:00 -> "12 AM", 12:00 -> "12 PM"."""
+	hour = t.hour % 12 or 12
+	suffix = "AM" if t.hour < 12 else "PM"
+	return f"{hour} {suffix}" if t.minute == 0 else f"{hour}:{t.minute:02d} {suffix}"
+
+
+def _spoken_list(parts):
+	return parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])} and {parts[-1]}"
+
+
+def _spoken_days(days):
+	"""
+	Consecutive days collapse into a range ("Monday to Saturday"), others are
+	listed ("Monday, Wednesday and Friday"); all seven are "every day".
+	"""
+	present = [d for d in WEEK if d in set(days)]
+	if not present:
+		return ""
+	if len(present) == len(WEEK):
+		return "every day"
+	runs, run = [], [present[0]]
+	for day in present[1:]:
+		if WEEK.index(day) == WEEK.index(run[-1]) + 1:
+			run.append(day)
+		else:
+			runs.append(run)
+			run = [day]
+	runs.append(run)
+	parts = []
+	for r in runs:
+		if len(r) >= 3:
+			parts.append(f"{DAY_NAMES[r[0]]} to {DAY_NAMES[r[-1]]}")
+		else:
+			parts.extend(DAY_NAMES[d] for d in r)
+	return _spoken_list(parts)
+
+
+def _hours_text(settings):
+	"""
+	[BR-TEL-006] The transfer hours as the agent says them - "10 AM to 8 PM,
+	Monday to Saturday" - built from the settings, so a change there changes
+	what the agent says. 00:00 to 23:59 is "all day".
+	"""
+	start = get_time(settings.transfer_start_time or "00:00:00")
+	end = get_time(settings.transfer_end_time or "23:59:59")
+	all_day = (start.hour, start.minute) == (0, 0) and (end.hour, end.minute) == (23, 59)
+	times = "all day" if all_day else f"{_spoken_time(start)} to {_spoken_time(end)}"
+	days = _spoken_days(_transfer_days(settings))
+	return f"{times}, {days}" if days else times
+
+
 def _transfer_window_open(settings):
 	tz = ZoneInfo(settings.transfer_timezone or "Asia/Kolkata")
 	now = _now(tz)
-	days = [d.strip()[:3].title() for d in (settings.transfer_days or "").split(",") if d.strip()]
+	days = _transfer_days(settings)
 	if now.strftime("%a") not in days:
 		return False, now
 	start = get_time(settings.transfer_start_time or "00:00:00")
@@ -1405,8 +1468,11 @@ def transfer_target(phone: str | None = None, key: str | None = None):
 
 	Returns:
 		dict: {allowed, open, target, target_name, then: [...], reason,
-		decision}. When `open` is false, `decision` is "CALLBACK" and
-		`reason` is OUTSIDE_HOURS / NOT_ON_RECORD / NO_EXECUTIVES.
+		decision, hours_text}. When `open` is false, `decision` is "CALLBACK"
+		and `reason` is OUTSIDE_HOURS / NOT_ON_RECORD / NO_EXECUTIVES.
+		`hours_text` (the transfer hours to say, e.g. "10 AM to 8 PM, Monday
+		to Saturday") is on every allowed response; a blocked/foreign caller
+		gets only the gate's {allowed, reason, message}.
 	"""
 	_check_webhook_key(key)
 	gate = evaluate(phone)
@@ -1414,7 +1480,11 @@ def transfer_target(phone: str | None = None, key: str | None = None):
 		return gate
 
 	settings = _settings()
-	closed = {"allowed": True, "open": False, "target": None, "target_name": None, "then": [], "decision": "CALLBACK"}
+	hours_text = _hours_text(settings)
+	closed = {
+		"allowed": True, "open": False, "target": None, "target_name": None, "then": [], "decision": "CALLBACK",
+		"hours_text": hours_text,
+	}
 
 	is_open, now = _transfer_window_open(settings)
 	if not is_open:
@@ -1439,6 +1509,7 @@ def transfer_target(phone: str | None = None, key: str | None = None):
 		"then_names": [e.executive_name for e in executives[1:]],
 		"reason": None,
 		"decision": "TRANSFER",
+		"hours_text": hours_text,
 	}
 
 

@@ -59,6 +59,9 @@ OPEN_TASK_STATUSES = ("Backlog", "Todo", "In Progress")
 # [BR-CRM-004] First words of a callback Task saved from a number the caller
 # spoke (save_request's `callback_number`), not the number Sarvam saw.
 CALLBACK_NUMBER_NOTE = "Callback request (number given by the caller, not the line):"
+# [BR-CRM-004] Every voice-agent callback Task's title starts with this - the
+# Callbacks workspace (callbacks_dashboard) counts Tasks by it.
+CALLBACK_TASK_TITLE_PREFIX = "Callback:"
 
 # Keys read from the call-ended webhook's `output_agent_variables`. Sarvam's
 # inbound payload shape is not yet confirmed against a real delivery (see
@@ -1230,7 +1233,7 @@ def _save_request(
 				*lines,
 			]
 		task_description = "\n".join(filter(None, lines))
-		result["task"] = _upsert_callback_task(*ref, f"Callback: {display_name or ctx.phone}", task_description)
+		result["task"] = _upsert_callback_task(*ref, f"{CALLBACK_TASK_TITLE_PREFIX} {display_name or ctx.phone}", task_description)
 
 	if result["status"] == "duplicate":
 		result["note"] = "A lead already exists for this number - a new lead was not created; the request was added to the existing lead."

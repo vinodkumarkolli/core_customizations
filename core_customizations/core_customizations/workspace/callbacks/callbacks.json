@@ -1,0 +1,49 @@
+{
+ "charts": [],
+ "content": "[{\"id\": \"cbHeader01\", \"type\": \"header\", \"data\": {\"text\": \"\\u003cspan class=\\\"h4\\\"\\u003e\\u003cb\\u003eVoice agent callback requests\\u003c/b\\u003e\\u003c/span\\u003e\", \"col\": 12}}, {\"id\": \"cbAwait001\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Callbacks Awaiting\", \"col\": 4}}, {\"id\": \"cbOverdue1\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Overdue Callbacks\", \"col\": 4}}]",
+ "creation": "2026-11-04 01:40:11.432079",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "phone-call",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Callbacks",
+ "link_type": "DocType",
+ "links": [],
+ "modified": "2026-11-04 01:40:11.432079",
+ "modified_by": "Administrator",
+ "module": "Core Customizations",
+ "name": "Callbacks",
+ "number_cards": [
+  {
+   "label": "Callbacks Awaiting",
+   "number_card_name": "Callbacks Awaiting"
+  },
+  {
+   "label": "Overdue Callbacks",
+   "number_card_name": "Overdue Callbacks"
+  }
+ ],
+ "owner": "Administrator",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Sales User"
+  },
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 0.0,
+ "shortcuts": [],
+ "standard": 1,
+ "title": "Callbacks",
+ "type": "Workspace"
+}

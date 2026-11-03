@@ -1,6 +1,6 @@
 # Manual 08 — Sarvam Inbound Voice Agent: Server Methods
 
-**Files**: `voice_agent.py`, `lead_address_link.py`, `sarvam_telephony.py` (`handle_inbound_webhook`), `doctype/sarvam_voice_agent_settings/`, `doctype/sarvam_transfer_executive/`, `doctype/sarvam_caller_category/`, `doctype/sarvam_pack_item/`, `patches/v1_0/seed_sarvam_voice_agent_rules.py`, `patches/v1_0/seed_sarvam_address_list_limit.py`, `tests/test_voice_agent.py`
+**Files**: `voice_agent.py`, `callbacks_dashboard.py`, `lead_address_link.py`, `sarvam_telephony.py` (`handle_inbound_webhook`), `doctype/sarvam_voice_agent_settings/`, `doctype/sarvam_transfer_executive/`, `doctype/sarvam_caller_category/`, `doctype/sarvam_pack_item/`, `patches/v1_0/seed_sarvam_voice_agent_rules.py`, `patches/v1_0/seed_sarvam_address_list_limit.py`, `tests/test_voice_agent.py`
 **Rules**: `[BR-TEL-006]`, `[BR-TEL-007]`, `[BR-CRM-004]`–`[BR-CRM-008]` (see `.agents/rules/business_blueprint.md`)
 **Sample responses**: [`docs/samples/voice_agent_samples.json`](samples/voice_agent_samples.json) — every case below, generated from real calls on the dev site (the record names in it come from a rolled-back session).
 
@@ -148,6 +148,21 @@ Every allowed `transfer_target` response — open or not, whatever the `reason` 
 7. **Remove** `check_transfer_hours` (timeapi.io) and `route_to_*` (httpbin); use `transfer_target`.
 8. **Remove `get_saved_addresses`.** Read `addresses` from `caller_context`, pass the chosen one as `address_name`.
 9. **Collect `city` and `pincode`** with a new caller's address so it can be saved as a real Address (`state` is optional).
+
+## Callbacks workspace (`[BR-CRM-009]`)
+
+Desk → **Callbacks** (roles Sales User, Sales Manager, System Manager) has two Number Cards:
+
+| Card | Counts | Click opens |
+|---|---|---|
+| **Callbacks Awaiting** | CRM Tasks titled `Callback: …`, owned by the Caller Gate Automation User, status Backlog / Todo / In Progress | CRM Task **Report View** with those filters |
+| **Overdue Callbacks** | the same, with a start date before today | Report View with those filters plus *Start Date < today* |
+
+- Only voice-agent callbacks: the owner filter is read from Sarvam Voice Agent Settings (not hardcoded); if it is blank, the `Callback:` title alone decides. A Task staff type by hand is not counted.
+- Moving a callback's start date to a later day takes it out of *Overdue* until that day.
+- The number is the same query the Report View runs, and respects the user's CRM Task permissions.
+- Files: `callbacks_dashboard.py`, `number_card/callbacks_awaiting`, `number_card/overdue_callbacks`, `workspace/callbacks` (standard records - created on another site by `bench migrate`), `tests/test_callbacks_dashboard.py`.
+- Not on the Frappe CRM dashboard: its cards have no click-through, and adding one means changing the CRM app itself.
 
 ## Configuration (Sarvam Voice Agent Settings)
 

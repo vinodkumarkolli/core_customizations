@@ -96,8 +96,61 @@ class TestCallbacksDashboard(FrappeTestCase):
 		self.assertEqual(self._counts()[0], awaiting + 1)
 
 	def test_desk_records_point_at_these_methods(self):
-		for card, method in (("Callbacks Awaiting", "callbacks_awaiting"), ("Overdue Callbacks", "overdue_callbacks")):
+		for card, method in (
+			("Callbacks Awaiting", "callbacks_awaiting"),
+			("Overdue Callbacks", "overdue_callbacks"),
+			("Live Agent Answered", "live_agent_answered_calls"),
+			("Resolved by Sarvam", "resolved_by_sarvam_calls"),
+			("Blocked Calls", "blocked_calls"),
+		):
 			doc = frappe.get_doc("Number Card", card)
 			self.assertEqual((doc.type, doc.method), ("Custom", f"core_customizations.core_customizations.callbacks_dashboard.{method}"))
 		workspace = frappe.get_doc("Workspace", "Callbacks")
-		self.assertEqual({c.number_card_name for c in workspace.number_cards}, {"Callbacks Awaiting", "Overdue Callbacks"})
+		self.assertEqual(
+			{c.number_card_name for c in workspace.number_cards},
+			{"Callbacks Awaiting", "Overdue Callbacks", "Live Agent Answered", "Resolved by Sarvam", "Blocked Calls"},
+		)
+
+	# --- voice-agent call outcomes [BR-CRM-010] ------------------------------
+
+	def _call(self, status, reason=None, call_type="Incoming", medium="Sarvam"):
+		log = frappe.get_doc(
+			{"doctype": "CRM Call Log", "id": frappe.generate_hash(length=12), "type": call_type, "telephony_medium": medium,
+			 "from": "+917000001301", "to": "+918064276261", "status": status, "custom_status_reason": reason}
+		).insert(ignore_permissions=True)
+		return log.name
+
+	def _call_counts(self):
+		return (cd.live_agent_answered_calls()["value"], cd.resolved_by_sarvam_calls()["value"], cd.blocked_calls()["value"])
+
+	def test_calls_are_counted_by_how_they_ended(self):
+		live, sarvam, blocked = self._call_counts()
+		self._call("Completed", "transferred")
+		self._call("Completed")
+		self._call("Completed")
+		self._call("Blocked", "on blocked list")
+		self._call("Blocked", "non-Indian number")
+		# Not counted anywhere: missed, outgoing, another medium.
+		self._call("No Answer")
+		self._call("Completed", call_type="Outgoing")
+		self._call("Completed", medium="Manual")
+		self.assertEqual(self._call_counts(), (live + 1, sarvam + 2, blocked + 2))
+
+	def test_last_months_calls_are_not_counted(self):
+		before = self._call_counts()
+		name = self._call("Completed")
+		frappe.db.set_value("CRM Call Log", name, "creation", frappe.utils.add_months(frappe.utils.now_datetime(), -1).replace(day=1))
+		self.assertEqual(self._call_counts(), before)
+
+	def test_call_cards_open_the_call_log_report_view(self):
+		for card, outcome in (
+			(cd.live_agent_answered_calls(), "live_agent"),
+			(cd.resolved_by_sarvam_calls(), "sarvam"),
+			(cd.blocked_calls(), "blocked"),
+		):
+			with self.subTest(outcome=outcome):
+				self.assertEqual(card["route"], ["List", "CRM Call Log", "Report"])
+				self.assertEqual(card["route_options"], cd.call_filters(outcome))
+				self.assertEqual(card["route_options"]["creation"], ["Timespan", "this month"])
+				count = len(frappe.get_list("CRM Call Log", filters=card["route_options"], pluck="name", limit_page_length=0))
+				self.assertEqual(card["value"], count)

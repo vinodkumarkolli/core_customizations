@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\": \"cbHeader01\", \"type\": \"header\", \"data\": {\"text\": \"\\u003cspan class=\\\"h4\\\"\\u003e\\u003cb\\u003eVoice agent callback requests\\u003c/b\\u003e\\u003c/span\\u003e\", \"col\": 12}}, {\"id\": \"cbAwait001\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Callbacks Awaiting\", \"col\": 4}}, {\"id\": \"cbOverdue1\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Overdue Callbacks\", \"col\": 4}}]",
+ "content": "[{\"id\": \"cbHeader01\", \"type\": \"header\", \"data\": {\"text\": \"\\u003cspan class=\\\"h4\\\"\\u003e\\u003cb\\u003eVoice agent callback requests\\u003c/b\\u003e\\u003c/span\\u003e\", \"col\": 12}}, {\"id\": \"cbAwait001\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Callbacks Awaiting\", \"col\": 4}}, {\"id\": \"cbOverdue1\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Overdue Callbacks\", \"col\": 4}}, {\"id\": \"callsHead01\", \"type\": \"header\", \"data\": {\"text\": \"\\u003cspan class=\\\"h4\\\"\\u003e\\u003cb\\u003eVoice agent calls this month\\u003c/b\\u003e\\u003c/span\\u003e\", \"col\": 12}}, {\"id\": \"callsCard00\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Live Agent Answered\", \"col\": 4}}, {\"id\": \"callsCard01\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Resolved by Sarvam\", \"col\": 4}}, {\"id\": \"callsCard02\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Blocked Calls\", \"col\": 4}}]",
  "creation": "2026-11-04 01:40:11.432079",
  "custom_blocks": [],
  "docstatus": 0,
@@ -13,7 +13,7 @@
  "label": "Callbacks",
  "link_type": "DocType",
  "links": [],
- "modified": "2026-11-04 01:40:11.432079",
+ "modified": "2026-11-04 02:53:39.148116",
  "modified_by": "Administrator",
  "module": "Core Customizations",
  "name": "Callbacks",
@@ -25,6 +25,18 @@
   {
    "label": "Overdue Callbacks",
    "number_card_name": "Overdue Callbacks"
+  },
+  {
+   "label": "Live Agent Answered",
+   "number_card_name": "Live Agent Answered"
+  },
+  {
+   "label": "Resolved by Sarvam",
+   "number_card_name": "Resolved by Sarvam"
+  },
+  {
+   "label": "Blocked Calls",
+   "number_card_name": "Blocked Calls"
   }
  ],
  "owner": "Administrator",

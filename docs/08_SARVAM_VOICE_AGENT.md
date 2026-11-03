@@ -203,8 +203,18 @@ Desk → **Callbacks** (roles Sales User, Sales Manager, System Manager) has two
 - Only voice-agent callbacks: the owner filter is read from Sarvam Voice Agent Settings (not hardcoded); if it is blank, the `Callback:` title alone decides. A Task staff type by hand is not counted.
 - Moving a callback's start date to a later day takes it out of *Overdue* until that day.
 - The number is the same query the Report View runs, and respects the user's CRM Task permissions.
-- Files: `callbacks_dashboard.py`, `number_card/callbacks_awaiting`, `number_card/overdue_callbacks`, `workspace/callbacks` (standard records - created on another site by `bench migrate`), `tests/test_callbacks_dashboard.py`.
+- Files: `callbacks_dashboard.py`, `number_card/callbacks_awaiting`, `number_card/overdue_callbacks`, `number_card/live_agent_answered`, `number_card/resolved_by_sarvam`, `number_card/blocked_calls`, `workspace/callbacks` (standard records - created on another site by `bench migrate`), `tests/test_callbacks_dashboard.py`.
 - Not on the Frappe CRM dashboard: its cards have no click-through, and adding one means changing the CRM app itself.
+
+**Voice agent calls this month (`[BR-CRM-010]`)** — three more cards on the same workspace, counting CRM Call Logs of type Incoming, medium Sarvam, created this month (each opens the CRM Call Log Report View with its filters):
+
+| Card | Counts |
+|---|---|
+| **Live Agent Answered** | status Completed, Status Reason `transferred` — the agent handed the call to a person (needs the agent's `transferred` output variable) |
+| **Resolved by Sarvam** | status Completed, no Status Reason — the agent handled the call itself |
+| **Blocked Calls** | status Blocked — blocked list or non-Indian number |
+
+Missed calls (No Answer — the caller never spoke) are in none of the three.
 
 ## Configuration (Sarvam Voice Agent Settings)
 

@@ -1309,18 +1309,19 @@
    "message": {
     "allowed": true,
     "open": true,
-    "target": "+918248207671",
-    "target_name": "Kalpana",
+    "target": "+916399962999",
+    "target_name": "Vinod",
     "then": [
-     "+918106557040",
-     "+918122586261"
+     "+918248207671",
+     "+918106557040"
     ],
     "then_names": [
-     "Sravya",
-     "Vinod"
+     "Kalpana",
+     "Sravya"
     ],
     "reason": null,
-    "decision": "TRANSFER"
+    "decision": "TRANSFER",
+    "hours_text": "10 AM to 8 PM, Monday to Saturday"
    }
   },
   "unknown_caller_in_hours": {
@@ -1331,6 +1332,7 @@
     "target_name": null,
     "then": [],
     "decision": "CALLBACK",
+    "hours_text": "10 AM to 8 PM, Monday to Saturday",
     "reason": "NOT_ON_RECORD"
    }
   },
@@ -1349,8 +1351,22 @@
     "target_name": null,
     "then": [],
     "decision": "CALLBACK",
+    "hours_text": "10 AM to 8 PM, Monday to Saturday",
     "reason": "OUTSIDE_HOURS",
     "checked_at": "2026-11-08T12:00+05:30"
+   }
+  },
+  "after_hours": {
+   "message": {
+    "allowed": true,
+    "open": false,
+    "target": null,
+    "target_name": null,
+    "then": [],
+    "decision": "CALLBACK",
+    "hours_text": "10 AM to 8 PM, Monday to Saturday",
+    "reason": "OUTSIDE_HOURS",
+    "checked_at": "2026-11-03T20:30+05:30"
    }
   }
  }

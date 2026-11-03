@@ -172,7 +172,7 @@ class TestVoiceAgent(FrappeTestCase):
 	@classmethod
 	def _pin_settings(cls):
 		"""
-		Caller Categories and Pack Items as the seed patch sets them, whatever
+		Caller Categories, Pack Items and the transfer window as the seed patch sets them, whatever
 		the site's own settings currently hold (staff edit them) - written in
 		this class's transaction, so the class rollback restores the site's.
 		"""
@@ -185,6 +185,17 @@ class TestVoiceAgent(FrappeTestCase):
 		settings.pack_items = []
 		for item_code, group, rule in PACK_ITEMS:
 			settings.append("pack_items", {"item_code": item_code, "customer_group": group, "shipping_rule": rule})
+		# The transfer window as seeded (10:00-20:00, Mon-Sat, IST, callers on
+		# record only) - dev's own window is edited for test calls.
+		settings.update(
+			{
+				"transfer_start_time": "10:00:00",
+				"transfer_end_time": "20:00:00",
+				"transfer_days": "Mon,Tue,Wed,Thu,Fri,Sat",
+				"transfer_timezone": "Asia/Kolkata",
+				"transfer_known_callers_only": 1,
+			}
+		)
 		settings.flags.ignore_mandatory = True
 		settings.save(ignore_permissions=True)
 
@@ -557,6 +568,48 @@ class TestVoiceAgent(FrappeTestCase):
 	def test_transfer_refused_for_unknown_caller(self):
 		result = self._transfer(UNKNOWN, _ist(2026, 11, 3, 11, 0))
 		self.assertEqual((result["open"], result["reason"]), (False, "NOT_ON_RECORD"))
+
+	def _set_window(self, start, end, days):
+		frappe.db.set_single_value(
+			SARVAM_SETTINGS_DOCTYPE, {"transfer_start_time": start, "transfer_end_time": end, "transfer_days": days}
+		)
+		frappe.clear_document_cache(SARVAM_SETTINGS_DOCTYPE, SARVAM_SETTINGS_DOCTYPE)
+
+	def test_hours_text_follows_the_settings(self):
+		for start, end, days, expected in (
+			("10:00:00", "20:00:00", "Mon,Tue,Wed,Thu,Fri,Sat", "10 AM to 8 PM, Monday to Saturday"),
+			("09:30:00", "18:00:00", "Mon,Tue,Wed,Thu,Fri", "9:30 AM to 6 PM, Monday to Friday"),
+			("00:00:00", "23:59:00", "Mon,Tue,Wed,Thu,Fri,Sat,Sun", "all day, every day"),
+			("00:00:00", "23:59:59", "Mon,Wed,Fri", "all day, Monday, Wednesday and Friday"),
+			("00:00:00", "20:00:00", "Mon,Tue,Wed,Thu,Fri,Sat", "12 AM to 8 PM, Monday to Saturday"),
+			("12:00:00", "17:45:00", "Sat,Sun", "12 PM to 5:45 PM, Saturday and Sunday"),
+			("10:00:00", "19:00:00", "Mon,Tue,Wed,Fri,Sat", "10 AM to 7 PM, Monday to Wednesday, Friday and Saturday"),
+		):
+			with self.subTest(expected=expected):
+				self._set_window(start, end, days)
+				self.assertEqual(va._hours_text(frappe.get_single(SARVAM_SETTINGS_DOCTYPE)), expected)
+
+	def test_hours_text_is_on_every_transfer_response(self):
+		self._set_window("09:30:00", "18:00:00", "Mon,Tue,Wed,Thu,Fri")
+		expected = "9:30 AM to 6 PM, Monday to Friday"
+		cases = {
+			"open": (LEAD_ONLY, _ist(2026, 11, 3, 11, 0)),
+			"OUTSIDE_HOURS": (LEAD_ONLY, _ist(2026, 11, 3, 19, 0)),
+			"NOT_ON_RECORD": (UNKNOWN, _ist(2026, 11, 3, 11, 0)),
+			"no phone": ("", _ist(2026, 11, 3, 11, 0)),
+		}
+		for case, (phone, when) in cases.items():
+			with self.subTest(case=case):
+				self.assertEqual(self._transfer(phone, when)["hours_text"], expected)
+		for row in frappe.get_single(SARVAM_SETTINGS_DOCTYPE).transfer_executives:
+			frappe.db.set_value("Sarvam Transfer Executive", row.name, "enabled", 0)
+		frappe.clear_document_cache(SARVAM_SETTINGS_DOCTYPE, SARVAM_SETTINGS_DOCTYPE)
+		result = self._transfer(LEAD_ONLY, _ist(2026, 11, 3, 11, 0))
+		self.assertEqual((result["reason"], result["hours_text"]), ("NO_EXECUTIVES", expected))
+
+	def test_blocked_caller_gets_no_hours_text(self):
+		result = self._transfer(BLOCKED, _ist(2026, 11, 3, 11, 0))
+		self.assertEqual(set(result), {"allowed", "reason", "message"})
 
 	# --- call ended -----------------------------------------------------------
 

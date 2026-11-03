@@ -135,6 +135,8 @@ Errors:
 
 **`transfer_target`** → `open: true` with `target` (then `then[]` in order), or `open: false`, `decision: "CALLBACK"`, `reason` `OUTSIDE_HOURS` / `NOT_ON_RECORD` / `NO_EXECUTIVES`.
 
+Every allowed `transfer_target` response — open or not, whatever the `reason` — also carries **`hours_text`**, the transfer hours to say, built from Sarvam Voice Agent Settings (Transfer Open From / Until / Days), e.g. `"10 AM to 8 PM, Monday to Saturday"`. The agent says the hours from this key, never from its prompt, so a settings change changes what it says. Times drop zero minutes (`9:30 AM`, `6 PM`; midnight is `12 AM`); consecutive days become a range, others a list (`Monday, Wednesday and Friday`), all seven `every day`; 00:00–23:59 is `all day` (`"all day, every day"`). A blocked/foreign caller still gets only `{allowed, reason, message}`.
+
 ## Changes to the agent's required inputs
 
 1. **`caller_type` values** are `individual`, `retailer`, `wholesale`, `distributor` (the four spoken categories). The agent's own `caller_type` variable currently allows only direct customer / retailer / distributor — add `wholesale`, and send `individual` for a direct/personal-use caller.

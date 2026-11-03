@@ -59,10 +59,12 @@ THREE_ADDRESS_CUSTOMER = "+917000001111"
 CONVERTING_CALLER = "+917000001112"
 TWIN_SEED = "+917000001113"
 OTHER_LEAD = "+917000001114"
+CONTACTLESS_CUSTOMER = "+917000001115"  # a Customer found by its own mobile_no, no Contact
 
 TEST_NUMBERS = [
 	BLOCKED, UNKNOWN, LEAD_ONLY, CUSTOMER_ONLY, LEAD_AND_CUSTOMER, LEGACY_SPACED_CALLER, COMMERCIAL_CUSTOMER,
 	NEW_CALLER, NO_ADDRESS_CUSTOMER, THREE_ADDRESS_CUSTOMER, CONVERTING_CALLER, TWIN_SEED, OTHER_LEAD,
+	CONTACTLESS_CUSTOMER,
 ]
 ADDRESS_KEYS = {
 	"name", "address_title", "address_type", "address_line1", "address_line2", "city", "state", "pincode",
@@ -1001,3 +1003,71 @@ class TestVoiceAgent(FrappeTestCase):
 		self.assertFalse(frappe.db.exists("Quotation", {"party_name": self.commercial}), "no items -> no quote")
 		with_items = va.save_request(phone=COMMERCIAL_CUSTOMER, key=KEY, items=[{"item_code": LOOSE, "qty": 2}])
 		self._assert_list(with_items["quote"], "VA Unit Customer List", 40, "customer")
+
+	# --- one quote path = one deal [BR-CRM-004] -------------------------------
+
+	def _deals_for(self, *names):
+		return frappe.db.count("CRM Deal", {"name": ("in", names)}) if names else 0
+
+	def _new_deals_since(self, before):
+		return frappe.get_all("CRM Deal", {"creation": (">=", before)}, pluck="name")
+
+	def test_upsert_quote_then_save_request_reuse_the_deal(self):
+		before = frappe.utils.now()
+		items = [{"item_code": PACK, "qty": 1}]
+		quote = va.upsert_quote(phone=CUSTOMER_ONLY, key=KEY, items=items)
+		saved = va.save_request(phone=CUSTOMER_ONLY, key=KEY, items=items)
+		self.assertEqual(quote["status"], "quoted", quote)
+		self.assertEqual((saved["deal"], saved["quote"]["deal"]), (quote["deal"], quote["deal"]))
+		self.assertEqual(saved["quotation"], quote["quotation"])
+		self.assertEqual(self._new_deals_since(before), [quote["deal"]])
+		self.assertEqual(frappe.db.count("Quotation", {"party_name": self.customer_only, "docstatus": 0}), 1)
+		contacts = frappe.get_all("CRM Contacts", {"parenttype": "CRM Deal", "parent": quote["deal"]}, pluck="contact")
+		self.assertEqual(len(contacts), 1, "the caller's Contact is the Deal's primary contact")
+		self.assertEqual(frappe.db.get_value("CRM Deal", quote["deal"], "mobile_no")[-10:], CUSTOMER_ONLY[-10:])
+
+	def test_save_request_alone_makes_one_deal_and_one_quotation(self):
+		before = frappe.utils.now()
+		saved = va.save_request(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}])
+		again = va.save_request(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}])
+		self.assertEqual(self._new_deals_since(before), [saved["deal"]])
+		self.assertEqual((again["deal"], again["quotation"]), (saved["deal"], saved["quotation"]))
+		self.assertEqual(frappe.db.count("Quotation", {"party_name": self.customer_only, "docstatus": 0}), 1)
+
+	def test_a_second_quote_the_same_day_updates_the_same_draft_and_deal(self):
+		before = frappe.utils.now()
+		first = va.upsert_quote(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": PACK, "qty": 1}])
+		second = va.save_request(phone=CUSTOMER_ONLY, key=KEY, items=[{"item_code": "SASB-50INR-PACK-4", "qty": 2}])
+		self.assertEqual((second["deal"], second["quotation"]), (first["deal"], first["quotation"]))
+		self.assertEqual(self._new_deals_since(before), [first["deal"]])
+		items = frappe.get_all("Quotation Item", {"parent": first["quotation"]}, ["item_code", "qty"])
+		self.assertEqual([(i.item_code, i.qty) for i in items], [("SASB-50INR-PACK-4", 2)], "the later quote replaces the items")
+
+	def test_customer_without_items_reuses_the_deal_and_task(self):
+		before = frappe.utils.now()
+		first = va.save_request(phone=CUSTOMER_ONLY, key=KEY, notes="Call me")
+		second = va.save_request(phone=CUSTOMER_ONLY, key=KEY, notes="Call me back please")
+		self.assertEqual((second["deal"], second["task"]), (first["deal"], first["task"]))
+		self.assertEqual(self._new_deals_since(before), [first["deal"]])
+
+	def test_customer_with_no_contact_reuses_the_deal(self):
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "VA Unit Contactless Customer", "customer_group": "Individual",
+			 "customer_type": "Individual", "default_price_list": "Standard Selling", "gst_category": "Unregistered"}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value("Customer", customer.name, "mobile_no", CONTACTLESS_CUSTOMER)
+		before = frappe.utils.now()
+		first = va.save_request(phone=CONTACTLESS_CUSTOMER, key=KEY, notes="Call me")
+		second = va.save_request(phone=CONTACTLESS_CUSTOMER, key=KEY, notes="Call me again")
+		self.assertTrue(first["deal"])
+		self.assertEqual(second["deal"], first["deal"])
+		self.assertEqual(self._new_deals_since(before), [first["deal"]])
+		self.assertEqual(frappe.db.get_value("CRM Deal", first["deal"], "mobile_no"), CONTACTLESS_CUSTOMER)
+
+	def test_lead_upsert_quote_then_save_request_reuse_the_deal(self):
+		before = frappe.utils.now()
+		items = [{"item_code": PACK, "qty": 1}]
+		quote = va.upsert_quote(phone=LEAD_ONLY, key=KEY, items=items)
+		saved = va.save_request(phone=LEAD_ONLY, key=KEY, items=items)
+		self.assertEqual((saved["deal"], saved["quotation"]), (quote["deal"], quote["quotation"]))
+		self.assertEqual(self._new_deals_since(before), [quote["deal"]])

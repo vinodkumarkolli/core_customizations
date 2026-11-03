@@ -521,30 +521,54 @@ def _quote_company():
 
 
 def _open_deal(ctx):
+	"""
+	[BR-CRM-004] The caller's newest open CRM Deal: for a caller with a CRM
+	Lead, the Deal of that Lead; otherwise a Deal whose number is the
+	caller's, or that has the caller's Contact in its Contacts table.
+
+	CRM Deal takes `mobile_no` from its primary Contact on every save (blank
+	when it has none), so a Customer's Deal is found through its Contact row
+	first - matching on `mobile_no` alone missed every Deal created without a
+	Contact, and each later quote or save opened another one.
+	"""
 	filters = {"status": ("not in", CLOSED_DEAL_STATUSES)}
 	if ctx.lead:
 		filters["lead"] = ctx.lead["name"]
 		return frappe.db.get_value("CRM Deal", filters, "name", order_by="creation desc")
-	last10 = last_10_digits(ctx.phone)
 	rows = frappe.db.sql(
-		f"""select name from `tabCRM Deal` where status not in %(closed)s and {_match_sql('mobile_no')}
-		    order by creation desc limit 1""",
-		{"last10": last10, "closed": CLOSED_DEAL_STATUSES},
+		f"""select d.name from `tabCRM Deal` d
+		    where d.status not in %(closed)s
+		      and ({_match_sql('d.mobile_no')}
+		           or exists (select 1 from `tabCRM Contacts` cc
+		                      where cc.parenttype = 'CRM Deal' and cc.parent = d.name and cc.contact = %(contact)s))
+		    order by d.creation desc limit 1""",
+		{
+			"last10": last_10_digits(ctx.phone),
+			"contact": ctx.contact.name if ctx.contact else "",
+			"closed": CLOSED_DEAL_STATUSES,
+		},
 		pluck=True,
 	)
 	return rows[0] if rows else None
 
 
 def _get_or_create_deal(ctx):
-	"""[BR-CRM-004] Reuses the caller's open CRM Deal; creates one only when none is open."""
+	"""
+	[BR-CRM-004] Reuses the caller's open CRM Deal; creates one only when none
+	is open. A new Deal gets the caller's Contact as its primary contact (so
+	CRM shows the caller and fills the Deal's number from it); a caller with
+	no Contact has the number written onto the Deal directly, since CRM
+	Deal's own validate blanks `mobile_no` when there is no Contact.
+	"""
 	existing = _open_deal(ctx)
 	if existing:
 		return existing, False
 	deal = {
 		"doctype": "CRM Deal",
 		"status": _settings().deal_status or "Qualification",
-		"mobile_no": ctx.phone,
 	}
+	if ctx.contact:
+		deal["contacts"] = [{"contact": ctx.contact.name, "is_primary": 1}]
 	if ctx.lead:
 		deal.update(lead=ctx.lead["name"], lead_name=ctx.lead.get("lead_name"))
 	if ctx.customer and frappe.db.exists("CRM Organization", ctx.customer.customer_name):
@@ -552,6 +576,8 @@ def _get_or_create_deal(ctx):
 	elif ctx.customer:
 		deal["lead_name"] = ctx.customer.customer_name
 	doc = frappe.get_doc(deal).insert(ignore_permissions=True)
+	if not last_10_digits(doc.mobile_no) and last_10_digits(ctx.phone):
+		frappe.db.set_value("CRM Deal", doc.name, "mobile_no", ctx.phone, update_modified=False)
 	return doc.name, True
 
 

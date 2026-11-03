@@ -119,6 +119,8 @@ Errors:
 | `blocked` | Caller is blocked/foreign (or became so mid-call — the `CALLER_BLOCKED:` guard fired); nothing saved |
 | `error` | `NAME_REQUIRED`, `PHONE_REQUIRED`, `INVALID_ITEMS`, `ADDRESS_NOT_ON_RECORD` or `ADDRESS_INVALID` — nothing was saved; ask and retry |
 
+**One deal per caller.** `upsert_quote` and `save_request` share the caller's open CRM Deal — the Deal of their CRM Lead, or for a Customer the open Deal that has their Contact in its Contacts table (or, with no Contact, their number). A new Deal gets the caller's Contact as its primary contact (CRM Deal takes its `mobile_no` from that and blanks it without one, which is why a Customer's quote used to open a new Deal every time). The same day, a second quote — even for different items — updates the same draft Quotation (its items are replaced) on the same Deal; a callback Task is likewise one per record per day.
+
 `warnings` may carry `CUSTOMER_GROUP_NEEDS_REVIEW: <category>` / `UNKNOWN_CATEGORY: <value>` (only for a caller with **no Customer**, or a Customer whose group isn't mapped in Caller Categories — an existing Customer with a mapped group, e.g. Mahaveer → Commercial → wholesale, is already classified and never warned) or `ADDRESS_NOT_SAVED: missing city` — informational, also written on the Task for the team.
 
 **`transfer_target`** → `open: true` with `target` (then `then[]` in order), or `open: false`, `decision: "CALLBACK"`, `reason` `OUTSIDE_HOURS` / `NOT_ON_RECORD` / `NO_EXECUTIVES`.

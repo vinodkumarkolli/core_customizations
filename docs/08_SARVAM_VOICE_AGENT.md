@@ -57,7 +57,7 @@ Every method first runs `caller_gate.evaluate(phone)`. A blocked or foreign call
 | `call_started` (webhook) | `check_blocked`, `lookup_caller_lead`, `lookup_caller_contact`, `lookup_lead_organization`, `lookup_contact_customer`, `fetch_caller_preferences`, `fetch_user_metadata`, `create_call_log`, `get_saved_addresses` | Sarvam's call-start payload: `user_phone_number`, `interaction_id`, `agent_phone_number`; `key` in the query string |
 | `caller_context` | same as above, as a tool instead of a webhook | `phone`, `key`, `call_id` (optional — Sarvam's `interaction_id`) |
 | `get_caller_preferences` / `set_caller_preferences` | `fetch_caller_preferences` | `phone`, `key`; set also takes `preferences` (JSON object) and `merge` (default 1) |
-| `upsert_quote` | the agent's own price/tax/shipping arithmetic | `phone`, `key`, `items` = `[{"item_code", "qty"}]`, `address_name` or `ship_to_pincode` (optional) |
+| `upsert_quote` | the agent's own price/tax/shipping arithmetic | `phone`, `key`, `items` = `[{"item_code", "qty"}]`, `address_name` **or** `address` + `city` + `pincode` (+ `state`) **or** `ship_to_pincode` (optional) |
 | `save_request` | the chain of create-lead / create-deal / create-quotation / create-task calls | `phone`, `key`, `name`, `caller_type`, `store_type`, `area`, `organization`, `items`, `address_name` **or** `address` + `city` + `pincode` (+ `state`), `whatsapp_number`, `notes`, `ship_to_pincode`, `callback_number` |
 | `transfer_target` | `check_transfer_hours` (timeapi.io), `route_to_*` (httpbin) | `phone`, `key`, `executive` (optional — the name the caller asked for), `interaction_id` (optional — Sarvam's interaction id; needed for the call-end webhook to free the executive early) |
 | `orderable_items` | the agent's own product list for retailers / wholesale / distributors | `phone`, `key` |
@@ -210,6 +210,16 @@ Order of checks in `transfer_target`:
 `orderable_items(phone, key)` (read-only) → `{allowed, category, customer_group, price_list, items: [{item_code, item_name, voice_name, size, uom, has_price}]}`. Items: enabled, not a template, sales items of the **Orderable Item Group** (Products), not a Pack Item, nothing with "Sample" in its code or name — today `SASB-12.6 ML` ("big bottle", 12.6 ML) and `SASB-1.4 ML` ("small pack", 1.4 ML), names from the Item's **Voice Name**. A caller whose customer group buys the packs (individuals) or who isn't on record gets `items: []`.
 
 Quote them with `upsert_quote` / `save_request` exactly like packs: `items: [{"item_code": "SASB-12.6 ML", "qty": 5}]`. **`qty` is bottles / sachets** (`uom` Nos — the price lists are per Nos; a Box is 400 big bottles or 4,000 small packs). Priced from the caller's price list (Customer's own, else group, else Caller Categories: Retailer Pricelist- Chennai, Wholesale Pricelist 42, Distributor Pricelist 41.25), GST 5% from the items' tax template, `total_to_say` as for packs; a missing rate is `PRICE_NOT_FOUND`. **No shipping is charged on these items today** — only Pack Items carry a Shipping Rule.
+
+## From quote to Sales Order (`[BR-CRM-011]`)
+
+A new caller's Quotation is addressed to their CRM Deal. On **Submit**, `deal_customer.ensure_customer` gives it a Customer, so ERPNext's **Make Sales Order** works:
+
+- the Customer entered on the Deal ("Customer in ERPNext") or linked by `crm_deal`; else one already on the caller's number; else a **new Customer** — name from the Deal's organisation / Lead (`Name - 6261` when another Customer has that name), group from the Lead's caller category default, price list = the Quotation's, the caller's Contact, `crm_deal` set (the Lead's saved Addresses follow). The quote's delivery address is linked to it.
+- No caller category with a default group → the submit is refused, saying to set the category or enter the Customer on the Deal.
+- Needs the ERPNext CRM integration **on** (ERPNext CRM Settings, plus ERPNext CRM Settings' "Enable Frappe CRM Data Synchronization"); keep **"Create customer on status change" off** — the integration's own creation fails (no group / price list) and reuses same-name Customers.
+
+A **returning Customer** who gives a new delivery address (`save_request`, or `upsert_quote` with `address` + `city` + `pincode`) gets it saved as a Shipping Address on their Customer (same line + pincode reused; their preferred address unchanged) and set on the Quotation, so it reaches the Sales Order. GST still follows Accounts Settings ("Determine Address Tax Category From", currently Billing Address).
 
 ## Changes to the agent's required inputs
 

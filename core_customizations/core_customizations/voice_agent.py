@@ -563,6 +563,18 @@ def _open_deal(ctx):
 	return rows[0] if rows else None
 
 
+def _link_deal_customer(deal, ctx):
+	"""
+	[BR-CRM-004] A caller who is already a Customer has the Deal's "Customer
+	in ERPNext" filled in (when the ERPNext CRM integration made that field),
+	so the CRM's Deal screen shows whose Deal it is. Never overwrites a
+	Customer someone entered there.
+	"""
+	if ctx.customer and frappe.get_meta("CRM Deal").has_field("erpnext_customer"):
+		if not frappe.db.get_value("CRM Deal", deal, "erpnext_customer"):
+			frappe.db.set_value("CRM Deal", deal, "erpnext_customer", ctx.customer.name, update_modified=False)
+
+
 def _get_or_create_deal(ctx):
 	"""
 	[BR-CRM-004] Reuses the caller's open CRM Deal; creates one only when none
@@ -573,6 +585,7 @@ def _get_or_create_deal(ctx):
 	"""
 	existing = _open_deal(ctx)
 	if existing:
+		_link_deal_customer(existing, ctx)
 		return existing, False
 	deal = {
 		"doctype": "CRM Deal",
@@ -589,6 +602,7 @@ def _get_or_create_deal(ctx):
 	doc = frappe.get_doc(deal).insert(ignore_permissions=True)
 	if not last_10_digits(doc.mobile_no) and last_10_digits(ctx.phone):
 		frappe.db.set_value("CRM Deal", doc.name, "mobile_no", ctx.phone, update_modified=False)
+	_link_deal_customer(doc.name, ctx)
 	return doc.name, True
 
 

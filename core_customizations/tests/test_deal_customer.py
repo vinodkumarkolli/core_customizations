@@ -229,3 +229,23 @@ class TestDealCustomer(FrappeTestCase):
 		quote = va.upsert_quote(phone=RETURNING, key=KEY, items=[{"item_code": PACK, "qty": 1}], address="4 Godown Road", pincode="500072")
 		self.assertEqual((quote["status"], quote["address"]), ("quoted", None))
 		self.assertEqual(quote["warnings"], ["ADDRESS_NOT_SAVED: missing city"])
+
+	# --- the Deal shows its Customer [BR-CRM-004] -------------------------------
+
+	def test_a_customers_deal_shows_its_customer(self):
+		quote = va.upsert_quote(phone=RETURNING, key=KEY, items=[{"item_code": PACK, "qty": 1}], ship_to_pincode="600128")
+		self.assertEqual(frappe.db.get_value("CRM Deal", quote["deal"], "erpnext_customer"), self.returning)
+		saved = va.save_request(phone=RETURNING, key=KEY, notes="Call me about an order")
+		self.assertEqual(saved["deal"], quote["deal"], "the same Deal is reused")
+		self.assertEqual(frappe.db.get_value("CRM Deal", saved["deal"], "erpnext_customer"), self.returning)
+
+	def test_a_customer_entered_on_the_deal_is_never_overwritten(self):
+		quote = va.upsert_quote(phone=RETURNING, key=KEY, items=[{"item_code": PACK, "qty": 1}], ship_to_pincode="600128")
+		other = self._customer("VA DC Other Customer", None, address=False)
+		frappe.db.set_value("CRM Deal", quote["deal"], "erpnext_customer", other)
+		va.upsert_quote(phone=RETURNING, key=KEY, items=[{"item_code": PACK, "qty": 2}], ship_to_pincode="600128")
+		self.assertEqual(frappe.db.get_value("CRM Deal", quote["deal"], "erpnext_customer"), other)
+
+	def test_a_request_with_no_items_links_the_deal_too(self):
+		saved = va.save_request(phone=RETURNING, key=KEY, notes="Call me about an order")
+		self.assertEqual(frappe.db.get_value("CRM Deal", saved["deal"], "erpnext_customer"), self.returning)

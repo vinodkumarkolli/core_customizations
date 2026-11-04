@@ -12,7 +12,7 @@ wrong, multi-step saves that failed half-way) with one call per job:
 - get/set_caller_preferences     [BR-CRM-007]  per-caller JSON preferences
 - upsert_quote                   [BR-CRM-006]  a real draft Quotation; the agent reads its totals
 - save_request                   [BR-CRM-004]  CRM Lead / Deal / Quotation / callback Task, one transaction
-- transfer_target                [BR-TEL-006]  who to transfer a live call to, if anyone
+- transfer_target                [BR-TEL-006]  who to transfer a live call to, if anyone (named, sticky, round robin, busy)
 
 The call-ended half of [BR-TEL-007] is `apply_call_outcome`, called from
 `sarvam_telephony.handle_inbound_webhook`.
@@ -39,7 +39,7 @@ from zoneinfo import ZoneInfo
 import frappe
 from frappe import _
 from frappe.integrations.utils import create_request_log
-from frappe.utils import cint, flt, get_system_timezone, get_time, nowdate
+from frappe.utils import add_to_date, cint, flt, get_system_timezone, get_time, now_datetime, nowdate
 
 from core_customizations.core_customizations import quotation_gst
 from core_customizations.core_customizations.caller_gate import (
@@ -1461,60 +1461,449 @@ def _transfer_window_open(settings):
 	return start <= now.time().replace(microsecond=0) < end, now
 
 
-@frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
-def transfer_target(phone: str | None = None, key: str | None = None):
-	"""
-	Business Purpose: [BR-TEL-006] Whether a live call may be transferred to
-	a person right now, and to whom - replaces check_transfer_hours
-	(timeapi.io) and the route_to_* tools (httpbin). Executives (in order),
-	hours, days, time zone and the "callers on record only" rule all come
-	from Sarvam Voice Agent Settings.
+# --- Routing: who takes the call  [BR-TEL-006] -------------------------------
+#
+# Every decision transfer_target makes is one Sarvam Transfer Attempt row; the
+# rows are the whole state - an executive is busy while they have a Routed or
+# Connected row younger than the busy timeout, the round-robin pointer is the
+# executive on the newest row that routed a call, and sticky routing reads the
+# rows that connected. Executives answer on personal phones, so there is no
+# live telephony state to ask.
 
-	Returns:
-		dict: {allowed, open, target, target_name, then: [...], reason,
-		decision, hours_text}. When `open` is false, `decision` is "CALLBACK"
-		and `reason` is OUTSIDE_HOURS / NOT_ON_RECORD / NO_EXECUTIVES.
-		`hours_text` (the transfer hours to say, e.g. "10 AM to 8 PM, Monday
-		to Saturday") is on every allowed response; a blocked/foreign caller
-		gets only the gate's {allowed, reason, message}.
-	"""
-	_check_webhook_key(key)
-	gate = evaluate(phone)
-	if not gate["allowed"]:
-		return gate
+ATTEMPT_DOCTYPE = "Sarvam Transfer Attempt"
+EXECUTIVE_DOCTYPE = "Sarvam Transfer Executive"
+ROUTED, CONNECTED, NOT_CONNECTED, ENDED, EXPIRED, REFUSED = ("Routed", "Connected", "Not connected", "Ended", "Expired", "Refused")
+BUSY_STATUSES = (ROUTED, CONNECTED)
+# A row whose call reached the executive - what sticky routing remembers.
+TOOK_CALL_STATUSES = (CONNECTED, ENDED)
+# The field's own default; an existing Single reads 0 until it is saved.
+DEFAULT_BUSY_TIMEOUT_MINUTES = 5
+MANAGER_ROLES = ("System Manager", "Sales Manager")
 
+
+def _busy_timeout(settings):
+	return cint(settings.busy_timeout_minutes) or DEFAULT_BUSY_TIMEOUT_MINUTES
+
+
+def _name_key(name):
+	return " ".join(re.sub(r"[^0-9a-z]+", " ", (name or "").lower()).split())
+
+
+def _executive_rows(lock=False):
+	"""
+	Enabled executives that have a number, in table (round-robin) order -
+	read from the database, not the cached settings, so an On Break tick is
+	seen at once. With `lock`, every executive row is locked FOR UPDATE until
+	the request's transaction ends: two calls routing at the same moment
+	queue here, and the second sees the first one's Routed row.
+
+	Every ledger read after the lock is a locking read (FOR UPDATE / LOCK IN
+	SHARE MODE): under REPEATABLE READ a plain SELECT would still read the
+	snapshot taken before the lock was granted - before the first call's
+	Routed row was committed - and hand out the same executive twice.
+	"""
+	rows = frappe.db.sql(
+		f"""select name, idx, executive_name, phone, user, enabled, on_break, aliases
+		    from `tab{EXECUTIVE_DOCTYPE}`
+		    where parenttype = %(settings)s and parent = %(settings)s and parentfield = 'transfer_executives'
+		    order by idx{' for update' if lock else ''}""",
+		{"settings": SARVAM_SETTINGS_DOCTYPE},
+		as_dict=True,
+	)
+	return [r for r in rows if cint(r.enabled) and (r.phone or "").strip()]
+
+
+def _busy_cutoff(timeout):
+	return add_to_date(now_datetime(), minutes=-timeout)
+
+
+def _append_log(text, line):
+	stamp = now_datetime().strftime("%Y-%m-%d %H:%M:%S")
+	return f"{text}\n{stamp} {line}" if text else f"{stamp} {line}"
+
+
+def _close_attempt(name, status, note, ended_at=None):
+	"""Moves one attempt to `status` (and ended_at), appending `note` to its decision log."""
+	log = frappe.db.get_value(ATTEMPT_DOCTYPE, name, "decision_log")
+	values = {"status": status, "decision_log": _append_log(log, note)}
+	if ended_at:
+		values["ended_at"] = ended_at
+	frappe.db.set_value(ATTEMPT_DOCTYPE, name, values)
+
+
+def expire_transfer_attempts(timeout=None):
+	"""
+	[BR-TEL-006] Frees executives whose call-end never told us otherwise: a
+	Routed row older than the busy timeout becomes Expired, a Connected one
+	Ended, with ended_at = routed_at + timeout. The busy check itself ignores
+	old rows anyway - this keeps the rows' statuses true for the log and the
+	busy list. Runs from transfer_target and the scheduler (every 5 minutes).
+	"""
+	timeout = timeout or _busy_timeout(_settings())
+	for old, new in ((ROUTED, EXPIRED), (CONNECTED, ENDED)):
+		for row in frappe.db.sql(
+			f"select name, routed_at from `tab{ATTEMPT_DOCTYPE}` where status = %(old)s and routed_at < %(cutoff)s for update",
+			{"old": old, "cutoff": _busy_cutoff(timeout)},
+			as_dict=True,
+		):
+			_close_attempt(row.name, new, f"{new}: no call end within {timeout} minutes", add_to_date(row.routed_at, minutes=timeout))
+
+
+def _busy_since(timeout):
+	"""
+	{executive_name: when their open attempt was routed}. The busy check
+	fails open: if the ledger can't be read, everyone is treated as free
+	(and the error logged) - a wrong "free" costs one unanswered transfer,
+	which the agent already turns into a callback.
+	"""
+	try:
+		rows = frappe.db.sql(
+			f"""select executive, min(routed_at) as since from `tab{ATTEMPT_DOCTYPE}`
+			    where status in %(busy)s and routed_at >= %(cutoff)s and ifnull(executive, '') != ''
+			    group by executive lock in share mode""",
+			{"busy": BUSY_STATUSES, "cutoff": _busy_cutoff(timeout)},
+			as_dict=True,
+		)
+		return {r.executive: r.since for r in rows}
+	except Exception:
+		frappe.log_error(title="Sarvam transfer: busy ledger unreadable, treating everyone as free")
+		return {}
+
+
+def _executive_names(executive):
+	aliases = re.split(r"[,\n;]", executive.aliases or "")
+	return {k for k in (_name_key(n) for n in [executive.executive_name, *aliases]) if k}
+
+
+def _match_executive(spoken, executives):
+	"""
+	The executive the caller named: their name or an alias equal to what was
+	said, ignoring case and punctuation; else one whose name or alias is a
+	whole word of it ("Kalpana madam"). Two executives answering to the same
+	words is no match - never a guess.
+	"""
+	key = _name_key(spoken)
+	if not key:
+		return None
+	exact = [e for e in executives if key in _executive_names(e)]
+	if exact:
+		return exact[0] if len(exact) == 1 else None
+	words = f" {key} "
+	partial = [e for e in executives if any(f" {n} " in words for n in _executive_names(e))]
+	return partial[0] if len(partial) == 1 else None
+
+
+def _sticky_executive(ctx, executives, notes):
+	"""
+	[BR-TEL-006] The executive on the caller's newest attempt that connected
+	(matched by their Lead, Contact or Customer), else the Lead's owner or
+	the Customer's account manager when that user is an enabled executive.
+	"""
+	by_name = {e.executive_name: e for e in executives}
+	keys = {
+		"lead": ctx.lead["name"] if ctx.lead else None,
+		"contact": ctx.contact["name"] if ctx.contact else None,
+		"customer": ctx.customer.name if ctx.customer else None,
+	}
+	keys = {k: v for k, v in keys.items() if v}
+	if keys:
+		rows = frappe.db.sql(
+			f"""select name, executive from `tab{ATTEMPT_DOCTYPE}`
+			    where status in %(took)s and ({' or '.join(f'{k} = %({k})s' for k in keys)})
+			    order by creation desc limit 1 lock in share mode""",
+			{"took": TOOK_CALL_STATUSES, **keys},
+			as_dict=True,
+		)
+		if rows and rows[0].executive in by_name:
+			notes.append(f"sticky: {rows[0].executive} took this caller's last transferred call ({rows[0].name})")
+			return by_name[rows[0].executive]
+		if rows:
+			notes.append(f"sticky: last transferred call went to {rows[0].executive}, no longer an enabled executive")
+
+	by_user = {e.user: e for e in executives if e.user}
+	owners = [
+		("lead owner", ctx.lead.get("lead_owner") if ctx.lead else None),
+		("account manager", frappe.db.get_value("Customer", ctx.customer.name, "account_manager") if ctx.customer else None),
+	]
+	for label, user in owners:
+		if user and user in by_user:
+			notes.append(f"sticky: no transferred call on record; {label} {user} is {by_user[user].executive_name}")
+			return by_user[user]
+	notes.append("sticky: no transferred call on record and no owner who is an executive")
+	return None
+
+
+def _round_robin(executives, unavailable, notes):
+	"""
+	[BR-TEL-006] The first free executive after the one on the newest attempt
+	that routed a call (refusals don't move the pointer), wrapping round the
+	table; from the top when that executive is no longer in it.
+	"""
+	last = frappe.db.sql(
+		f"""select executive from `tab{ATTEMPT_DOCTYPE}`
+		    where status != %(refused)s and ifnull(executive, '') != ''
+		    order by creation desc limit 1 lock in share mode""",
+		{"refused": REFUSED},
+		pluck=True,
+	)
+	last = last[0] if last else None
+	names = [e.executive_name for e in executives]
+	start = names.index(last) + 1 if last in names else 0
+	for e in executives[start:] + executives[:start]:
+		if e.executive_name not in unavailable:
+			notes.append(f"round robin: after {last or 'nobody'} -> {e.executive_name}")
+			return e
+	return None
+
+
+def _write_attempt(attempt, notes):
+	"""Inserts the decision's row; the request commits it (a GET would otherwise be rolled back)."""
+	doc = frappe.get_doc(
+		{"doctype": ATTEMPT_DOCTYPE, **attempt, "routed_at": now_datetime(), "decision_log": _append_log("", "; ".join(notes))}
+	).insert(ignore_permissions=True)
+	frappe.local.flags.commit = True
+	return doc.name
+
+
+def _route(phone, requested, interaction_id):
 	settings = _settings()
 	hours_text = _hours_text(settings)
-	closed = {
-		"allowed": True, "open": False, "target": None, "target_name": None, "then": [], "decision": "CALLBACK",
-		"hours_text": hours_text,
+	response = {
+		"allowed": True, "open": False, "target": None, "target_name": None, "executive": None, "routed_by": None,
+		"then": [], "then_names": [], "decision": "CALLBACK", "available": [], "attempt": None, "hours_text": hours_text,
 	}
+	attempt = frappe._dict(
+		caller_phone=_canonical(phone), interaction_id=(interaction_id or "").strip() or None, requested_name=requested or None
+	)
+	notes = [f"asked for {requested!r}" if requested else "no executive named"]
+
+	def refuse(reason, note, **extra):
+		notes.append(note)
+		name = _write_attempt({**attempt, "status": REFUSED, "refused_reason": reason}, notes)
+		return {**response, "reason": reason, "attempt": name, **extra}
 
 	is_open, now = _transfer_window_open(settings)
 	if not is_open:
-		return {**closed, "reason": "OUTSIDE_HOURS", "checked_at": now.isoformat(timespec="minutes")}
+		return refuse("outside_hours", f"outside transfer hours ({hours_text}) at {now:%a %H:%M}", checked_at=now.isoformat(timespec="minutes"))
 
-	if cint(settings.transfer_known_callers_only):
+	ctx = _resolve(phone)
+	attempt.update(
+		lead=ctx.lead["name"] if ctx.lead else None,
+		contact=ctx.contact["name"] if ctx.contact else None,
+		customer=ctx.customer.name if ctx.customer else None,
+	)
+	if cint(settings.transfer_known_callers_only) and not (ctx.lead or ctx.contact or ctx.customer):
+		return refuse("unknown_caller", "caller not on record")
+
+	# From here to the commit, one routing decision at a time.
+	timeout = _busy_timeout(settings)
+	executives = _executive_rows(lock=True)
+	expire_transfer_attempts(timeout)
+	if attempt.interaction_id:
+		# The agent is routing this call again (the first transfer didn't happen) - free whoever it got before.
+		for name in frappe.db.sql(
+			f"select name from `tab{ATTEMPT_DOCTYPE}` where interaction_id = %(iid)s and status = %(routed)s for update",
+			{"iid": attempt.interaction_id, "routed": ROUTED},
+			pluck=True,
+		):
+			_close_attempt(name, NOT_CONNECTED, "Not connected: the agent routed this call again", now_datetime())
+	busy = _busy_since(timeout)
+	unavailable = {e.executive_name for e in executives if cint(e.on_break) or e.executive_name in busy}
+	response["available"] = [e.executive_name for e in executives if e.executive_name not in unavailable]
+
+	def why_unavailable(e):
+		return "on break" if cint(e.on_break) else f"busy since {busy[e.executive_name]:%H:%M:%S}"
+
+	def route(e, routed_by):
+		name = _write_attempt(
+			{**attempt, "status": ROUTED, "routed_by": routed_by, "executive": e.executive_name, "user": e.user, "target": _canonical(e.phone)},
+			notes,
+		)
+		return {
+			**response,
+			"open": True,
+			"target": _canonical(e.phone),
+			"target_name": e.executive_name,
+			"executive": e.executive_name,
+			"routed_by": routed_by,
+			"reason": None,
+			"decision": "TRANSFER",
+			"available": [n for n in response["available"] if n != e.executive_name],
+			"attempt": name,
+		}
+
+	if requested:
+		match = _match_executive(requested, executives)
+		if not match:
+			return refuse("executive_not_found", "no enabled executive by that name")
+		if match.executive_name in unavailable:
+			return refuse("executive_busy", f"{match.executive_name} is {why_unavailable(match)}")
+		notes.append(f"matched {match.executive_name}")
+		return route(match, "requested")
+
+	if cint(settings.sticky_agent):
+		sticky = _sticky_executive(ctx, executives, notes)
+		if sticky and sticky.executive_name not in unavailable:
+			return route(sticky, "sticky")
+		if sticky:
+			notes.append(f"{sticky.executive_name} is {why_unavailable(sticky)}, falling through to round robin")
+
+	chosen = _round_robin(executives, unavailable, notes)
+	if not chosen:
+		return refuse("all_busy", "no enabled executive is free" if executives else "no enabled executive with a number")
+	return route(chosen, "round_robin")
+
+
+@frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
+def transfer_target(
+	phone: str | None = None, key: str | None = None, executive: str | None = None, interaction_id: str | None = None
+):
+	"""
+	Business Purpose: [BR-TEL-006] The single routing endpoint: whether a
+	live call may be transferred to a person right now, and to whom.
+	Hours, days, time zone, "callers on record only", the executives and
+	their aliases, sticky routing and the busy timeout all come from Sarvam
+	Voice Agent Settings.
+
+	Order: the existing gates (hours/days, known caller); then the executive
+	the caller named (`executive`, matched by name or alias); else, with
+	Sticky Agent on, the executive who last took this caller's transferred
+	call, else their lead / account owner; else round robin over the free
+	executives. A busy or on-break sticky executive falls through to round
+	robin; a busy named one is refused. Checking and routing hold a row lock
+	on the executives, and the Routed row is written in the same
+	transaction, so two callers can never get the same executive.
+
+	Never blocks a call on an error: anything unexpected returns open false,
+	reason "error" (and is logged), and the agent takes a callback.
+
+	Args:
+		phone (str): The caller's number, any spelling.
+		key (str): Must match Sarvam Voice Agent Settings.webhook_secret.
+		executive (str | None): The name the caller asked for.
+		interaction_id (str | None): Sarvam's interaction id for this call -
+			the call-end webhook closes the attempt by it.
+
+	Returns:
+		dict: {allowed, open, target (E.164), executive, routed_by
+		(requested / sticky / round_robin), reason (when open is false:
+		outside_hours, unknown_caller, executive_not_found, executive_busy,
+		all_busy, error), available (names free right now), attempt,
+		hours_text, decision (TRANSFER / CALLBACK), target_name (=
+		executive), then / then_names (always empty - every transfer is
+		routed here)}. A blocked/foreign caller gets only the gate's
+		{allowed, reason, message}.
+	"""
+	_check_webhook_key(key)
+	frappe.db.savepoint("voice_agent_transfer")
+	try:
+		gate = evaluate(phone)
+		if not gate["allowed"]:
+			return gate
 		with _as_automation_user():
-			ctx = _resolve(phone)
-		if not (ctx.lead or ctx.contact or ctx.customer):
-			return {**closed, "reason": "NOT_ON_RECORD"}
+			return _route(phone, (executive or "").strip(), interaction_id)
+	except Exception:
+		frappe.db.rollback(save_point="voice_agent_transfer")
+		frappe.log_error(title="Sarvam transfer_target failed")
+		frappe.local.flags.commit = True  # keep the Error Log
+		try:
+			hours_text = _hours_text(_settings())
+		except Exception:
+			hours_text = ""
+		return {
+			"allowed": True, "open": False, "target": None, "target_name": None, "executive": None, "routed_by": None,
+			"then": [], "then_names": [], "decision": "CALLBACK", "available": [], "attempt": None,
+			"reason": "error", "hours_text": hours_text,
+		}
 
-	executives = [e for e in settings.transfer_executives if e.enabled and e.phone]
-	if not executives:
-		return {**closed, "reason": "NO_EXECUTIVES"}
 
-	return {
-		"allowed": True,
-		"open": True,
-		"target": _canonical(executives[0].phone),
-		"target_name": executives[0].executive_name,
-		"then": [_canonical(e.phone) for e in executives[1:]],
-		"then_names": [e.executive_name for e in executives[1:]],
-		"reason": None,
-		"decision": "TRANSFER",
-		"hours_text": hours_text,
-	}
+def _close_transfer_attempts(call_log, interaction_id, variables):
+	"""
+	[BR-TEL-006] The call-end webhook's half of the busy ledger, matched only
+	by interaction id (never by executive), and idempotent - only a Routed
+	row ever changes, so a late or repeated delivery changes nothing.
+
+	- `transferred` true: the newest Routed row becomes Connected and the
+	  Call Log's receiver is that executive's user. The executive stays busy
+	  until the busy timeout (then Ended) - this webhook arrives when the
+	  agent hands over, not when the executive's call ends.
+	- `transferred` false or missing: Not connected - the executive is free
+	  at once.
+	- No attempt for the interaction: nothing.
+	"""
+	if not interaction_id:
+		return
+	attempts = frappe.get_all(
+		ATTEMPT_DOCTYPE,
+		{"interaction_id": interaction_id, "status": ("!=", REFUSED)},
+		["name", "status", "user"],
+		order_by="creation desc",
+	)
+	if not attempts:
+		return
+	transferred = str(_first(variables, TRANSFERRED_KEYS) or "").strip().lower() in _TRUE
+	latest = attempts[0]
+	for row in attempts:
+		if row.status != ROUTED:
+			continue
+		if transferred and row.name == latest.name:
+			_close_attempt(row.name, CONNECTED, "Connected: call-end webhook says transferred; busy until the timeout")
+		else:
+			_close_attempt(row.name, NOT_CONNECTED, "Not connected: call-end webhook says not transferred", now_datetime())
+	if transferred and latest.user:
+		call_log.receiver = latest.user
+
+
+@frappe.whitelist()
+def busy_executives():
+	"""
+	[BR-TEL-006] Who can't take a transferred call right now and since when,
+	for the Settings form's "Who Is Busy": every enabled executive with
+	busy / on_break, the open attempt's status, caller and when it frees up.
+	"""
+	frappe.only_for((*MANAGER_ROLES, "Sales User"))
+	timeout = _busy_timeout(_settings())
+	open_rows = frappe.get_all(
+		ATTEMPT_DOCTYPE,
+		{"status": ("in", BUSY_STATUSES), "routed_at": (">=", _busy_cutoff(timeout))},
+		["name", "executive", "status", "routed_at", "caller_phone"],
+		order_by="routed_at asc",
+	)
+	by_executive = {}
+	for row in open_rows:
+		by_executive.setdefault(row.executive, row)
+	result = []
+	for e in _executive_rows():
+		row = by_executive.get(e.executive_name)
+		result.append(
+			{
+				"executive": e.executive_name,
+				"on_break": cint(e.on_break),
+				"busy": bool(row) or bool(cint(e.on_break)),
+				"status": row.status if row else None,
+				"since": row.routed_at if row else None,
+				"free_at": add_to_date(row.routed_at, minutes=timeout) if row else None,
+				"caller_phone": row.caller_phone if row else None,
+				"attempt": row.name if row else None,
+			}
+		)
+	return result
+
+
+@frappe.whitelist(methods=["POST"])
+def clear_busy_executives():
+	"""
+	[BR-TEL-006] Frees every executive the busy ledger holds now (Routed ->
+	Expired, Connected -> Ended, noting who cleared them). On Break ticks
+	are the executives' own and are left as they are.
+	"""
+	frappe.only_for(MANAGER_ROLES)
+	note = f"cleared by {frappe.session.user}"
+	rows = frappe.get_all(ATTEMPT_DOCTYPE, {"status": ("in", BUSY_STATUSES)}, ["name", "status"])
+	for row in rows:
+		new = EXPIRED if row.status == ROUTED else ENDED
+		_close_attempt(row.name, new, f"{new}: {note}", now_datetime())
+	return {"cleared": len(rows)}
 
 
 # --------------------------------------------------------------------------
@@ -1751,6 +2140,8 @@ def record_inbound_call(payload):
 	- Start/end time and duration from the payload; the summary and
 	  transcript as FCRM Notes on the log (apply_call_outcome /
 	  save_transcript_note); this call's callback Tasks linked to it.
+	- Closes this interaction's Sarvam Transfer Attempt ([BR-TEL-006],
+	  _close_transfer_attempts) and sets the receiver when it was transferred.
 	- Creates no Lead, Deal or Task.
 
 	Args:
@@ -1834,6 +2225,7 @@ def record_inbound_call(payload):
 		call_log.recording_url = payload.get("recording_url")
 
 	_link_callback_tasks(call_log, start or nowdate())
+	_close_transfer_attempts(call_log, interaction_id, variables)
 	call_log.save(ignore_permissions=True)
 	if not call_log.reference_docname and call_log.reference_doctype:
 		# Insert re-applies the field's "CRM Lead" default - an unlinked log has no type either.

@@ -252,8 +252,12 @@ def number_for_hash(phone_hash):
 	return None
 
 
+# Longest interaction id echoed back - Sarvam's look like "20261104/44095154-03:06:25-a3c8ce7a".
+INTERACTION_ID_MAX_LENGTH = 140
+
+
 @frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
-def check(phone: str | None = None, key: str | None = None):
+def check(phone: str | None = None, key: str | None = None, interaction_id: str | None = None):
 	"""
 	Business Purpose: [BR-CRM-002] The server-side caller gate Sarvam's
 	on-start webhook (or any other call-start hook) calls instead of the
@@ -274,14 +278,23 @@ def check(phone: str | None = None, key: str | None = None):
 	number it matched, not the hash. Blank, an unmatched hash, or a caller
 	who isn't allowed gets `phone: ""` - the agent then asks for the number.
 
+	Also echoes `interaction_id` back unchanged ([BR-TEL-006]): a Sarvam tool
+	can read the call's system variables only at call start, so the agent
+	passes the interaction id here, saves what comes back to an agent
+	variable and later sends it to `voice_agent.transfer_target` - which
+	is how the call-end webhook finds the transfer attempt to close. Echoed
+	for every caller (it is the caller's own call id, not CRM data); blank
+	when none was sent.
+
 	Args:
 		phone (str | None): The caller's number, in any format, or its
 			SHA-256 hash. Blank is allowed (the agent should ask the caller
 			for their number).
 		key (str | None): Must match `Sarvam Voice Agent Settings.webhook_secret`.
+		interaction_id (str | None): Sarvam's interaction id for this call.
 
 	Returns:
-		dict: {allowed, reason, message, phone} - see `evaluate`.
+		dict: {allowed, reason, message, phone, interaction_id} - see `evaluate`.
 
 	Raises:
 		frappe.PermissionError: If `key` doesn't match.
@@ -294,7 +307,11 @@ def check(phone: str | None = None, key: str | None = None):
 	else:
 		number = _indian_mobile(raw)
 		gate = evaluate(raw)
-	return {**gate, "phone": number if gate["allowed"] and number else ""}
+	return {
+		**gate,
+		"phone": number if gate["allowed"] and number else "",
+		"interaction_id": (interaction_id or "").strip()[:INTERACTION_ID_MAX_LENGTH],
+	}
 
 
 @frappe.whitelist()

@@ -59,12 +59,12 @@ Every method first runs `caller_gate.evaluate(phone)`. A blocked or foreign call
 | `get_caller_preferences` / `set_caller_preferences` | `fetch_caller_preferences` | `phone`, `key`; set also takes `preferences` (JSON object) and `merge` (default 1) |
 | `upsert_quote` | the agent's own price/tax/shipping arithmetic | `phone`, `key`, `items` = `[{"item_code", "qty"}]`, `address_name` or `ship_to_pincode` (optional) |
 | `save_request` | the chain of create-lead / create-deal / create-quotation / create-task calls | `phone`, `key`, `name`, `caller_type`, `store_type`, `area`, `organization`, `items`, `address_name` **or** `address` + `city` + `pincode` (+ `state`), `whatsapp_number`, `notes`, `ship_to_pincode`, `callback_number` |
-| `transfer_target` | `check_transfer_hours` (timeapi.io), `route_to_*` (httpbin) | `phone`, `key` |
+| `transfer_target` | `check_transfer_hours` (timeapi.io), `route_to_*` (httpbin) | `phone`, `key`, `executive` (optional — the name the caller asked for), `interaction_id` (optional — Sarvam's interaction id; needed for the call-end webhook to free the executive early) |
 | call-ended webhook (`sarvam_telephony.handle_inbound_webhook`, unchanged URL) | `update_call_log`, `update_call_log_conversation_ref` | Sarvam's call-end payload: `interaction_id`, `user_phone_number`, `agent_phone_number`, `duration`, `start_datetime`, `end_datetime`, `recording_url`, `interaction_transcript`, `output_agent_variables` (`call_summary`/`summary`, `conversation_ref`, `preferences`, `transferred`) |
 
 ### Sarvam configuration
 
-- **Call start:** the `check_blocked` tool on `caller_gate.check` (returns `allowed` and `phone`, creates nothing). `voice_agent.call_started` is an optional alternative that also opens an "In Progress" Call Log; it is not needed — the call-ended webhook creates the log itself.
+- **Call start:** the `check_blocked` tool on `caller_gate.check` (returns `allowed` and `phone`, creates nothing). Pass the call's `interaction_id` system variable to it too: `check` echoes it back unchanged as `interaction_id` — save that to an agent variable and send it to every `transfer_target` call. Sarvam tools can read system variables only at call start, so this is the only way the call-end webhook can find and free the executive; without it only the busy timeout frees them. `voice_agent.call_started` is an optional alternative that also opens an "In Progress" Call Log; it is not needed — the call-ended webhook creates the log itself.
 - **Call ended** webhook (the deployment's `webhook_config`): `<site>/api/method/core_customizations.core_customizations.sarvam_telephony.handle_inbound_webhook?key=<webhook_secret>` — on dev, `https://dev-zap.jayamco.in/api/method/core_customizations.core_customizations.sarvam_telephony.handle_inbound_webhook?key=<webhook_secret>` (or send the key as the `X-Webhook-Key` header).
 
 ### Call ended → one CRM Call Log (`[BR-TEL-005]`)
@@ -175,9 +175,34 @@ Errors:
 
 `warnings` may carry `CUSTOMER_GROUP_NEEDS_REVIEW: <category>` / `UNKNOWN_CATEGORY: <value>` (only for a caller with **no Customer**, or a Customer whose group isn't mapped in Caller Categories — an existing Customer with a mapped group, e.g. Mahaveer → Commercial → wholesale, is already classified and never warned) or `ADDRESS_NOT_SAVED: missing city` — informational, also written on the Task for the team.
 
-**`transfer_target`** → `open: true` with `target` (then `then[]` in order), or `open: false`, `decision: "CALLBACK"`, `reason` `OUTSIDE_HOURS` / `NOT_ON_RECORD` / `NO_EXECUTIVES`.
+**`transfer_target`** → `open: true` with `target` (E.164 — save it to the agent's `transfer_number`), `executive` (the name to say) and `routed_by` (`requested` / `sticky` / `round_robin`); or `open: false`, `decision: "CALLBACK"`, `reason` `outside_hours` / `unknown_caller` / `executive_not_found` / `executive_busy` / `all_busy` / `error`. `available` lists the executives free right now (offer them on `executive_busy` / `executive_not_found`; if the caller accepts anyone, call again **with no `executive`**). `then` / `then_names` are always empty — every transfer is routed here; never transfer to a number this call didn't return. On `error`, take a callback.
+
+See **Live transfer routing** below for the rules.
 
 Every allowed `transfer_target` response — open or not, whatever the `reason` — also carries **`hours_text`**, the transfer hours to say, built from Sarvam Voice Agent Settings (Transfer Open From / Until / Days), e.g. `"10 AM to 8 PM, Monday to Saturday"`. The agent says the hours from this key, never from its prompt, so a settings change changes what it says. Times drop zero minutes (`9:30 AM`, `6 PM`; midnight is `12 AM`); consecutive days become a range, others a list (`Monday, Wednesday and Friday`), all seven `every day`; 00:00–23:59 is `all day` (`"all day, every day"`). A blocked/foreign caller still gets only `{allowed, reason, message}`.
+
+## Live transfer routing (`[BR-TEL-006]`)
+
+Order of checks in `transfer_target`:
+
+1. **Gates** (unchanged): transfer hours / days in the settings' time zone (`outside_hours`), and — with "Only Transfer Callers On Record" — a CRM Lead, Contact or Customer for the number (`unknown_caller`).
+2. **Named executive** (`executive`): matched against **enabled** executives by name or Aliases, ignoring case and punctuation; a name or alias that is a whole word of what was said also matches ("Kalpana madam"). Two executives answering to the same words is no match. No match → `executive_not_found`; busy or On Break → `executive_busy`; else routed, `routed_by: requested`.
+3. **Sticky** (no name, Sticky Agent ticked): the executive on the caller's newest attempt that connected (by Lead, Contact or Customer), else the Lead's owner / Customer's account manager when that user is an enabled executive. Busy or on break → step 4, never a refusal.
+4. **Round robin**: the first free executive after the one on the newest attempt that routed a call, in table order, wrapping. Refusals don't move the pointer.
+5. Nobody free → `all_busy`.
+
+**Busy ledger** — `Sarvam Transfer Attempt`, one row per decision (refusals included, status Refused with `refused_reason`; every row has a Decision Log of each step taken). An executive is busy while On Break, or while they have a **Routed** or **Connected** row routed less than **Busy Timeout (Minutes)** ago (5). Steps 2–5 hold a row lock on the executive rows and write the Routed row in the same transaction (committed even for a GET), with locking reads of the ledger, so two callers at once never get the same executive — the second waits, then sees busy (checked on dev with two concurrent requests). If the ledger can't be read, everyone counts as free (fails open, logged); any other error returns `reason: "error"`.
+
+**Call end** (`handle_inbound_webhook`), matched by `interaction_id` only:
+
+- `transferred` true → the newest Routed row becomes **Connected** and the Call Log's **receiver** is that executive's user (status reason stays "transferred"). The executive **stays busy until the timeout** (then Ended): measured on dev, the webhook arrives ~2 s after the agent hands over (the agent's leg ends at the hand-over), not when the executive's call ends — so the timeout is the only end signal.
+- `transferred` false or missing → **Not connected**, executive free at once.
+- No attempt for the interaction → nothing extra. Only a Routed row ever changes, so a late or repeated delivery changes nothing.
+- A Routed row with no call end becomes **Expired** after the timeout (scheduler every 5 minutes, and on every routing). Routing the same `interaction_id` again frees the executive it got before (Not connected).
+
+**Settings form → Transfers menu**: *Who Is Busy* (each executive, state, since, free at, caller), *Clear Busy Flags* (Sales Manager / System Manager — frees everyone the ledger holds; On Break ticks are left alone), *Transfer Log* (the attempt list).
+
+**Not detectable**: an executive busy on a personal call we can't see — the agent's "transfer did not connect, take a callback" path covers it.
 
 ## Changes to the agent's required inputs
 
@@ -187,7 +212,7 @@ Every allowed `transfer_target` response — open or not, whatever the `reason` 
 4. **Quote after saving.** `upsert_quote` needs the caller on record; for a new caller, collect name + number and call `save_request` with the items (it returns the same figures under `quote`).
 5. **A delivery pincode** is needed to quote a new caller (GST depends on the state) — pass it as `ship_to_pincode` or inside `address`.
 6. **No call-log tools.** Remove `create_call_log`, `update_call_log` and `update_call_log_conversation_ref`; set `summary`, `conversation_ref` and `preferences` as output variables instead — the call-ended webhook writes them.
-7. **Remove** `check_transfer_hours` (timeapi.io) and `route_to_*` (httpbin); use `transfer_target`.
+7. **Remove** `check_transfer_hours` (timeapi.io) and `route_to_*` (httpbin); use `transfer_target`, passing `executive` when the caller names someone and `interaction_id` always. `reason` values are now lowercase (`outside_hours`, `unknown_caller`, …).
 8. **Remove `get_saved_addresses`.** Read `addresses` from `caller_context`, pass the chosen one as `address_name`.
 9. **Collect `city` and `pincode`** with a new caller's address so it can be saved as a real Address (`state` is optional).
 
@@ -223,7 +248,7 @@ Seeded by `seed_sarvam_voice_agent_rules` (only into empty tables):
 - **Voice Agent Records** — Default Lead Owner (blank = automation user), Callback Task Assignee (**not seeded — set it**), Callback Task Priority (High), Quotation Company (blank = global default), New Deal Status (Qualification), Saved Addresses Returned (5).
 - **Caller Categories** — individual → Individual @ Standard Selling (default); wholesale, distributor → Commercial (default, no price list); retailer → the five retail groups (no default — flagged for review).
 - **Pack Items** — SASB-50INR-PACK-4/10/20 → Individual only, Next Day Shipping.
-- **Live Transfer** — 10:00–20:00, Mon–Sat, Asia/Kolkata, callers on record only; Kalpana +918248207671, Sravya +918106557040, Vinod +918122586261.
+- **Live Transfer** — 10:00–20:00, Mon–Sat, Asia/Kolkata, callers on record only; Kalpana +918248207671, Sravya +918106557040, Vinod +918122586261 (row order = round-robin order). Each executive has **User** (needed for sticky routing and the Call Log receiver), **On Break** and **Aliases**. **Sticky Agent** (off) and **Busy Timeout (Minutes)** (5, seeded by `seed_sarvam_transfer_routing`).
 
 ## Persistent test records (dev only)
 

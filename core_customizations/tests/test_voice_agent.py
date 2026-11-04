@@ -554,20 +554,20 @@ class TestVoiceAgent(FrappeTestCase):
 
 	def test_transfer_open_for_known_caller_in_hours(self):
 		result = self._transfer(LEAD_ONLY, _ist(2026, 11, 3, 11, 0))  # Tuesday
-		self.assertTrue(result["open"])
+		self.assertTrue(result["open"], result)
 		executives = [e for e in frappe.get_single(SARVAM_SETTINGS_DOCTYPE).transfer_executives if e.enabled]
-		self.assertEqual(result["target"], executives[0].phone)
-		self.assertEqual(result["then"], [e.phone for e in executives[1:]])
+		self.assertIn(result["target"], [va._canonical(e.phone) for e in executives])
+		self.assertEqual((result["decision"], result["then"]), ("TRANSFER", []))  # routing: test_voice_agent_routing
 
 	def test_transfer_closed_outside_hours_and_on_sunday(self):
 		for when in (_ist(2026, 11, 3, 9, 59), _ist(2026, 11, 3, 20, 0), _ist(2026, 11, 8, 12, 0)):
 			with self.subTest(when=when):
 				result = self._transfer(LEAD_ONLY, when)
-				self.assertEqual((result["open"], result["reason"], result["decision"]), (False, "OUTSIDE_HOURS", "CALLBACK"))
+				self.assertEqual((result["open"], result["reason"], result["decision"]), (False, "outside_hours", "CALLBACK"))
 
 	def test_transfer_refused_for_unknown_caller(self):
 		result = self._transfer(UNKNOWN, _ist(2026, 11, 3, 11, 0))
-		self.assertEqual((result["open"], result["reason"]), (False, "NOT_ON_RECORD"))
+		self.assertEqual((result["open"], result["reason"]), (False, "unknown_caller"))
 
 	def _set_window(self, start, end, days):
 		frappe.db.set_single_value(
@@ -605,7 +605,7 @@ class TestVoiceAgent(FrappeTestCase):
 			frappe.db.set_value("Sarvam Transfer Executive", row.name, "enabled", 0)
 		frappe.clear_document_cache(SARVAM_SETTINGS_DOCTYPE, SARVAM_SETTINGS_DOCTYPE)
 		result = self._transfer(LEAD_ONLY, _ist(2026, 11, 3, 11, 0))
-		self.assertEqual((result["reason"], result["hours_text"]), ("NO_EXECUTIVES", expected))
+		self.assertEqual((result["reason"], result["hours_text"]), ("all_busy", expected))
 
 	def test_blocked_caller_gets_no_hours_text(self):
 		result = self._transfer(BLOCKED, _ist(2026, 11, 3, 11, 0))

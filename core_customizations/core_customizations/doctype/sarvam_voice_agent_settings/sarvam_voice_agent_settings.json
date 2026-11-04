@@ -46,6 +46,7 @@
   "section_break_caller_categories",
   "caller_categories",
   "pack_items",
+  "orderable_item_group",
   "section_break_transfer",
   "transfer_start_time",
   "transfer_end_time",
@@ -53,6 +54,8 @@
   "transfer_days",
   "transfer_timezone",
   "transfer_known_callers_only",
+  "sticky_agent",
+  "busy_timeout_minutes",
   "transfer_executives"
  ],
  "fields": [
@@ -317,6 +320,14 @@
    "label": "Pack Items"
   },
   {
+   "default": "Products",
+   "fieldname": "orderable_item_group",
+   "fieldtype": "Link",
+   "options": "Item Group",
+   "label": "Orderable Item Group",
+   "description": "[BR-CRM-006] orderable_items offers enabled, non-template sales Items of this group to callers who don't buy the packs above (packs and \"Sample\" items excluded)."
+  },
+  {
    "fieldname": "section_break_transfer",
    "fieldtype": "Section Break",
    "label": "Live Transfer"
@@ -357,6 +368,21 @@
    "label": "Only Transfer Callers On Record"
   },
   {
+   "default": "0",
+   "fieldname": "sticky_agent",
+   "fieldtype": "Check",
+   "label": "Sticky Agent",
+   "description": "[BR-TEL-006] Route a caller who names no one to the executive who last took their transferred call, else their lead / account owner - if that executive is free; otherwise round robin."
+  },
+  {
+   "default": "5",
+   "fieldname": "busy_timeout_minutes",
+   "fieldtype": "Int",
+   "label": "Busy Timeout (Minutes)",
+   "non_negative": 1,
+   "description": "[BR-TEL-006] An executive stays busy this long after a call is routed to them, unless the call-end webhook says the transfer did not connect."
+  },
+  {
    "fieldname": "transfer_executives",
    "fieldtype": "Table",
    "options": "Sarvam Transfer Executive",
@@ -366,7 +392,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-03 00:00:00.000000",
+ "modified": "2026-11-04 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Core Customizations",
  "name": "Sarvam Voice Agent Settings",

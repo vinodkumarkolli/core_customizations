@@ -1,0 +1,208 @@
+{
+ "actions": [],
+ "autoname": "STA-.YYYY.-.#####",
+ "creation": "2026-11-04 00:00:00.000000",
+ "description": "[BR-TEL-006] One row per voice-agent transfer decision (transfer_target). The busy ledger, sticky-agent history and round-robin pointer are all read from these rows.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "routed_by",
+  "executive",
+  "user",
+  "target",
+  "column_break_routing",
+  "routed_at",
+  "ended_at",
+  "refused_reason",
+  "requested_name",
+  "section_break_caller",
+  "interaction_id",
+  "caller_phone",
+  "column_break_caller",
+  "lead",
+  "contact",
+  "customer",
+  "section_break_decision",
+  "decision_log"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Routed\nConnected\nNot connected\nEnded\nExpired\nRefused",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "read_only": 1,
+   "description": "Routed: target given to the agent (executive busy). Connected: the agent reported the transfer (still busy until the timeout - the call-end webhook arrives at hand-over). Not connected / Ended / Expired: executive free again. Refused: no target - see Refused Reason."
+  },
+  {
+   "fieldname": "routed_by",
+   "fieldtype": "Select",
+   "label": "Routed By",
+   "options": "\nrequested\nsticky\nround_robin",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "executive",
+   "fieldtype": "Data",
+   "label": "Executive",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "target",
+   "fieldtype": "Data",
+   "label": "Target Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_routing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "routed_at",
+   "fieldtype": "Datetime",
+   "label": "Routed At",
+   "in_list_view": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "ended_at",
+   "fieldtype": "Datetime",
+   "label": "Ended At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "refused_reason",
+   "fieldtype": "Data",
+   "label": "Refused Reason",
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "outside_hours, unknown_caller, executive_not_found, executive_busy, all_busy or error."
+  },
+  {
+   "fieldname": "requested_name",
+   "fieldtype": "Data",
+   "label": "Name Asked For",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_caller",
+   "fieldtype": "Section Break",
+   "label": "Caller"
+  },
+  {
+   "fieldname": "interaction_id",
+   "fieldtype": "Data",
+   "label": "Interaction ID",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "caller_phone",
+   "fieldtype": "Data",
+   "label": "Caller Phone",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_caller",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "options": "CRM Lead",
+   "label": "Lead",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "options": "Contact",
+   "label": "Contact",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "options": "Customer",
+   "label": "Customer",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_decision",
+   "fieldtype": "Section Break",
+   "label": "Decision"
+  },
+  {
+   "fieldname": "decision_log",
+   "fieldtype": "Small Text",
+   "label": "Decision Log",
+   "read_only": 1,
+   "description": "Why this decision was made - every step transfer_target took."
+  }
+ ],
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Core Customizations",
+ "name": "Sarvam Transfer Attempt",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1,
+   "delete": 1,
+   "write": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "executive"
+}

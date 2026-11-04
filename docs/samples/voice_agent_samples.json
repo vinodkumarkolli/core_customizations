@@ -1305,23 +1305,101 @@
   }
  },
  "transfer_target": {
-  "known_caller_in_hours": {
+  "named_executive_free": {
    "message": {
     "allowed": true,
     "open": true,
-    "target": "+916399962999",
-    "target_name": "Vinod",
-    "then": [
-     "+918248207671",
-     "+918106557040"
-    ],
-    "then_names": [
-     "Kalpana",
-     "Sravya"
-    ],
-    "reason": null,
+    "target": "+918248207671",
+    "target_name": "Kalpana",
+    "executive": "Kalpana",
+    "routed_by": "requested",
+    "then": [],
+    "then_names": [],
     "decision": "TRANSFER",
-    "hours_text": "10 AM to 8 PM, Monday to Saturday"
+    "available": [
+     "Sravya",
+     "Vinod"
+    ],
+    "attempt": "STA-2026-00012",
+    "hours_text": "10 AM to 8 PM, Monday to Saturday",
+    "reason": null
+   }
+  },
+  "named_executive_busy": {
+   "message": {
+    "allowed": true,
+    "open": false,
+    "target": null,
+    "target_name": null,
+    "executive": null,
+    "routed_by": null,
+    "then": [],
+    "then_names": [],
+    "decision": "CALLBACK",
+    "available": [
+     "Sravya",
+     "Vinod"
+    ],
+    "attempt": "STA-2026-00013",
+    "hours_text": "10 AM to 8 PM, Monday to Saturday",
+    "reason": "executive_busy"
+   }
+  },
+  "name_not_found": {
+   "message": {
+    "allowed": true,
+    "open": false,
+    "target": null,
+    "target_name": null,
+    "executive": null,
+    "routed_by": null,
+    "then": [],
+    "then_names": [],
+    "decision": "CALLBACK",
+    "available": [
+     "Kalpana",
+     "Sravya",
+     "Vinod"
+    ],
+    "attempt": "STA-2026-00014",
+    "hours_text": "10 AM to 8 PM, Monday to Saturday",
+    "reason": "executive_not_found"
+   }
+  },
+  "anyone_round_robin": {
+   "message": {
+    "allowed": true,
+    "open": true,
+    "target": "+918106557040",
+    "target_name": "Sravya",
+    "executive": "Sravya",
+    "routed_by": "round_robin",
+    "then": [],
+    "then_names": [],
+    "decision": "TRANSFER",
+    "available": [
+     "Vinod"
+    ],
+    "attempt": "STA-2026-00015",
+    "hours_text": "10 AM to 8 PM, Monday to Saturday",
+    "reason": null
+   }
+  },
+  "all_busy": {
+   "message": {
+    "allowed": true,
+    "open": false,
+    "target": null,
+    "target_name": null,
+    "executive": null,
+    "routed_by": null,
+    "then": [],
+    "then_names": [],
+    "decision": "CALLBACK",
+    "available": [],
+    "attempt": "STA-2026-00016",
+    "hours_text": "10 AM to 8 PM, Monday to Saturday",
+    "reason": "all_busy"
    }
   },
   "unknown_caller_in_hours": {
@@ -1330,17 +1408,15 @@
     "open": false,
     "target": null,
     "target_name": null,
+    "executive": null,
+    "routed_by": null,
     "then": [],
+    "then_names": [],
     "decision": "CALLBACK",
+    "available": [],
+    "attempt": "STA-2026-00017",
     "hours_text": "10 AM to 8 PM, Monday to Saturday",
-    "reason": "NOT_ON_RECORD"
-   }
-  },
-  "blocked": {
-   "message": {
-    "allowed": false,
-    "reason": "BLOCKED_LIST",
-    "message": "This caller is on the blocked list."
+    "reason": "unknown_caller"
    }
   },
   "sunday": {
@@ -1349,24 +1425,40 @@
     "open": false,
     "target": null,
     "target_name": null,
+    "executive": null,
+    "routed_by": null,
     "then": [],
+    "then_names": [],
     "decision": "CALLBACK",
+    "available": [],
+    "attempt": "STA-2026-00018",
     "hours_text": "10 AM to 8 PM, Monday to Saturday",
-    "reason": "OUTSIDE_HOURS",
+    "reason": "outside_hours",
     "checked_at": "2026-11-08T12:00+05:30"
    }
   },
-  "after_hours": {
+  "internal_error": {
    "message": {
     "allowed": true,
     "open": false,
     "target": null,
     "target_name": null,
+    "executive": null,
+    "routed_by": null,
     "then": [],
+    "then_names": [],
     "decision": "CALLBACK",
+    "available": [],
+    "attempt": null,
     "hours_text": "10 AM to 8 PM, Monday to Saturday",
-    "reason": "OUTSIDE_HOURS",
-    "checked_at": "2026-11-03T20:30+05:30"
+    "reason": "error"
+   }
+  },
+  "blocked": {
+   "message": {
+    "allowed": false,
+    "reason": "BLOCKED_LIST",
+    "message": "This caller is on the blocked list."
    }
   }
  },
@@ -1667,6 +1759,43 @@
     "duration": 95.0,
     "note": "1v14rgukss",
     "links": []
+   }
+  }
+ },
+ "orderable_items": {
+  "retailer": {
+   "message": {
+    "allowed": true,
+    "category": "retailer",
+    "customer_group": "Chennai GT",
+    "price_list": "Retailer Pricelist- Chennai",
+    "items": [
+     {
+      "item_code": "SASB-12.6 ML",
+      "item_name": "Sastry Balm-12.6 ML",
+      "voice_name": "big bottle",
+      "size": "12.6 ML",
+      "uom": "Nos",
+      "has_price": true
+     },
+     {
+      "item_code": "SASB-1.4 ML",
+      "item_name": "Sastry Balm-1.4 ML",
+      "voice_name": "small pack",
+      "size": "1.4 ML",
+      "uom": "Nos",
+      "has_price": true
+     }
+    ]
+   }
+  },
+  "individual": {
+   "message": {
+    "allowed": true,
+    "category": "individual",
+    "customer_group": "Individual",
+    "price_list": null,
+    "items": []
    }
   }
  }

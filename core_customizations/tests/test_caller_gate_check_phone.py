@@ -102,6 +102,13 @@ class TestCheckReturnsPhone(FrappeTestCase):
 		self.assertEqual(self._check("+14155552671")["reason"], "FOREIGN_NUMBER")
 
 	def test_existing_keys_are_unchanged(self):
-		self.assertEqual(set(self._check("+919876543210")), {"allowed", "reason", "message", "phone"})
+		self.assertEqual(set(self._check("+919876543210")), {"allowed", "reason", "message", "phone", "interaction_id"})
 		with self.assertRaises(frappe.PermissionError):
 			check(phone="+919876543210", key="wrong")
+
+	def test_interaction_id_is_echoed_for_every_caller(self):
+		iid = "20261104/44095154-03:06:25-a3c8ce7a"
+		for phone in ("+919876543210", sha(LEAD_NUMBER), BLOCKED_NUMBER, "+14155552671", ""):
+			with self.subTest(phone=phone):
+				self.assertEqual(check(phone=phone, key=KEY, interaction_id=f"  {iid} ")["interaction_id"], iid)
+		self.assertEqual(self._check("+919876543210")["interaction_id"], "", "blank when none was sent")

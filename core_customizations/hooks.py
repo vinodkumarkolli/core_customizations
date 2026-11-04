@@ -244,6 +244,13 @@ doc_events = {
 # 	],
 # }
 
+# [BR-TEL-006] Frees executives whose transferred call never reported an end.
+scheduler_events = {
+	"cron": {
+		"*/5 * * * *": ["core_customizations.core_customizations.voice_agent.expire_transfer_attempts"],
+	},
+}
+
 # Testing
 # -------
 

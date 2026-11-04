@@ -195,6 +195,11 @@ doc_events = {
 	"Quotation": {
 		"before_validate": "core_customizations.core_customizations.quotation_gst.apply_gst",
 		"validate": "core_customizations.core_customizations.caller_gate.guard_caller_gate",
+		# [BR-CRM-011] A CRM Deal quotation gets its Customer before it can be ordered.
+		"before_submit": "core_customizations.core_customizations.deal_customer.ensure_customer",
+	},
+	"Sales Order": {
+		"before_validate": "core_customizations.core_customizations.deal_customer.fill_sales_order_customer",
 	},
 	"Blocked Contact Request": {
 		# @businessRule [BR-CRM-003] The Pending -> Approved transition is a

@@ -13,6 +13,7 @@ wrong, multi-step saves that failed half-way) with one call per job:
 - upsert_quote                   [BR-CRM-006]  a real draft Quotation; the agent reads its totals
 - save_request                   [BR-CRM-004]  CRM Lead / Deal / Quotation / callback Task, one transaction
 - transfer_target                [BR-TEL-006]  who to transfer a live call to, if anyone (named, sticky, round robin, busy)
+- orderable_items                [BR-CRM-006]  the items a retailer / wholesale / distributor may order
 
 The call-ended half of [BR-TEL-007] is `apply_call_outcome`, called from
 `sarvam_telephony.handle_inbound_webhook`.
@@ -1478,6 +1479,9 @@ BUSY_STATUSES = (ROUTED, CONNECTED)
 TOOK_CALL_STATUSES = (CONNECTED, ENDED)
 # The field's own default; an existing Single reads 0 until it is saved.
 DEFAULT_BUSY_TIMEOUT_MINUTES = 5
+DEFAULT_ORDERABLE_ITEM_GROUP = "Products"
+# [BR-CRM-006] Items whose code or name contains this are never offered by orderable_items.
+NOT_ORDERABLE_TEXT = "sample"
 MANAGER_ROLES = ("System Manager", "Sales Manager")
 
 
@@ -1904,6 +1908,92 @@ def clear_busy_executives():
 		new = EXPIRED if row.status == ROUTED else ENDED
 		_close_attempt(row.name, new, f"{new}: {note}", now_datetime())
 	return {"cleared": len(rows)}
+
+
+# --------------------------------------------------------------------------
+# 5b. Orderable items  [BR-CRM-006]
+# --------------------------------------------------------------------------
+
+_SIZE = re.compile(r"(\d+(?:\.\d+)?)\s*(ml|l|g|gm|kg)\b", re.IGNORECASE)
+
+
+def _caller_group(ctx):
+	"""(category, customer group) the caller is quoted under - the Customer's, else the Lead's category default."""
+	if ctx.customer:
+		return ctx.customer.category, ctx.customer.customer_group
+	if ctx.lead:
+		category = (ctx.lead.get("caller_category") or "").strip().lower() or None
+		row = _category_default(category)
+		return category, row.customer_group if row else None
+	return None, None
+
+
+def _orderable_item_rows(settings):
+	packs = {r.item_code for r in settings.pack_items}
+	rows = frappe.get_all(
+		"Item",
+		filters={
+			"disabled": 0,
+			"has_variants": 0,
+			"is_sales_item": 1,
+			"item_group": settings.orderable_item_group or DEFAULT_ORDERABLE_ITEM_GROUP,
+		},
+		fields=["name", "item_name", "stock_uom", "custom_voice_name"],
+		order_by="item_name asc",
+	)
+	return [
+		r for r in rows
+		if r.name not in packs and NOT_ORDERABLE_TEXT not in f"{r.name} {r.item_name}".lower()
+	]
+
+
+@frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
+def orderable_items(phone: str | None = None, key: str | None = None):
+	"""
+	Business Purpose: [BR-CRM-006] The items a retailer, wholesale or
+	distributor caller may order on the call - enabled, non-template sales
+	Items of the Orderable Item Group, not a pack and not a sample. A caller
+	whose customer group buys the packs (Pack Items in the settings - the
+	individuals) or who is not on record gets an empty list: they order the
+	packs. Read-only.
+
+	Returns:
+		dict: {allowed, category, customer_group, price_list, items:
+		[{item_code, item_name, voice_name, size, uom, has_price}]}.
+		`voice_name` is the Item's Voice Name (its item name when blank);
+		`size` is read from the item name ("12.6 ML"); qty is in `uom`, the
+		unit the price list is per; `has_price` is false when the caller's
+		price list has no rate for it (upsert_quote would say
+		PRICE_NOT_FOUND). A blocked/foreign caller gets only the gate's
+		{allowed, reason, message}.
+	"""
+	_check_webhook_key(key)
+	gate = evaluate(phone)
+	if not gate["allowed"]:
+		return gate
+	settings = _settings()
+	with _as_automation_user():
+		ctx = _resolve(phone)
+		category, group = _caller_group(ctx)
+		empty = {"allowed": True, "category": category, "customer_group": group, "price_list": None, "items": []}
+		if not group or group in {r.customer_group for r in settings.pack_items}:
+			return empty
+		party, _err = _quote_party(ctx)
+		price_list = party.price_list if party else None
+		items = []
+		for r in _orderable_item_rows(settings):
+			size = _SIZE.search(r.item_name or r.name)
+			items.append(
+				{
+					"item_code": r.name,
+					"item_name": r.item_name,
+					"voice_name": (r.custom_voice_name or "").strip() or r.item_name,
+					"size": f"{size.group(1)} {size.group(2).upper()}" if size else None,
+					"uom": r.stock_uom,
+					"has_price": bool(price_list and frappe.db.exists("Item Price", {"item_code": r.name, "price_list": price_list})),
+				}
+			)
+		return {**empty, "price_list": price_list, "items": items}
 
 
 # --------------------------------------------------------------------------

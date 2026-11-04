@@ -1761,5 +1761,42 @@
     "links": []
    }
   }
+ },
+ "orderable_items": {
+  "retailer": {
+   "message": {
+    "allowed": true,
+    "category": "retailer",
+    "customer_group": "Chennai GT",
+    "price_list": "Retailer Pricelist- Chennai",
+    "items": [
+     {
+      "item_code": "SASB-12.6 ML",
+      "item_name": "Sastry Balm-12.6 ML",
+      "voice_name": "big bottle",
+      "size": "12.6 ML",
+      "uom": "Nos",
+      "has_price": true
+     },
+     {
+      "item_code": "SASB-1.4 ML",
+      "item_name": "Sastry Balm-1.4 ML",
+      "voice_name": "small pack",
+      "size": "1.4 ML",
+      "uom": "Nos",
+      "has_price": true
+     }
+    ]
+   }
+  },
+  "individual": {
+   "message": {
+    "allowed": true,
+    "category": "individual",
+    "customer_group": "Individual",
+    "price_list": null,
+    "items": []
+   }
+  }
  }
 }

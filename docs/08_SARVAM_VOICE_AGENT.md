@@ -60,6 +60,7 @@ Every method first runs `caller_gate.evaluate(phone)`. A blocked or foreign call
 | `upsert_quote` | the agent's own price/tax/shipping arithmetic | `phone`, `key`, `items` = `[{"item_code", "qty"}]`, `address_name` or `ship_to_pincode` (optional) |
 | `save_request` | the chain of create-lead / create-deal / create-quotation / create-task calls | `phone`, `key`, `name`, `caller_type`, `store_type`, `area`, `organization`, `items`, `address_name` **or** `address` + `city` + `pincode` (+ `state`), `whatsapp_number`, `notes`, `ship_to_pincode`, `callback_number` |
 | `transfer_target` | `check_transfer_hours` (timeapi.io), `route_to_*` (httpbin) | `phone`, `key`, `executive` (optional — the name the caller asked for), `interaction_id` (optional — Sarvam's interaction id; needed for the call-end webhook to free the executive early) |
+| `orderable_items` | the agent's own product list for retailers / wholesale / distributors | `phone`, `key` |
 | call-ended webhook (`sarvam_telephony.handle_inbound_webhook`, unchanged URL) | `update_call_log`, `update_call_log_conversation_ref` | Sarvam's call-end payload: `interaction_id`, `user_phone_number`, `agent_phone_number`, `duration`, `start_datetime`, `end_datetime`, `recording_url`, `interaction_transcript`, `output_agent_variables` (`call_summary`/`summary`, `conversation_ref`, `preferences`, `transferred`) |
 
 ### Sarvam configuration
@@ -204,6 +205,12 @@ Order of checks in `transfer_target`:
 
 **Not detectable**: an executive busy on a personal call we can't see — the agent's "transfer did not connect, take a callback" path covers it.
 
+## Orderable items for retailers, wholesale and distributors (`[BR-CRM-006]`)
+
+`orderable_items(phone, key)` (read-only) → `{allowed, category, customer_group, price_list, items: [{item_code, item_name, voice_name, size, uom, has_price}]}`. Items: enabled, not a template, sales items of the **Orderable Item Group** (Products), not a Pack Item, nothing with "Sample" in its code or name — today `SASB-12.6 ML` ("big bottle", 12.6 ML) and `SASB-1.4 ML` ("small pack", 1.4 ML), names from the Item's **Voice Name**. A caller whose customer group buys the packs (individuals) or who isn't on record gets `items: []`.
+
+Quote them with `upsert_quote` / `save_request` exactly like packs: `items: [{"item_code": "SASB-12.6 ML", "qty": 5}]`. **`qty` is bottles / sachets** (`uom` Nos — the price lists are per Nos; a Box is 400 big bottles or 4,000 small packs). Priced from the caller's price list (Customer's own, else group, else Caller Categories: Retailer Pricelist- Chennai, Wholesale Pricelist 42, Distributor Pricelist 41.25), GST 5% from the items' tax template, `total_to_say` as for packs; a missing rate is `PRICE_NOT_FOUND`. **No shipping is charged on these items today** — only Pack Items carry a Shipping Rule.
+
 ## Changes to the agent's required inputs
 
 1. **`caller_type` values** are `individual`, `retailer`, `wholesale`, `distributor` (the four spoken categories). The agent's own `caller_type` variable currently allows only direct customer / retailer / distributor — add `wholesale`, and send `individual` for a direct/personal-use caller.
@@ -213,6 +220,7 @@ Order of checks in `transfer_target`:
 5. **A delivery pincode** is needed to quote a new caller (GST depends on the state) — pass it as `ship_to_pincode` or inside `address`.
 6. **No call-log tools.** Remove `create_call_log`, `update_call_log` and `update_call_log_conversation_ref`; set `summary`, `conversation_ref` and `preferences` as output variables instead — the call-ended webhook writes them.
 7. **Remove** `check_transfer_hours` (timeapi.io) and `route_to_*` (httpbin); use `transfer_target`, passing `executive` when the caller names someone and `interaction_id` always. `reason` values are now lowercase (`outside_hours`, `unknown_caller`, …).
+10. **Retailers / wholesale / distributors**: call `orderable_items` and offer its `voice_name`s; quote with the `item_code`s.
 8. **Remove `get_saved_addresses`.** Read `addresses` from `caller_context`, pass the chosen one as `address_name`.
 9. **Collect `city` and `pincode`** with a new caller's address so it can be saved as a real Address (`state` is optional).
 
@@ -249,6 +257,7 @@ Seeded by `seed_sarvam_voice_agent_rules` (only into empty tables):
 - **Caller Categories** — individual → Individual @ Standard Selling (default); wholesale, distributor → Commercial (default, no price list); retailer → the five retail groups (no default — flagged for review).
 - **Pack Items** — SASB-50INR-PACK-4/10/20 → Individual only, Next Day Shipping.
 - **Live Transfer** — 10:00–20:00, Mon–Sat, Asia/Kolkata, callers on record only; Kalpana +918248207671, Sravya +918106557040, Vinod +918122586261 (row order = round-robin order). Each executive has **User** (needed for sticky routing and the Call Log receiver), **On Break** and **Aliases**. **Sticky Agent** (off) and **Busy Timeout (Minutes)** (5, seeded by `seed_sarvam_transfer_routing`).
+- **Orderable Item Group** — Products (seeded by `seed_sarvam_orderable_items`, which also sets the Voice Name of SASB-12.6 ML / SASB-1.4 ML to "big bottle" / "small pack" when blank).
 
 ## Persistent test records (dev only)
 

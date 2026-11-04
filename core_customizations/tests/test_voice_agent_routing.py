@@ -4,9 +4,10 @@
 """
 Tests for the voice agent's transfer routing [BR-TEL-006] - transfer_target
 with a named executive, sticky agent, round robin and the busy ledger
-(Sarvam Transfer Attempt), closed by the call-end webhook.
+(Sarvam Transfer Attempt), closed by the call-end webhook - and for
+orderable_items / quoting the retailers' items [BR-CRM-006].
 
-The executives and transfer window are pinned to test
+The executives, transfer window and caller categories are pinned to test
 values inside the class's transaction, every Transfer Attempt on the site is
 deleted inside it (so the round-robin pointer starts clean), and each test
 runs in a savepoint rolled back afterwards. Nothing may commit -
@@ -28,6 +29,8 @@ from core_customizations.core_customizations.sarvam_telephony import SARVAM_SETT
 KEY = "test-voice-agent-routing-key"
 AUTOMATION_USER = "test-va-routing-automation@example.com"
 ATTEMPT = va.ATTEMPT_DOCTYPE
+BIG_BOTTLE = "SASB-12.6 ML"
+SMALL_PACK = "SASB-1.4 ML"
 
 # Executives: (name, number, user, aliases) - test-only numbers and users.
 EXECUTIVES = [
@@ -35,9 +38,21 @@ EXECUTIVES = [
 	("Kalpana", "+917000001292", "test-va-exec-kalpana@example.com", "Kalpa, Kalpana Muthu"),
 	("Sravya", "+917000001293", "test-va-exec-sravya@example.com", ""),
 ]
+# Caller categories as Settings hold them on the site (real price lists).
+CATEGORIES = [
+	("individual", "Individual", "Standard Selling", 1),
+	("wholesale", "Commercial", "Wholesale Pricelist 42", 1),
+	("distributor", "Commercial", "Distributor Pricelist 41.25", 1),
+	("retailer", "Chennai GT", "Retailer Pricelist- Chennai", 1),
+]
+
 CALLER_A = "+917000001201"
 CALLER_B = "+917000001202"
 CALLER_OWNED = "+917000001203"  # lead owned by Kalpana's user
+RETAILER = "+917000001204"
+INDIVIDUAL = "+917000001205"
+WHOLESALE = "+917000001206"
+DISTRIBUTOR = "+917000001207"
 UNKNOWN = "+917000001209"
 BLOCKED = "+917000001210"
 TUESDAY_11 = datetime(2026, 11, 3, 11, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
@@ -49,7 +64,7 @@ class TestVoiceAgentRouting(FrappeTestCase):
 		super().setUpClass()
 		cls._commit_guard = patch.object(frappe.db, "commit", side_effect=AssertionError("must never commit"))
 		cls._commit_guard.start()
-		for number in (CALLER_A, CALLER_B, CALLER_OWNED, UNKNOWN, BLOCKED):
+		for number in (CALLER_A, CALLER_B, CALLER_OWNED, RETAILER, INDIVIDUAL, WHOLESALE, DISTRIBUTOR, UNKNOWN, BLOCKED):
 			assert not frappe.db.sql(
 				"select name from `tabCRM Lead` where right(regexp_replace(ifnull(mobile_no,''),'[^0-9]',''),10)=%s "
 				"union select parent from `tabContact Phone` where right(regexp_replace(ifnull(phone,''),'[^0-9]',''),10)=%s",
@@ -74,11 +89,15 @@ class TestVoiceAgentRouting(FrappeTestCase):
 				"transfer_known_callers_only": 1,
 				"sticky_agent": 0,
 				"busy_timeout_minutes": 15,
+				"orderable_item_group": "Products",
 			}
 		)
 		settings.transfer_executives = []
 		for name, phone, user, aliases in EXECUTIVES:
 			settings.append("transfer_executives", {"executive_name": name, "phone": phone, "user": user, "aliases": aliases, "enabled": 1})
+		settings.caller_categories = []
+		for category, group, price_list, is_default in CATEGORIES:
+			settings.append("caller_categories", {"category": category, "customer_group": group, "price_list": price_list, "is_default": is_default})
 		settings.flags.ignore_mandatory = True
 		settings.save(ignore_permissions=True)
 		frappe.clear_document_cache(SARVAM_SETTINGS_DOCTYPE, SARVAM_SETTINGS_DOCTYPE)
@@ -88,6 +107,10 @@ class TestVoiceAgentRouting(FrappeTestCase):
 		cls.lead_a = cls._lead("VA Route A", CALLER_A)
 		cls.lead_b = cls._lead("VA Route B", CALLER_B)
 		cls.lead_owned = cls._lead("VA Route Owned", CALLER_OWNED, owner=EXECUTIVES[1][2])
+		cls.retailer = cls._lead("VA Route Retailer", RETAILER, category="retailer", address="Address: 5 Main Rd, Chennai 600128")
+		cls.individual = cls._lead("VA Route Individual", INDIVIDUAL, category="individual", address="Address: 5 Main Rd, Chennai 600128")
+		cls.wholesale = cls._customer("VA Route Wholesale", WHOLESALE, "Wholesale Pricelist 42")
+		cls.distributor = cls._customer("VA Route Distributor", DISTRIBUTOR, "Distributor Pricelist 41.25")
 
 	@classmethod
 	def tearDownClass(cls):
@@ -108,6 +131,29 @@ class TestVoiceAgentRouting(FrappeTestCase):
 			.insert(ignore_permissions=True)
 			.name
 		)
+
+	@classmethod
+	def _customer(cls, name, mobile, price_list):
+		customer = frappe.get_doc(
+			{
+				"doctype": "Customer", "customer_name": name, "customer_group": "Commercial", "customer_type": "Company",
+				"default_price_list": price_list, "gst_category": "Unregistered",
+			}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Address", "address_title": name, "address_type": "Billing", "address_line1": "1 Test Street",
+				"city": "Chennai", "state": "Tamil Nadu", "pincode": "600128", "country": "India", "gst_category": "Unregistered",
+				"is_primary_address": 1, "links": [{"link_doctype": "Customer", "link_name": customer.name}],
+			}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Contact", "first_name": name, "phone_nos": [{"phone": mobile, "is_primary_mobile_no": 1}],
+				"links": [{"link_doctype": "Customer", "link_name": customer.name}],
+			}
+		).insert(ignore_permissions=True)
+		return customer.name
 
 	def setUp(self):
 		frappe.set_user("Administrator")
@@ -389,6 +435,8 @@ class TestVoiceAgentRouting(FrappeTestCase):
 	def test_wrong_key_still_raises(self):
 		with self.assertRaises(frappe.PermissionError):
 			va.transfer_target(phone=CALLER_A, key="wrong")
+		with self.assertRaises(frappe.PermissionError):
+			va.orderable_items(phone=RETAILER, key="wrong")
 
 	def test_busy_list_and_clear_button(self):
 		self._make_busy("Kalpana")
@@ -403,3 +451,55 @@ class TestVoiceAgentRouting(FrappeTestCase):
 		frappe.set_user(EXECUTIVES[0][2])  # a Sales User
 		with self.assertRaises(frappe.PermissionError):
 			va.clear_busy_executives()
+
+	# --- orderable items and quoting ------------------------------------------
+
+	def _rate(self, price_list, item_code):
+		return frappe.db.get_value("Item Price", {"price_list": price_list, "item_code": item_code}, "price_list_rate")
+
+	def test_retailer_gets_the_big_bottle_and_the_small_pack(self):
+		result = va.orderable_items(phone=RETAILER, key=KEY)
+		self.assertEqual((result["category"], result["customer_group"], result["price_list"]), ("retailer", "Chennai GT", "Retailer Pricelist- Chennai"))
+		items = {i["item_code"]: i for i in result["items"]}
+		self.assertEqual(set(items), {BIG_BOTTLE, SMALL_PACK})
+		self.assertEqual((items[BIG_BOTTLE]["voice_name"], items[BIG_BOTTLE]["size"], items[BIG_BOTTLE]["uom"]), ("big bottle", "12.6 ML", "Nos"))
+		self.assertEqual((items[SMALL_PACK]["voice_name"], items[SMALL_PACK]["size"]), ("small pack", "1.4 ML"))
+		for code, item in items.items():
+			self.assertEqual(item["has_price"], bool(self._rate("Retailer Pricelist- Chennai", code)), code)
+
+	def test_wholesale_and_distributor_get_the_same_items(self):
+		for phone, price_list in ((WHOLESALE, "Wholesale Pricelist 42"), (DISTRIBUTOR, "Distributor Pricelist 41.25")):
+			with self.subTest(price_list=price_list):
+				result = va.orderable_items(phone=phone, key=KEY)
+				self.assertEqual(({i["item_code"] for i in result["items"]}, result["price_list"]), ({BIG_BOTTLE, SMALL_PACK}, price_list))
+
+	def test_individual_and_unknown_callers_get_no_items(self):
+		for phone in (INDIVIDUAL, UNKNOWN):
+			with self.subTest(phone=phone):
+				self.assertEqual(va.orderable_items(phone=phone, key=KEY)["items"], [])
+		self.assertEqual(set(va.orderable_items(phone=BLOCKED, key=KEY)), {"allowed", "reason", "message"})
+
+	def test_retailer_orders_five_big_bottles(self):
+		result = va.upsert_quote(phone=RETAILER, key=KEY, items=[{"item_code": BIG_BOTTLE, "qty": 5}])
+		self.assertEqual(result["status"], "quoted", result)
+		self.assertEqual(result["price_list"], "Retailer Pricelist- Chennai")
+		self.assertEqual(result["items"][0]["rate"], self._rate("Retailer Pricelist- Chennai", BIG_BOTTLE))
+		self.assertEqual(result["gst_percent"], 5.0)
+		doc = frappe.get_doc("Quotation", result["quotation"])
+		self.assertEqual(result["total_to_say"], doc.rounded_total)
+		self.assertAlmostEqual(result["net_total"] + result["gst_amount"] + result["shipping"], doc.grand_total, 2)
+
+	def test_wholesale_and_distributor_quote_from_their_lists_in_save_request(self):
+		for phone, price_list in ((WHOLESALE, "Wholesale Pricelist 42"), (DISTRIBUTOR, "Distributor Pricelist 41.25")):
+			with self.subTest(price_list=price_list):
+				saved = va.save_request(phone=phone, key=KEY, items=[{"item_code": SMALL_PACK, "qty": 100}, {"item_code": BIG_BOTTLE, "qty": 10}])
+				quote = saved["quote"]
+				self.assertEqual((quote["status"], quote["price_list"], quote["gst_percent"]), ("quoted", price_list, 5.0), quote)
+				rates = {i["item_code"]: i["rate"] for i in quote["items"]}
+				self.assertEqual(rates, {SMALL_PACK: self._rate(price_list, SMALL_PACK), BIG_BOTTLE: self._rate(price_list, BIG_BOTTLE)})
+
+	def test_item_with_no_rate_is_price_not_found(self):
+		if self._rate("Retailer Pricelist- Chennai", SMALL_PACK):
+			frappe.db.delete("Item Price", {"price_list": "Retailer Pricelist- Chennai", "item_code": SMALL_PACK})
+		result = va.upsert_quote(phone=RETAILER, key=KEY, items=[{"item_code": SMALL_PACK, "qty": 5}])
+		self.assertEqual((result["error"], result["items"]), ("PRICE_NOT_FOUND", [SMALL_PACK]))
